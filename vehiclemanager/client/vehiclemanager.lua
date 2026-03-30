@@ -68,8 +68,8 @@ end
 local vehicleMenuPool = VMUI.CreatePool()
 local vehicleMainMenu = VMUI.CreateMenu("Vehicle Manager", "~b~CURRENT VEHICLE", menuX, 0, nil, nil, nil, 255, 255, 255, 210)
 
-local helpListItem = VMUI.CreateListItem("Help", { "Fix Vehicle", "Teleport To Nearest Road" }, 1, "Quick vehicle helper actions.")
-local saveVehicleItem = VMUI.CreateItem("Save Vehicle", "Scaffold a vehicle save payload and write it to JSON on the resource.")
+local helpListItem = VMUI.CreateListItem("Help", { "Fix Vehicle", "Teleport To Nearest Road" }, 1, "Handy tools for getting your vehicle back in shape.")
+local saveVehicleItem = VMUI.CreateItem("Save Vehicle", "Save your current vehicle and setup for later.")
 local saveLoadSubMenu = nil
 local deleteVehiclesSubMenu = nil
 local customizeSubMenu = nil
@@ -80,18 +80,19 @@ local statsGatewayItem = nil
 local statsLocalMenu = nil
 local statsLocalSubMenu = nil
 local returnToCustomizeAfterPerformanceTuningClose = false
-local paintCategoryListItem = VMUI.CreateListItem("Paint Category", { "Classic" }, 1, "Choose the paint family for both vehicle colors.")
-local primaryPaintColorListItem = VMUI.CreateListItem("Primary", { "Black" }, 1, "Apply a primary paint color.")
-local secondaryPaintColorListItem = VMUI.CreateListItem("Secondary", { "Black" }, 1, "Apply a secondary paint color.")
-local pearlescentColorListItem = VMUI.CreateListItem("Pearlescent", { "Black" }, 1, "Apply the pearlescent color.")
-local interiorColorListItem = VMUI.CreateListItem("Interior", { "Black" }, 1, "Apply the interior color.")
-local dashboardColorListItem = VMUI.CreateListItem("Dashboard", { "Black" }, 1, "Apply the dashboard color.")
-local xenonColorListItem = VMUI.CreateListItem("Xenon", { "Default" }, 1, "Apply the xenon headlight color.")
+local pendingVehicleMenuCloseSaveId = 0
+local paintCategoryListItem = VMUI.CreateListItem("Paint Category", { "Classic" }, 1, "Choose the paint finish for your body colors.")
+local primaryPaintColorListItem = VMUI.CreateListItem("Primary", { "Black" }, 1, "Set the main paint color.")
+local secondaryPaintColorListItem = VMUI.CreateListItem("Secondary", { "Black" }, 1, "Set the secondary paint color.")
+local pearlescentColorListItem = VMUI.CreateListItem("Pearlescent", { "Black" }, 1, "Add a pearl finish over the paint.")
+local interiorColorListItem = VMUI.CreateListItem("Interior", { "Black" }, 1, "Change the interior color.")
+local dashboardColorListItem = VMUI.CreateListItem("Dashboard", { "Black" }, 1, "Change the dashboard color.")
+local xenonColorListItem = VMUI.CreateListItem("Xenon", { "Default" }, 1, "Set the xenon headlight color.")
 local liveryListItem = VMUI.CreateListItem("Livery", { "No liveries available" }, 1, "Apply a livery if this vehicle supports one.")
-local wheelCategoryListItem = VMUI.CreateListItem("Wheel Category", { "Sport" }, 1, "Choose the wheel family.")
-local wheelListItem = VMUI.CreateListItem("Wheel", { "Stock" }, 1, "Apply a wheel style for the current wheel category.")
-local wheelColorListItem = VMUI.CreateListItem("Wheel Color", { "Black" }, 1, "Apply the wheel color.")
-local customTyresItem = UIMenuCheckboxItem.New("Custom Tyres", false, 1, "Toggle custom tyres for the current wheel setup.")
+local wheelCategoryListItem = VMUI.CreateListItem("Wheel Category", { "Sport" }, 1, "Choose a wheel family to browse.")
+local wheelListItem = VMUI.CreateListItem("Wheel", { "Stock" }, 1, "Pick a wheel style from this category.")
+local wheelColorListItem = VMUI.CreateListItem("Wheel Color", { "Black" }, 1, "Change the wheel color.")
+local customTyresItem = UIMenuCheckboxItem.New("Custom Tyres", false, 1, "Toggle custom tyres for this wheel setup.")
 customTyresItem.Activated = customTyresItem.Activated or function() end
 
 local currentPrimaryColorOptions = {}
@@ -571,6 +572,33 @@ local function notify(message)
     EndTextCommandThefeedPostTicker(false, false)
 end
 
+local function notifyPersistentVehicleUpdated(vehicle)
+    local vehicleName = "vehicle"
+
+    if vehicle and DoesEntityExist(vehicle) then
+        local model = GetEntityModel(vehicle)
+        local displayName = GetDisplayNameFromVehicleModel(model)
+        if not displayName or displayName == "" then
+            displayName = tostring(model)
+        end
+
+        local localizedName = GetLabelText(displayName)
+        if localizedName and localizedName ~= "" and localizedName ~= "NULL" then
+            vehicleName = localizedName
+        else
+            vehicleName = displayName
+        end
+    end
+
+    local message = ("Persistent ~HUD_COLOUR_FREEMODE~%s~s~ updated."):format(tostring(vehicleName))
+    if ScaleformUI and ScaleformUI.Notifications and ScaleformUI.Notifications.ShowNotification then
+        ScaleformUI.Notifications:ShowNotification(message, false, false)
+        return
+    end
+
+    notify(("Persistent %s updated."):format(tostring(vehicleName)))
+end
+
 local function tryOpenPerformanceTuningMenu()
     if GetResourceState("performancetuning") ~= "started" then
         return false
@@ -673,7 +701,7 @@ local function rebuildModMenu(subMenu, categories, emptyTitle, emptyDescription)
     targetMenu:Clear()
     local vehicle = getManagedVehicle(false)
     if not vehicle then
-        local emptyItem = VMUI.CreateItem("No vehicle", "Enter a vehicle to browse available mod categories.")
+        local emptyItem = VMUI.CreateItem("No vehicle", "Get into a vehicle to see options here.")
         emptyItem:Enabled(false)
         targetMenu:AddItem(emptyItem)
         vehicleMenuPool:RefreshIndex()
@@ -711,7 +739,7 @@ local function rebuildModMenu(subMenu, categories, emptyTitle, emptyDescription)
                 end
             end
 
-            local item = VMUI.CreateListItem(category.label, optionLabels, currentIndex, ("Choose a %s mod for the current vehicle."):format(category.label:lower()))
+            local item = VMUI.CreateListItem(category.label, optionLabels, currentIndex, "Choose an option for this category.")
             targetMenu:AddItem(item)
             modItems[#modItems + 1] = item
             modEntries[#modEntries + 1] = {
@@ -737,7 +765,7 @@ local function rebuildPartsMenu()
         partsSubMenu,
         partsVehicleModCategories,
         "No parts available",
-        "This vehicle does not expose tunable body mod categories."
+        "This vehicle doesn't have any customizable parts here."
     )
 end
 
@@ -746,7 +774,7 @@ local function rebuildStatsMenu()
         statsLocalMenu,
         statsVehicleModCategories,
         "No stats upgrades",
-        "This vehicle does not expose engine, brakes, transmission, suspension, or armor upgrades."
+        "This vehicle doesn't have any upgrade options here."
     )
 end
 
@@ -1766,10 +1794,19 @@ end
 local function buildSavedVehicleDescription(entry)
     local saveId = tostring((entry and entry.saveId) or "")
     if saveId == "" then
-        return "ID: (missing)"
+        return "Load this saved vehicle."
     end
 
-    return ("ID: %s"):format(saveId)
+    return ("Load this saved vehicle. ID: %s"):format(saveId)
+end
+
+local function buildDeleteSavedVehicleDescription(entry)
+    local saveId = tostring((entry and entry.saveId) or "")
+    if saveId == "" then
+        return "Delete this saved vehicle from your garage."
+    end
+
+    return ("Delete this saved vehicle from your garage. ID: %s"):format(saveId)
 end
 
 local function rebuildSavedVehicleMenu()
@@ -1782,7 +1819,7 @@ local function rebuildSavedVehicleMenu()
         saveLoadSubMenu.SubMenu:AddItem(deleteVehiclesSubMenu.Item)
         if deleteVehiclesSubMenu.SubMenu then
             deleteVehiclesSubMenu.SubMenu:Clear()
-            local emptyDeleteItem = VMUI.CreateItem("No Saved Vehicles", "Nothing to remove from the index yet.")
+            local emptyDeleteItem = VMUI.CreateItem("No Saved Vehicles", "You don't have any saved vehicles to delete.")
             emptyDeleteItem:Enabled(false)
             deleteVehiclesSubMenu.SubMenu:AddItem(emptyDeleteItem)
         end
@@ -1792,7 +1829,7 @@ local function rebuildSavedVehicleMenu()
         if deleteVehiclesSubMenu and deleteVehiclesSubMenu.Item then
             deleteVehiclesSubMenu.Item:Enabled(false)
         end
-        local emptyItem = VMUI.CreateItem("No Saved Vehicles", "Save a vehicle first to populate this list.")
+        local emptyItem = VMUI.CreateItem("No Saved Vehicles", "You don't have any saved vehicles yet.")
         emptyItem:Enabled(false)
         saveLoadSubMenu.SubMenu:AddItem(emptyItem)
         vehicleMenuPool:RefreshIndex()
@@ -1814,13 +1851,13 @@ local function rebuildSavedVehicleMenu()
         deleteVehiclesSubMenu.Item:Enabled(#deleteVehicleEntries > 0)
         deleteVehiclesSubMenu.SubMenu:Clear()
         if #deleteVehicleEntries <= 0 then
-            local emptyDeleteItem = VMUI.CreateItem("No Saved Vehicles", "Nothing to remove from the index yet.")
+            local emptyDeleteItem = VMUI.CreateItem("No Saved Vehicles", "You don't have any saved vehicles to delete.")
             emptyDeleteItem:Enabled(false)
             deleteVehiclesSubMenu.SubMenu:AddItem(emptyDeleteItem)
         else
             for i = 1, #deleteVehicleEntries do
                 local entry = deleteVehicleEntries[i]
-                local deleteItem = VMUI.CreateColouredItem(buildSavedVehicleLabel(entry), buildSavedVehicleDescription(entry))
+                local deleteItem = VMUI.CreateColouredItem(buildSavedVehicleLabel(entry), buildDeleteSavedVehicleDescription(entry))
                 deleteItem.Activated = function()
                     TriggerServerEvent("vehiclemanager:forgetSavedVehicle", entry.file)
                 end
@@ -1976,6 +2013,25 @@ local function autosaveManagedVehicleToExistingSave()
     TriggerServerEvent("vehiclemanager:updateSavedVehicleSnapshot", saveId, payload)
 end
 
+local function scheduleVehicleMenuCloseAutosave()
+    pendingVehicleMenuCloseSaveId = pendingVehicleMenuCloseSaveId + 1
+    local saveRequestId = pendingVehicleMenuCloseSaveId
+
+    CreateThread(function()
+        Wait(1000)
+
+        if saveRequestId ~= pendingVehicleMenuCloseSaveId then
+            return
+        end
+
+        if MenuHandler:IsAnyMenuOpen() then
+            return
+        end
+
+        autosaveManagedVehicleToExistingSave()
+    end)
+end
+
 local function applyPaintColor(target, categoryIndex, colorIndex)
     local vehicle = getManagedVehicle(false)
     local category = getPaintCategory(categoryIndex)
@@ -2095,13 +2151,13 @@ local function applySelectedLivery(index)
 end
 
 vehicleMainMenu:AddItem(helpListItem)
-customizeSubMenu = vehicleMenuPool:AddSubMenu(vehicleMainMenu, "Customize Vehicle", "Apply paint and livery options to the current vehicle.", true, true)
-saveLoadSubMenu = vehicleMenuPool:AddSubMenu(vehicleMainMenu, "Save / Load", "Save the current vehicle or load one of the saved vehicles.", true, true)
-deleteVehiclesSubMenu = vehicleMenuPool:AddSubMenu(saveLoadSubMenu.SubMenu, "Delete Vehicle", "Remove a saved vehicle entry from your index.", true, true)
-statsLocalSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, "Stats", "Vehicle stats and tune information.", true, true)
-colorSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, "Color", "Vehicle paint and livery options.", true, true)
-partsSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, "Parts", "Vehicle parts customization.", true, true)
-wheelsSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, "Wheels", "Wheel family, style, and custom tyres.", true, true)
+customizeSubMenu = vehicleMenuPool:AddSubMenu(vehicleMainMenu, "Customize Vehicle", "Personalize your vehicle's look, parts, wheels, and upgrades.", true, true)
+saveLoadSubMenu = vehicleMenuPool:AddSubMenu(vehicleMainMenu, "Save / Load", "Save your current vehicle or bring back one from your garage.", true, true)
+deleteVehiclesSubMenu = vehicleMenuPool:AddSubMenu(saveLoadSubMenu.SubMenu, "Delete Vehicle", "Remove a saved vehicle from your garage list.", true, true)
+statsLocalSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, "Stats", "Tune the upgrades that change how your vehicle performs.", true, true)
+colorSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, "Color", "Change paint, trim, headlights, and liveries.", true, true)
+partsSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, "Parts", "Swap body parts and other visual upgrades.", true, true)
+wheelsSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, "Wheels", "Pick your wheel type, style, color, and tyre setup.", true, true)
 statsGatewayItem = statsLocalSubMenu.Item
 statsLocalMenu = statsLocalSubMenu.SubMenu
 statsGatewayItem.Activated = function(menu)
@@ -2114,6 +2170,10 @@ statsGatewayItem.Activated = function(menu)
 
     rebuildStatsMenu()
     menu:SwitchTo(statsLocalMenu, 1, true)
+end
+saveLoadSubMenu.Item.Activated = function(menu)
+    requestSavedVehicleIndex()
+    menu:SwitchTo(saveLoadSubMenu.SubMenu, 1, true)
 end
 colorSubMenu.SubMenu:AddItem(paintCategoryListItem)
 colorSubMenu.SubMenu:AddItem(primaryPaintColorListItem)
@@ -2284,6 +2344,14 @@ statsLocalMenu.OnListSelect = function(_, item, index)
     applyModSelection(item, index, statsModEntries)
 end
 
+statsLocalMenu.OnMenuClose = function()
+    if not customizeSubMenu or not customizeSubMenu.SubMenu then
+        return
+    end
+
+    customizeSubMenu.SubMenu:Visible(true)
+end
+
 saveLoadSubMenu.SubMenu.OnItemSelect = function(_, item, index)
     local _ = item
     local __ = index
@@ -2309,7 +2377,7 @@ vehicleMainMenu.OnMenuChanged = function(_, newmenu, forward)
 end
 
 vehicleMainMenu.OnMenuClose = function()
-    autosaveManagedVehicleToExistingSave()
+    scheduleVehicleMenuCloseAutosave()
 end
 
 RegisterNetEvent("performancetuning:menuClosed", function()
@@ -2347,12 +2415,8 @@ RegisterNetEvent("vehiclemanager:receiveSavedVehiclePayload", function(savedData
 end)
 
 RegisterNetEvent("vehiclemanager:vehicleSnapshotUpdated", function(saveId)
-    if type(saveId) ~= "string" or saveId == "" then
-        notify("Saved vehicle updated.")
-        return
-    end
-
-    notify("Saved vehicle updated.")
+    local _ = saveId
+    notifyPersistentVehicleUpdated(getManagedVehicle(false))
 end)
 
 RegisterNetEvent("vehiclemanager:vehicleSaved", function(saveId)

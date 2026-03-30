@@ -112,7 +112,7 @@ syncVehicleHandlingState = function(vehicle)
 end
 
 local function notifyDragRebalanceFinished(dragCoeff)
-    notify('Drag rebalance complete.')
+    local _ = dragCoeff
 end
 
 local function requestDragRebalance(vehicle, durationMs)
