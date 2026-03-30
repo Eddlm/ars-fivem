@@ -2344,14 +2344,6 @@ statsLocalMenu.OnListSelect = function(_, item, index)
     applyModSelection(item, index, statsModEntries)
 end
 
-statsLocalMenu.OnMenuClose = function()
-    if not customizeSubMenu or not customizeSubMenu.SubMenu then
-        return
-    end
-
-    customizeSubMenu.SubMenu:Visible(true)
-end
-
 saveLoadSubMenu.SubMenu.OnItemSelect = function(_, item, index)
     local _ = item
     local __ = index

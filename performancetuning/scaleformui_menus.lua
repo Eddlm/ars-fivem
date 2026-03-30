@@ -10,9 +10,11 @@ local function getScaleformUIState()
     scaleformUI.state.options = scaleformUI.state.options or {}
     scaleformUI.state.sliderValues = scaleformUI.state.sliderValues or {}
     scaleformUI.state.dynamicSliderProfiles = scaleformUI.state.dynamicSliderProfiles or {}
+    scaleformUI.state.panels = scaleformUI.state.panels or {}
     scaleformUI.state.piDisplayModeIndex = math.max(1, math.min(3, math.floor(tonumber(scaleformUI.state.piDisplayModeIndex) or 1)))
     scaleformUI.state.menuOpen = scaleformUI.state.menuOpen == true
     scaleformUI.state.menuInitialized = scaleformUI.state.menuInitialized == true
+    scaleformUI.state.switchingToTweaks = scaleformUI.state.switchingToTweaks == true
     return scaleformUI.state
 end
 
@@ -126,6 +128,71 @@ local function setMenuItemsEnabled(enabled, disabledDescription)
             end
         end
     end
+end
+
+local function createPiStatisticsPanel()
+    return UIMenuStatisticsPanel.New({
+        { name = 'Speed', value = 0 },
+        { name = 'Power', value = 0 },
+        { name = 'Grip', value = 0 },
+        { name = 'Brake', value = 0 },
+    })
+end
+
+local function attachPiStatisticsPanel(item)
+    if not item or type(item.AddPanel) ~= 'function' then
+        return
+    end
+
+    local state = getScaleformUIState()
+    state.panels.piStats = state.panels.piStats or {}
+
+    local panel = createPiStatisticsPanel()
+    item:AddPanel(panel)
+    state.panels.piStats[#state.panels.piStats + 1] = panel
+end
+
+local function refreshVisibleMenuPanels()
+    local state = getScaleformUIState()
+    local menus = { state.menus.main, state.menus.tweaks }
+
+    for index = 1, #menus do
+        local menu = menus[index]
+        if menu and menu:Visible() and type(menu.CurrentSelection) == 'function' and type(menu.SendPanelsToItemScaleform) == 'function' then
+            local currentSelection = math.floor(tonumber(menu:CurrentSelection()) or 1)
+            if currentSelection >= 1 and currentSelection <= #(menu.Items or {}) then
+                menu:SendPanelsToItemScaleform(currentSelection, false)
+            end
+        end
+    end
+end
+
+local function updatePiStatisticsPanels(vehicle)
+    local state = getScaleformUIState()
+    local panels = (state.panels or {}).piStats or {}
+    if #panels <= 0 then
+        return
+    end
+
+    local metrics = vehicle and PerformanceTuning.PerformancePanel and PerformanceTuning.PerformancePanel.buildMetrics and PerformanceTuning.PerformancePanel.buildMetrics(vehicle) or nil
+    local fills = type(metrics) == 'table' and type(metrics.fills) == 'table' and metrics.fills or {}
+    local values = {
+        math.floor(((tonumber(fills[2]) or 0.0) * 100.0) + 0.5),
+        math.floor(((tonumber(fills[1]) or 0.0) * 100.0) + 0.5),
+        math.floor(((tonumber(fills[3]) or 0.0) * 100.0) + 0.5),
+        math.floor(((tonumber(fills[4]) or 0.0) * 100.0) + 0.5),
+    }
+
+    for index = 1, #panels do
+        local panel = panels[index]
+        if panel then
+            for statIndex = 1, 4 do
+                panel:UpdateStatistic(statIndex, values[statIndex] or 0)
+            end
+        end
+    end
+
+    refreshVisibleMenuPanels()
 end
 
 local function refreshSuspensionRaiseSliderRange(vehicle)
@@ -330,6 +397,7 @@ local function handleMainMenuSelection(context, index)
     previewMainMenuSelection(context, index)
     PerformanceTuning.ScaleformUI.applyMenuSelection(context, index)
     updateMainMenuListContext(context)
+    updatePiStatisticsPanels(PerformanceTuning.ScaleformUI.getCurrentVehicle())
 end
 
 local function handleMainSliderChange(index)
@@ -341,6 +409,7 @@ local function handleMainSliderChange(index)
     local value = scaleformUI.getSliderValueForIndex(index + 1, scaleformUI.sliderRanges.antirollBars)
     setAntirollSliderState(value)
     scaleformUI.applyAntirollForceTweak(vehicle, value)
+    updatePiStatisticsPanels(vehicle)
 end
 
 local function handleTweakSliderChange(item, index)
@@ -377,6 +446,8 @@ local function handleTweakSliderChange(item, index)
         setSuspensionBiasSliderState(value)
         scaleformUI.applySuspensionBiasFrontTweak(vehicle, value)
     end
+
+    updatePiStatisticsPanels(vehicle)
 end
 
 function PerformanceTuning.ScaleformUI.closeMenu()
@@ -481,6 +552,7 @@ function PerformanceTuning.ScaleformUI.refreshMenu()
     end
     setSuspensionRaiseSliderState(currentSuspensionRaise)
     setSuspensionBiasSliderState(bucket.suspensionBiasFront)
+    updatePiStatisticsPanels(engineState.vehicle)
     restoreMenuSelection(state.menus.main, selectedMenuIndex)
     return true
 end
@@ -548,11 +620,36 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     state.menus.tweaks:AddItem(state.items.suspensionRaiseSlider)
     state.menus.tweaks:AddItem(state.items.suspensionBiasSlider)
 
+    attachPiStatisticsPanel(state.items.engine)
+    attachPiStatisticsPanel(state.items.transmission)
+    attachPiStatisticsPanel(state.items.suspension)
+    attachPiStatisticsPanel(state.items.tireCompoundCategory)
+    attachPiStatisticsPanel(state.items.tireCompoundQuality)
+    attachPiStatisticsPanel(state.items.brakes)
+    attachPiStatisticsPanel(state.items.antirollSlider)
+    attachPiStatisticsPanel(state.items.nitrous)
+    attachPiStatisticsPanel(state.items.piDisplayMode)
+    attachPiStatisticsPanel(state.items.openTweaks)
+    attachPiStatisticsPanel(state.items.nitrousShotSlider)
+    attachPiStatisticsPanel(state.items.revLimiter)
+    attachPiStatisticsPanel(state.items.steeringLockMode)
+    attachPiStatisticsPanel(state.items.brakeBiasSlider)
+    attachPiStatisticsPanel(state.items.gripBiasSlider)
+    attachPiStatisticsPanel(state.items.antirollBiasSlider)
+    attachPiStatisticsPanel(state.items.suspensionRaiseSlider)
+    attachPiStatisticsPanel(state.items.suspensionBiasSlider)
+
     state.items.openTweaks.Activated = function(menu)
+        state.switchingToTweaks = true
         menu:SwitchTo(state.menus.tweaks, 1, true)
     end
 
     state.menus.main.OnMenuClose = function()
+        if state.switchingToTweaks then
+            state.switchingToTweaks = false
+            return
+        end
+
         local vehicle = scaleformUI.getCurrentVehicle()
         if vehicle and PerformanceTuning._internals.requestDragRebalance then
             PerformanceTuning._internals.requestDragRebalance(vehicle, 10000)
@@ -647,9 +744,11 @@ function PerformanceTuning.ScaleformUI.processFrame()
     end
 
     if hasValidVehicle then
-        scaleformUI.drawPerformanceIndexPanel(vehicle)
+        -- Custom left PI panel disabled for now; keep draw code available for later iteration.
+        -- scaleformUI.drawPerformanceIndexPanel(vehicle)
     else
-        scaleformUI.drawPerformanceIndexPanel(nil, { drawNearbyOnly = true })
+        -- Custom left PI panel disabled for now; keep draw code available for later iteration.
+        -- scaleformUI.drawPerformanceIndexPanel(nil, { drawNearbyOnly = true })
     end
     return true
 end

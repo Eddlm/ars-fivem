@@ -93,6 +93,20 @@ local function drawPiCenteredText(x, y, scale, text)
     DrawText(x, y)
 end
 
+local function drawPiLeftText(x, y, scale, text)
+    SetTextFont(0)
+    SetTextProportional(false)
+    SetTextScale(scale, scale)
+    SetTextColour(255, 255, 255, 220)
+    SetTextDropShadow()
+    SetTextEdge(1, 0, 0, 0, 255)
+    SetTextOutline()
+    SetTextCentre(false)
+    SetTextEntry('STRING')
+    AddTextComponentString(text)
+    DrawText(x, y)
+end
+
 local function getUiAspectWidth(heightUnits)
     local resX, resY = GetActiveScreenResolution()
     if not resX or not resY or resX <= 0 or resY <= 0 then
@@ -312,13 +326,13 @@ local function getWorldAnchoredPanelPosition(vehicle, panelScale, safeInset)
     if type(roofHeight) ~= 'number' then
         roofHeight = 1.0
     end
-    local roofClearance = 0.02
+    local roofClearance = 1.0
     local anchor = GetOffsetFromEntityInWorldCoords(vehicle, 0.0, 0.0, roofHeight + roofClearance)
 
     local anchorX = anchor.x
     local anchorY = anchor.y
     local anchorZ = anchor.z
-    local visible, screenX = GetScreenCoordFromWorldCoord(anchorX, anchorY, anchorZ)
+    local visible, screenX, screenY = GetScreenCoordFromWorldCoord(anchorX, anchorY, anchorZ)
     if not visible then
         return nil
     end
@@ -326,7 +340,7 @@ local function getWorldAnchoredPanelPosition(vehicle, panelScale, safeInset)
     local panelHeight = 0.19 * panelScale
     local panelWidth = getUiAspectWidth(panelHeight)
     local panelLeftX = screenX - (panelWidth * 0.5)
-    local panelY = 0.18 + safeInset
+    local panelY = screenY
     return clampPanelToSafeZone(panelLeftX, panelY, panelWidth, panelHeight, safeInset)
 end
 
@@ -346,8 +360,8 @@ local function drawPanelInstanceInternal(vehicle, displayState, stateKey, option
     local safeZone = GetSafeZoneSize()
     local safeInset = (1.0 - safeZone) * 0.5
     local panelScale = math.max(0.1, tonumber((options or {}).panelScale) or 1.3)
-    local panelH = 0.19 * panelScale
-    local panelW = getUiAspectWidth(panelH)
+    local panelH = (0.19 * panelScale) * 0.46
+    local panelW = getUiAspectWidth(0.19 * panelScale) * 1.12
     local panelLeftX = tonumber((options or {}).panelLeftX)
     if panelLeftX == nil then
         panelLeftX = 0.014 + safeInset
@@ -357,18 +371,21 @@ local function drawPanelInstanceInternal(vehicle, displayState, stateKey, option
     if panelY == nil then
         panelY = 0.18 + safeInset
     end
-    local panelAlpha = math.max(0, math.min(255, math.floor(tonumber((options or {}).panelAlpha) or 84)))
-    local fillAlpha = math.max(0, math.min(255, math.floor(tonumber((options or {}).fillAlpha) or 168)))
-    local barBaseY = panelY + (0.0152088 * panelScale)
-    local barH = 0.108 * panelScale
-    local barW = getUiAspectWidth(0.03086208 * panelScale)
-    local barGap = getUiAspectWidth(0.0403767 * panelScale)
-    local firstBarX = panelX - (barGap * 1.5)
+    local panelAlpha = math.max(0, math.min(255, math.floor(tonumber((options or {}).panelAlpha) or 168)))
+    local fillAlpha = math.max(0, math.min(255, math.floor(tonumber((options or {}).fillAlpha) or 255)))
+    local leftX = panelX - (panelW * 0.5)
+    local labelX = leftX + (panelW * 0.11)
+    local trackLeftX = leftX + (panelW * 0.49)
+    local trackW = panelW * 0.42
+    local rowGap = panelH * 0.235
+    local trackH = panelH * 0.062
+    local rowStartY = panelY - (rowGap * 1.32)
+    local segmentGap = trackW * 0.016
+    local segmentCount = 5
+    local segmentW = (trackW - (segmentGap * (segmentCount - 1))) / segmentCount
     local dt = GetFrameTime()
     local lerpAlpha = math.min(1.0, math.max(0.0, dt * 6.0))
-    local piScales = getPiScales(runtimeConfig)
     local animationState = getPanelAnimationState(displayState, stateKey)
-    local title = tostring((options or {}).title or '')
 
     for index = 1, #panelMetrics.fills do
         local currentFill = animationState.fills[index] or 0.0
@@ -376,27 +393,39 @@ local function drawPanelInstanceInternal(vehicle, displayState, stateKey, option
         animationState.fills[index] = currentFill + ((targetFill - currentFill) * lerpAlpha)
     end
 
-    local displayedValues = {
-        math.floor(((animationState.fills[1] or 0.0) * 100.0 * piScales.power) + 0.5),
-        math.floor(((animationState.fills[2] or 0.0) * 100.0 * piScales.topSpeed) + 0.5),
-        math.floor(((animationState.fills[3] or 0.0) * 100.0 * piScales.grip) + 0.5),
-        math.floor(((animationState.fills[4] or 0.0) * 100.0 * piScales.brake) + 0.5),
-    }
-    local displayedTotal = displayedValues[1] + displayedValues[2] + displayedValues[3] + displayedValues[4]
-
     DrawRect(panelX, panelY, panelW, panelH, 0, 0, 0, panelAlpha)
-    if title ~= '' then
-        drawPiCenteredText(panelX, panelY - (0.102 * panelScale), 0.16 * panelScale, title)
-    end
-    drawPiCenteredText(panelX, panelY - (0.082 * panelScale), 0.28 * panelScale, ('PI: %d'):format(displayedTotal))
 
-    for index = 1, #animationState.fills do
-        local barX = firstBarX + ((index - 1) * barGap)
-        local fill = animationState.fills[index]
-        DrawRect(barX, barBaseY, barW, barH, 0, 0, 0, panelAlpha)
-        DrawRect(barX, barBaseY + ((barH * (1.0 - fill)) * 0.5), barW, barH * fill, 40, 110, 255, fillAlpha)
-        drawPiCenteredText(barX, barBaseY - (barH * 0.72), 0.18 * panelScale, ('%d'):format(displayedValues[index] or 0))
-        drawPiCenteredText(barX, barBaseY + (barH * 0.5104), 0.22 * panelScale, panelMetrics.labels[index])
+    local orderedLabels = { 'Brake', 'Grip', 'Power', 'Speed' }
+    local orderedFills = {
+        animationState.fills[4] or 0.0,
+        animationState.fills[3] or 0.0,
+        animationState.fills[1] or 0.0,
+        animationState.fills[2] or 0.0,
+    }
+
+    for index = 1, #orderedFills do
+        local fill = orderedFills[index]
+        local rowY = rowStartY + ((index - 1) * rowGap)
+        local scaledSegments = math.max(0.0, math.min(segmentCount, fill * segmentCount))
+        local fullSegments = math.floor(scaledSegments)
+        local partialSegmentFill = scaledSegments - fullSegments
+
+        drawPiLeftText(labelX, rowY - (trackH * 0.8), 0.22 * panelScale, orderedLabels[index])
+
+        for segmentIndex = 1, segmentCount do
+            local segmentCenterX = trackLeftX + (segmentW * 0.5) + ((segmentIndex - 1) * (segmentW + segmentGap))
+            local segmentLeftX = segmentCenterX - (segmentW * 0.5)
+            local emptyAlpha = math.max(110, math.floor(panelAlpha * 0.9))
+            DrawRect(segmentCenterX, rowY, segmentW, trackH, 60, 60, 60, emptyAlpha)
+
+            if segmentIndex <= fullSegments then
+                DrawRect(segmentCenterX, rowY, segmentW, trackH, 255, 255, 255, fillAlpha)
+            elseif segmentIndex == (fullSegments + 1) and partialSegmentFill > 0.001 then
+                local partialWidth = segmentW * partialSegmentFill
+                local partialCenterX = segmentLeftX + (partialWidth * 0.5)
+                DrawRect(partialCenterX, rowY, partialWidth, trackH, 255, 255, 255, fillAlpha)
+            end
+        end
     end
 
     return true
