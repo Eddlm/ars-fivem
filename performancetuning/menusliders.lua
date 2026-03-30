@@ -1,4 +1,4 @@
--- Builds, clamps, and labels NativeUI slider values for tuning controls.
+-- Builds, clamps, and labels ScaleformUI slider values for tuning controls.
 PerformanceTuning = PerformanceTuning or {}
 PerformanceTuning.MenuSliders = PerformanceTuning.MenuSliders or {}
 
@@ -70,9 +70,9 @@ function MenuSliders.buildSuspensionClearanceSliderValues(baseUpperLimit)
     end)
 end
 
-function MenuSliders.getNativeUISliderValues(key)
-    local nativeUI = PerformanceTuning and PerformanceTuning.NativeUI or nil
-    local state = nativeUI and nativeUI.state or nil
+function MenuSliders.getUISliderValues(key)
+    local scaleformUI = PerformanceTuning and PerformanceTuning.ScaleformUI or nil
+    local state = scaleformUI and scaleformUI.state or nil
     local sliderValues = state and state.sliderValues or nil
     return sliderValues and sliderValues[key] or {}
 end
@@ -84,7 +84,7 @@ end
 
 function MenuSliders.getAntirollSliderIndex(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).antirollBars, MenuSliders.getNativeUISliderValues('antirollBars'), 0.0)
+    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).antirollBars, MenuSliders.getUISliderValues('antirollBars'), 0.0)
 end
 
 function MenuSliders.getAntirollForceLabel(value)
@@ -98,7 +98,7 @@ end
 
 function MenuSliders.getBrakeBiasSliderIndex(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).brakeBiasFront, MenuSliders.getNativeUISliderValues('brakeBiasFront'), 0.5)
+    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).brakeBiasFront, MenuSliders.getUISliderValues('brakeBiasFront'), 0.5)
 end
 
 function MenuSliders.getBrakeBiasFrontLabel(value)
@@ -112,7 +112,7 @@ end
 
 function MenuSliders.getGripBiasSliderIndex(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).gripBiasFront, MenuSliders.getNativeUISliderValues('gripBiasFront'), 0.5)
+    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).gripBiasFront, MenuSliders.getUISliderValues('gripBiasFront'), 0.5)
 end
 
 function MenuSliders.getGripBiasFrontLabel(value)
@@ -126,7 +126,7 @@ end
 
 function MenuSliders.getAntirollBiasSliderIndex(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).antirollBiasFront, MenuSliders.getNativeUISliderValues('antirollBiasFront'), 0.5)
+    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).antirollBiasFront, MenuSliders.getUISliderValues('antirollBiasFront'), 0.5)
 end
 
 function MenuSliders.getAntirollBiasFrontLabel(value)
@@ -140,7 +140,7 @@ end
 
 function MenuSliders.getSuspensionRaiseSliderIndex(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).suspensionRaise, MenuSliders.getNativeUISliderValues('suspensionRaise'), 0.0)
+    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).suspensionRaise, MenuSliders.getUISliderValues('suspensionRaise'), 0.0)
 end
 
 function MenuSliders.getSuspensionRaiseLabel(value)
@@ -170,7 +170,7 @@ end
 
 function MenuSliders.getSuspensionBiasSliderIndex(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).suspensionBiasFront, MenuSliders.getNativeUISliderValues('suspensionBiasFront'), 0.5)
+    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).suspensionBiasFront, MenuSliders.getUISliderValues('suspensionBiasFront'), 0.5)
 end
 
 function MenuSliders.getSuspensionBiasFrontLabel(value)
@@ -184,7 +184,7 @@ end
 
 function MenuSliders.getNitroShotSliderIndex(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).nitrousShotStrength, MenuSliders.getNativeUISliderValues('nitrousShotStrength'), 1.0)
+    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).nitrousShotStrength, MenuSliders.getUISliderValues('nitrousShotStrength'), 1.0)
 end
 
 function MenuSliders.getNitroShotStrengthLabel(value)

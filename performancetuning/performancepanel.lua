@@ -197,8 +197,8 @@ local function getNearbyPanelConfig(runtimeConfig)
 end
 
 local function getPiDisplayModeIndex()
-    local nativeUIState = (((PerformanceTuning or {}).NativeUI or {}).state or {})
-    local index = math.floor(tonumber(nativeUIState.piDisplayModeIndex) or 1)
+    local scaleformUIState = (((PerformanceTuning or {}).ScaleformUI or {}).state or {})
+    local index = math.floor(tonumber(scaleformUIState.piDisplayModeIndex) or 1)
     return math.max(1, math.min(3, index))
 end
 
@@ -727,8 +727,8 @@ CreateThread(function()
     local state = getDisplayState()
     while true do
         local nativeMenuOpen = false
-        if PerformanceTuning.NativeUI and PerformanceTuning.NativeUI.processFrame then
-            nativeMenuOpen = PerformanceTuning.NativeUI.processFrame() == true
+        if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.processFrame then
+            nativeMenuOpen = PerformanceTuning.ScaleformUI.processFrame() == true
         end
 
         local persistentNearbyModeActive = getPiDisplayModeIndex() ~= 1

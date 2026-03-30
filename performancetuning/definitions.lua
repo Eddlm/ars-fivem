@@ -8,7 +8,6 @@ PerformanceTuning.Definitions.stateBagKeys = {
     tune = 'performancetuning:tuneState',
     handling = 'performancetuning:handlingState',
     pi = 'performancetuning:pi',
-    saveId = 'nativeui26:saveId',
 }
 
 PerformanceTuning.Definitions.handlingFields = {

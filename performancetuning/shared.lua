@@ -3,7 +3,7 @@ PerformanceTuning = PerformanceTuning or {}
 
 PerformanceTuningConfig = PerformanceTuningConfig or {}
 
--- NativeUI tweak slider ranges.
+-- Tuning UI slider ranges.
 PerformanceTuningConfig.sliderRanges = {
     antirollBars = {
         min = 0.0,

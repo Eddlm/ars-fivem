@@ -259,14 +259,6 @@ CreateThread(function()
     end
 end)
 
-RegisterNetEvent('nativeui26:tuningSaveUpdated', function(saveId)
-    if type(saveId) ~= 'string' or saveId == '' then
-        notify('Saved tuning updated.')
-        return
-    end
-
-        notify('Saved tuning updated.')
-end)
 local function logInfo(message)
     return message
 end
@@ -393,14 +385,14 @@ end
 local function applyNativeMenuSelection(context, index)
     local vehicle, vehicleError = PerformanceTuning.VehicleManager.getCurrentVehicle()
     if not vehicle then
-        if PerformanceTuning.NativeUI and PerformanceTuning.NativeUI.closeMenu then
-            PerformanceTuning.NativeUI.closeMenu()
+        if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.closeMenu then
+            PerformanceTuning.ScaleformUI.closeMenu()
         end
         return false, vehicleError
     end
 
-    local nativeUIState = PerformanceTuning.NativeUI and PerformanceTuning.NativeUI.state or nil
-    local optionsByContext = nativeUIState and nativeUIState.options or nil
+    local scaleformUIState = PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.state or nil
+    local optionsByContext = scaleformUIState and scaleformUIState.options or nil
     local options = optionsByContext and optionsByContext[context] or nil
     local option = type(options) == 'table' and options[index] or nil
     local bucket = PerformanceTuning.VehicleManager.ensureTuningState(vehicle)
@@ -504,12 +496,20 @@ exports('DrawPerformanceIndexPanelInstance', function(vehicle, options)
 end)
 
 exports('OpenPerformanceTuningMenu', function()
-    if PerformanceTuning.NativeUI and PerformanceTuning.NativeUI.openMainMenu then
-        return PerformanceTuning.NativeUI.openMainMenu() == true
+    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.openMainMenu then
+        return PerformanceTuning.ScaleformUI.openMainMenu() == true
     end
 
     return false
 end)
+
+RegisterCommand('ptune', function()
+    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.openMainMenu then
+        PerformanceTuning.ScaleformUI.openMainMenu()
+    else
+        notify('ScaleformUI tuning menu is not available.')
+    end
+end, false)
 
 PerformanceTuning.RuntimeState = RuntimeState
 PerformanceTuning.RuntimeConfig = RuntimeConfig

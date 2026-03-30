@@ -645,35 +645,3 @@ function VehicleManager.syncVehicleTuneState(vehicle)
     VehicleManager.syncVehicleHandlingState(vehicle)
     VehicleManager.syncVehiclePiState(vehicle, false)
 end
-
-function VehicleManager.updateSavedVehicleTuningFile(vehicle)
-    local stateBagKeys = PerformanceTuning._internals.StateBagKeys
-    if not VehicleManager.isVehicleEntityValid(vehicle) then
-        return
-    end
-
-    if not VehicleManager.ensureVehicleNetworked(vehicle, 1500) then
-        return
-    end
-
-    local entityState = Entity(vehicle).state
-    if not entityState then
-        return
-    end
-
-    local saveId = entityState[stateBagKeys.saveId]
-    if type(saveId) ~= 'string' or saveId == '' then
-        return
-    end
-
-    local tuneState = VehicleManager.serializeTuneState(VehicleManager.ensureTuningState(vehicle))
-    local handlingState = entityState[stateBagKeys.handling]
-    if type(tuneState) ~= 'table' and type(handlingState) ~= 'table' then
-        return
-    end
-
-    TriggerServerEvent('nativeui26:updateSavedVehicleTuning', saveId, {
-        tuneState = type(tuneState) == 'table' and tuneState or nil,
-        handlingState = type(handlingState) == 'table' and handlingState or nil,
-    })
-end
