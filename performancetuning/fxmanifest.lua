@@ -13,10 +13,6 @@ dependency 'NativeUI26'
 
 shared_script 'shared.lua'
 
-files {
-    'materials.dat'
-}
-
 client_scripts {
     '@NativeUI26/share/Utils.lua',
     '@NativeUI26/elements/UIResRectangle.lua',
