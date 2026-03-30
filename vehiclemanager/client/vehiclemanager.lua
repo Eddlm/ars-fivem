@@ -20,8 +20,6 @@ function VMUI.CreatePool()
         item.Activated = function(menu)
             menu:SwitchTo(submenu, 1, true)
         end
-        parentMenu.Children = parentMenu.Children or {}
-        parentMenu:BindMenuToItem(submenu, item)
         return {
             Item = item,
             SubMenu = submenu,
@@ -78,8 +76,9 @@ local customizeSubMenu = nil
 local colorSubMenu = nil
 local wheelsSubMenu = nil
 local partsSubMenu = nil
-local statsSubMenu = nil
-local statsSubMenuBoundToVehicleManager = true
+local statsGatewayItem = nil
+local statsLocalMenu = nil
+local statsLocalSubMenu = nil
 local returnToCustomizeAfterPerformanceTuningClose = false
 local paintCategoryListItem = VMUI.CreateListItem("Paint Category", { "Classic" }, 1, "Choose the paint family for both vehicle colors.")
 local primaryPaintColorListItem = VMUI.CreateListItem("Primary", { "Black" }, 1, "Apply a primary paint color.")
@@ -109,6 +108,7 @@ local deleteVehicleEntries = {}
 local deleteVehicleItems = {}
 local vehicleRequiredItems = {}
 local driverRequiredItems = {}
+local saveActionInFlight = false
 local availabilityState = {
     hasVehicle = nil,
     hasDriverVehicle = nil,
@@ -583,38 +583,6 @@ local function tryOpenPerformanceTuningMenu()
     return ok and opened == true
 end
 
-local function setStatsSubMenuBinding(shouldBindToVehicleManager)
-    if not customizeSubMenu or not customizeSubMenu.SubMenu or not statsSubMenu or not statsSubMenu.Item or not statsSubMenu.SubMenu then
-        return
-    end
-
-    local parentMenu = customizeSubMenu.SubMenu
-    local shouldBind = shouldBindToVehicleManager == true
-
-    if shouldBind and not statsSubMenuBoundToVehicleManager then
-        statsSubMenu.Item.Activated = function(menu)
-            menu:SwitchTo(statsSubMenu.SubMenu, 1, true)
-        end
-        statsSubMenuBoundToVehicleManager = true
-    elseif not shouldBind and statsSubMenuBoundToVehicleManager then
-        statsSubMenu.Item.Activated = function()
-        end
-        statsSubMenuBoundToVehicleManager = false
-    end
-end
-
-local function refreshStatsTargetBindingFromSelection(menu)
-    local targetMenu = menu or (customizeSubMenu and customizeSubMenu.SubMenu) or nil
-    if not targetMenu or not statsSubMenu or not statsSubMenu.Item then
-        return
-    end
-
-    local selectionIndex = targetMenu:CurrentSelection()
-    local selectedItem = targetMenu.Items[selectionIndex]
-    local shouldRedirectToPerformanceTuning = selectedItem == statsSubMenu.Item and GetResourceState("performancetuning") == "started"
-    setStatsSubMenuBinding(not shouldRedirectToPerformanceTuning)
-end
-
 local function rebuildPaintColorList(listItem, categoryIndex, target)
     local category = getPaintCategory(categoryIndex)
     local options = {}
@@ -694,12 +662,20 @@ local function rebuildLiveryList(vehicle)
 end
 
 local function rebuildModMenu(subMenu, categories, emptyTitle, emptyDescription)
-    subMenu.SubMenu:Clear()
+    local targetMenu = subMenu
+    if type(subMenu) == "table" and subMenu.SubMenu then
+        targetMenu = subMenu.SubMenu
+    end
+    if not targetMenu then
+        return {}, {}
+    end
+
+    targetMenu:Clear()
     local vehicle = getManagedVehicle(false)
     if not vehicle then
         local emptyItem = VMUI.CreateItem("No vehicle", "Enter a vehicle to browse available mod categories.")
         emptyItem:Enabled(false)
-        subMenu.SubMenu:AddItem(emptyItem)
+        targetMenu:AddItem(emptyItem)
         vehicleMenuPool:RefreshIndex()
         return
     end
@@ -736,7 +712,7 @@ local function rebuildModMenu(subMenu, categories, emptyTitle, emptyDescription)
             end
 
             local item = VMUI.CreateListItem(category.label, optionLabels, currentIndex, ("Choose a %s mod for the current vehicle."):format(category.label:lower()))
-            subMenu.SubMenu:AddItem(item)
+            targetMenu:AddItem(item)
             modItems[#modItems + 1] = item
             modEntries[#modEntries + 1] = {
                 modType = category.modType,
@@ -749,7 +725,7 @@ local function rebuildModMenu(subMenu, categories, emptyTitle, emptyDescription)
     if #modItems <= 0 then
         local emptyItem = VMUI.CreateItem(emptyTitle, emptyDescription)
         emptyItem:Enabled(false)
-        subMenu.SubMenu:AddItem(emptyItem)
+        targetMenu:AddItem(emptyItem)
     end
 
     vehicleMenuPool:RefreshIndex()
@@ -767,7 +743,7 @@ end
 
 local function rebuildStatsMenu()
     statsModItems, statsModEntries = rebuildModMenu(
-        statsSubMenu,
+        statsLocalMenu,
         statsVehicleModCategories,
         "No stats upgrades",
         "This vehicle does not expose engine, brakes, transmission, suspension, or armor upgrades."
@@ -1027,7 +1003,6 @@ local function updateVehicleAvailabilityState(forceRefresh)
     rebuildPartsMenu()
     rebuildStatsMenu()
 
-    refreshStatsTargetBindingFromSelection(customizeSubMenu and customizeSubMenu.SubMenu or nil)
     vehicleMenuPool:RefreshIndex()
 end
 
@@ -1805,9 +1780,18 @@ local function rebuildSavedVehicleMenu()
     saveLoadSubMenu.SubMenu:AddItem(saveVehicleItem)
     if deleteVehiclesSubMenu and deleteVehiclesSubMenu.Item then
         saveLoadSubMenu.SubMenu:AddItem(deleteVehiclesSubMenu.Item)
+        if deleteVehiclesSubMenu.SubMenu then
+            deleteVehiclesSubMenu.SubMenu:Clear()
+            local emptyDeleteItem = VMUI.CreateItem("No Saved Vehicles", "Nothing to remove from the index yet.")
+            emptyDeleteItem:Enabled(false)
+            deleteVehiclesSubMenu.SubMenu:AddItem(emptyDeleteItem)
+        end
     end
 
     if #savedVehicleEntries <= 0 then
+        if deleteVehiclesSubMenu and deleteVehiclesSubMenu.Item then
+            deleteVehiclesSubMenu.Item:Enabled(false)
+        end
         local emptyItem = VMUI.CreateItem("No Saved Vehicles", "Save a vehicle first to populate this list.")
         emptyItem:Enabled(false)
         saveLoadSubMenu.SubMenu:AddItem(emptyItem)
@@ -1827,6 +1811,7 @@ local function rebuildSavedVehicleMenu()
     end
 
     if deleteVehiclesSubMenu and deleteVehiclesSubMenu.SubMenu then
+        deleteVehiclesSubMenu.Item:Enabled(#deleteVehicleEntries > 0)
         deleteVehiclesSubMenu.SubMenu:Clear()
         if #deleteVehicleEntries <= 0 then
             local emptyDeleteItem = VMUI.CreateItem("No Saved Vehicles", "Nothing to remove from the index yet.")
@@ -1961,8 +1946,18 @@ local function saveCurrentVehicle()
     TriggerServerEvent("vehiclemanager:saveVehicle", payload)
 end
 
-saveVehicleItem.Activated = function()
+local function triggerSaveVehicleAction()
+    if saveActionInFlight then
+        return
+    end
+
+    saveActionInFlight = true
     saveCurrentVehicle()
+    saveActionInFlight = false
+end
+
+saveVehicleItem.Activated = function()
+    triggerSaveVehicleAction()
 end
 
 local function autosaveManagedVehicleToExistingSave()
@@ -2103,10 +2098,23 @@ vehicleMainMenu:AddItem(helpListItem)
 customizeSubMenu = vehicleMenuPool:AddSubMenu(vehicleMainMenu, "Customize Vehicle", "Apply paint and livery options to the current vehicle.", true, true)
 saveLoadSubMenu = vehicleMenuPool:AddSubMenu(vehicleMainMenu, "Save / Load", "Save the current vehicle or load one of the saved vehicles.", true, true)
 deleteVehiclesSubMenu = vehicleMenuPool:AddSubMenu(saveLoadSubMenu.SubMenu, "Delete Vehicle", "Remove a saved vehicle entry from your index.", true, true)
-statsSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, "Stats", "Vehicle stats and tune information.", true, true)
+statsLocalSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, "Stats", "Vehicle stats and tune information.", true, true)
 colorSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, "Color", "Vehicle paint and livery options.", true, true)
 partsSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, "Parts", "Vehicle parts customization.", true, true)
 wheelsSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, "Wheels", "Wheel family, style, and custom tyres.", true, true)
+statsGatewayItem = statsLocalSubMenu.Item
+statsLocalMenu = statsLocalSubMenu.SubMenu
+statsGatewayItem.Activated = function(menu)
+    if GetResourceState("performancetuning") == "started" and tryOpenPerformanceTuningMenu() then
+        customizeSubMenu.SubMenu:CurrentSelection(1)
+        returnToCustomizeAfterPerformanceTuningClose = true
+        vehicleMenuPool:CloseAllMenus()
+        return
+    end
+
+    rebuildStatsMenu()
+    menu:SwitchTo(statsLocalMenu, 1, true)
+end
 colorSubMenu.SubMenu:AddItem(paintCategoryListItem)
 colorSubMenu.SubMenu:AddItem(primaryPaintColorListItem)
 colorSubMenu.SubMenu:AddItem(secondaryPaintColorListItem)
@@ -2125,7 +2133,7 @@ registerDriverRequiredItem(saveVehicleItem)
 registerVehicleRequiredItem(customizeSubMenu.Item)
 registerVehicleRequiredItem(colorSubMenu.Item)
 registerVehicleRequiredItem(partsSubMenu.Item)
-registerVehicleRequiredItem(statsSubMenu.Item)
+registerVehicleRequiredItem(statsGatewayItem)
 registerVehicleRequiredItem(wheelsSubMenu.Item)
 registerVehicleRequiredItem(paintCategoryListItem)
 registerVehicleRequiredItem(primaryPaintColorListItem)
@@ -2149,7 +2157,7 @@ customizeSubMenu.Item:RightLabel(">>>")
 colorSubMenu.Item:RightLabel(">>>")
 wheelsSubMenu.Item:RightLabel(">>>")
 partsSubMenu.Item:RightLabel(">>>")
-statsSubMenu.Item:RightLabel(">>>")
+statsGatewayItem:RightLabel(">>>")
 vehicleMenuPool:Add(vehicleMainMenu)
 vehicleMenuPool:RefreshIndex()
 updateVehicleAvailabilityState(true)
@@ -2259,32 +2267,20 @@ partsSubMenu.SubMenu.OnMenuChanged = function(_, _, _)
 end
 
 customizeSubMenu.SubMenu.OnIndexChange = function(menu, newindex)
-    refreshStatsTargetBindingFromSelection(menu)
+    local _ = menu
+    local __ = newindex
 end
 
 customizeSubMenu.SubMenu.OnItemSelect = function(_, item, index)
-    if item ~= statsSubMenu.Item then
-        return
-    end
-
-    if statsSubMenuBoundToVehicleManager then
-        return
-    end
-
-    if tryOpenPerformanceTuningMenu() then
-        customizeSubMenu.SubMenu:CurrentSelection(1)
-        returnToCustomizeAfterPerformanceTuningClose = true
-        vehicleMenuPool:CloseAllMenus()
-    else
-        customizeSubMenu.SubMenu:SwitchTo(statsSubMenu.SubMenu, 1, true)
-    end
+    local _ = item
+    local __ = index
 end
 
-statsSubMenu.SubMenu.OnListChange = function(_, item, index)
+statsLocalMenu.OnListChange = function(_, item, index)
     applyModSelection(item, index, statsModEntries)
 end
 
-statsSubMenu.SubMenu.OnListSelect = function(_, item, index)
+statsLocalMenu.OnListSelect = function(_, item, index)
     applyModSelection(item, index, statsModEntries)
 end
 
@@ -2301,15 +2297,13 @@ if deleteVehiclesSubMenu and deleteVehiclesSubMenu.SubMenu then
 end
 
 vehicleMainMenu.OnMenuChanged = function(_, newmenu, forward)
-    if newmenu == customizeSubMenu.SubMenu then
-        refreshStatsTargetBindingFromSelection(newmenu)
-    elseif forward and newmenu == saveLoadSubMenu.SubMenu then
+    if forward and newmenu == saveLoadSubMenu.SubMenu then
         requestSavedVehicleIndex()
     elseif forward and newmenu == wheelsSubMenu.SubMenu then
         refreshWheelControls()
     elseif forward and newmenu == partsSubMenu.SubMenu then
         rebuildPartsMenu()
-    elseif forward and newmenu == statsSubMenu.SubMenu then
+    elseif forward and newmenu == statsLocalMenu then
         rebuildStatsMenu()
     end
 end
@@ -2330,7 +2324,6 @@ RegisterNetEvent("performancetuning:menuClosed", function()
     end
 
     customizeSubMenu.SubMenu:Visible(true)
-    refreshStatsTargetBindingFromSelection(customizeSubMenu.SubMenu)
 end)
 
 RegisterNetEvent("vehiclemanager:receiveSavedVehicleIndex", function(entries)

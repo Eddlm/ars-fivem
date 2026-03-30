@@ -1,4 +1,11 @@
 local saveDirectory = "savedvehicles"
+local ownerIdentifierPrefixes = {
+    "license:",
+    "license2:",
+    "fivem:",
+    "steam:",
+    "discord:",
+}
 local TUNING_SELECTION_SCHEMA = {
     { key = "enginePack", parse = function(value) return type(value) == "string" and value or "stock" end },
     { key = "transmissionPack", parse = function(value) return type(value) == "string" and value or "stock" end },
@@ -51,24 +58,27 @@ local function sanitizeFilePart(value, fallback)
     return text
 end
 
-local function getPlayerLicense(playerSource)
+local function getPlayerOwnerIdentifier(playerSource)
     local identifiers = GetPlayerIdentifiers(playerSource)
     for i = 1, #identifiers do
         local identifier = identifiers[i]
-        if string.sub(identifier, 1, 8) == "license:" then
-            return identifier
+        for prefixIndex = 1, #ownerIdentifierPrefixes do
+            local prefix = ownerIdentifierPrefixes[prefixIndex]
+            if string.sub(identifier, 1, #prefix) == prefix then
+                return identifier
+            end
         end
     end
     return nil
 end
 
 local function getOwnerDirectory(playerSource)
-    local license = getPlayerLicense(playerSource)
-    if not license then
+    local ownerIdentifier = getPlayerOwnerIdentifier(playerSource)
+    if not ownerIdentifier then
         return nil, nil
     end
-    local ownerKey = sanitizeFilePart(license, "unknown_license")
-    return ownerKey, license
+    local ownerKey = sanitizeFilePart(ownerIdentifier, "unknown_owner")
+    return ownerKey, ownerIdentifier
 end
 
 local function getIndexFileName(ownerKey)
@@ -231,13 +241,13 @@ RegisterNetEvent("vehiclemanager:saveVehicle", function(vehicleData)
         return
     end
 
-    local ownerKey, license = getOwnerDirectory(source)
-    if not ownerKey or not license then
+    local ownerKey, ownerIdentifier = getOwnerDirectory(source)
+    if not ownerKey or not ownerIdentifier then
         return
     end
 
     vehicleData.owner = {
-        license = license,
+        license = ownerIdentifier,
         key = ownerKey,
     }
     vehicleData.savedAt = os.date("!%Y-%m-%dT%H:%M:%SZ")
@@ -284,8 +294,8 @@ RegisterNetEvent("vehiclemanager:requestSavedVehiclePayload", function(fileName)
         return
     end
 
-    local ownerKey, license = getOwnerDirectory(src)
-    if not ownerKey or not license then
+    local ownerKey, ownerIdentifier = getOwnerDirectory(src)
+    if not ownerKey or not ownerIdentifier then
         TriggerClientEvent("vehiclemanager:receiveSavedVehiclePayload", src, nil)
         return
     end
@@ -309,7 +319,7 @@ RegisterNetEvent("vehiclemanager:requestSavedVehiclePayload", function(fileName)
     end
 
     local owner = payload.owner or {}
-    if owner.license ~= license then
+    if owner.license ~= ownerIdentifier then
         TriggerClientEvent("vehiclemanager:receiveSavedVehiclePayload", src, nil)
         return
     end
@@ -343,8 +353,8 @@ RegisterNetEvent("vehiclemanager:updateSavedVehicleSnapshot", function(saveId, v
         return
     end
 
-    local ownerKey, license = getOwnerDirectory(src)
-    if not ownerKey or not license then
+    local ownerKey, ownerIdentifier = getOwnerDirectory(src)
+    if not ownerKey or not ownerIdentifier then
         return
     end
 
@@ -360,7 +370,7 @@ RegisterNetEvent("vehiclemanager:updateSavedVehicleSnapshot", function(saveId, v
     end
 
     local owner = payload.owner or {}
-    if owner.license ~= license then
+    if owner.license ~= ownerIdentifier then
         return
     end
 

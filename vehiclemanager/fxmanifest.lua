@@ -3,7 +3,6 @@ game 'gta5'
 -- Startup order hint:
 -- ensure ScaleformUI_Assets
 -- ensure ScaleformUI_Lua
--- ensure performancetuning
 -- ensure vehiclemanager
 
 name 'vehiclemanager'
@@ -15,7 +14,6 @@ lua54 'yes'
 
 dependency 'ScaleformUI_Assets'
 dependency 'ScaleformUI_Lua'
-dependency 'performancetuning'
 
 client_scripts {
     '@ScaleformUI_Lua/ScaleformUI.lua',
@@ -24,4 +22,9 @@ client_scripts {
 
 server_scripts {
     'server/vehicle_saves.lua'
+}
+
+files {
+    'savedvehicles/.gitkeep',
+    'savedvehicles/*.json'
 }
