@@ -1,0 +1,15 @@
+util.lua
+========
+
+util.lua
+├─ CustomPhysicsUtil.clamp(value, minimum, maximum)
+├─ CustomPhysicsUtil.mapValue(x, inMin, inMax, outMin, outMax, doClamp)
+│  └─ CustomPhysicsUtil.clamp(...)                [when doClamp is true]
+├─ CustomPhysicsUtil.getFpsRatio()
+├─ CustomPhysicsUtil.getDeltaSeconds()
+├─ CustomPhysicsUtil.getPlanarAngleDegrees(forward, velocity)
+│  └─ CustomPhysicsUtil.clamp(...)
+├─ CustomPhysicsUtil.getVehiclePlanarSpeed(vehicle)
+├─ CustomPhysicsUtil.buildWheelPowerSnapshot(vehicle)
+└─ CustomPhysicsUtil.getDrivenWheelPowerTotal(vehicle)
+   └─ CustomPhysicsUtil.buildWheelPowerSnapshot(vehicle)

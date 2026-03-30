@@ -1,0 +1,60 @@
+local lastVehicle = nil
+
+-- Vehicle discovery helpers
+
+-- Returns the local player's current vehicle only when they are the active driver.
+local function getDriverVehicle()
+    local ped = PlayerPedId()
+    local vehicle = DoesEntityExist(ped) and GetVehiclePedIsIn(ped, false) or 0
+    if vehicle == 0 or not DoesEntityExist(vehicle) or GetPedInVehicleSeat(vehicle, -1) ~= ped then
+        return nil
+    end
+
+    return vehicle
+end
+
+-- Resets all subsystem overrides for the given vehicle context.
+local function clearOverrides(vehicle)
+    CustomPhysicsPower.reset(vehicle)
+    CustomPhysicsWheelies.reset()
+    CustomPhysicsRollovers.reset()
+    CustomPhysicsNitrous.reset(vehicle)
+end
+
+-- Runtime entrypoints
+
+-- Runs the main per-frame coordinator loop for the local player vehicle.
+CreateThread(function()
+    while true do
+        local now = GetGameTimer()
+        local vehicle = getDriverVehicle()
+
+        if vehicle then
+            if lastVehicle and lastVehicle ~= vehicle then
+                clearOverrides(lastVehicle)
+            end
+
+            CustomPhysicsRollovers.update(vehicle)
+            CustomPhysicsWheelies.update(vehicle)
+            CustomPhysicsPower.update(vehicle, now)
+            CustomPhysicsNitrous.update(vehicle, now)
+            lastVehicle = vehicle
+        else
+            if lastVehicle then
+                clearOverrides(lastVehicle)
+                lastVehicle = nil
+            end
+        end
+
+        Wait(0)
+    end
+end)
+
+-- Clears active overrides when the resource stops to avoid leaving stale effects behind.
+AddEventHandler('onResourceStop', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then
+        return
+    end
+
+    clearOverrides(lastVehicle)
+end)

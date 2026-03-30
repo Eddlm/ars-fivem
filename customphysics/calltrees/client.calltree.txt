@@ -1,0 +1,19 @@
+client.lua
+==========
+
+client.lua
+├─ getDriverVehicle()
+├─ clearOverrides(vehicle)
+│  ├─ CustomPhysicsPower.reset(vehicle)
+│  ├─ CustomPhysicsWheelies.reset()
+│  └─ CustomPhysicsRollovers.reset()
+├─ CreateThread(...)
+│  └─ loop
+│     ├─ getDriverVehicle()
+│     ├─ clearOverrides(lastVehicle)              [when switching vehicles]
+│     ├─ CustomPhysicsRollovers.update(vehicle)
+│     ├─ CustomPhysicsWheelies.update(vehicle)
+│     ├─ CustomPhysicsPower.update(vehicle, now)
+│     └─ clearOverrides(lastVehicle)              [when leaving vehicle]
+└─ AddEventHandler('onResourceStop', ...)
+   └─ clearOverrides(lastVehicle)

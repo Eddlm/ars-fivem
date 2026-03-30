@@ -1,0 +1,23 @@
+wheelies.lua
+============
+
+wheelies.lua
+├─ CustomPhysicsWheelies.reset()
+│  └─ resetWheelieState()
+└─ CustomPhysicsWheelies.update(vehicle)
+   ├─ updateNativeWheelieControl(vehicle)
+   │  ├─ isHandbrakeHeld()
+   │  └─ isAccelerationActive()
+   ├─ isHandbrakeHeld()
+   ├─ isAccelerationActive()
+   ├─ resetWheelieState()                         [when disabled / invalid state]
+   ├─ getVehicleLength(vehicle)                   [for front force offset]
+   ├─ getSlopeRelativePitchDegrees(vehicle)
+   │  └─ getVehicleLength(vehicle)
+   ├─ getClampedDrivenWheelPower(vehicle)
+   │  ├─ CustomPhysicsUtil.getDrivenWheelPowerTotal(vehicle)
+   │  │  └─ CustomPhysicsUtil.buildWheelPowerSnapshot(vehicle)
+   │  └─ CustomPhysicsUtil.clamp(...)
+   ├─ CustomPhysicsUtil.clamp(...)                [wheelPowerNorm]
+   ├─ CustomPhysicsUtil.clamp(...)                [rearBiasMultiplier]
+   └─ ApplyForceToEntity(...)                     [final wheelie forces]
