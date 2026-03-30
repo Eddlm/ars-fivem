@@ -318,7 +318,23 @@ local function getMinimumBubbleDistance(vehicleLength)
 end
 
 local function getViewModeHeightOffset()
-    return getViewModeFollowPadding() * 0.75
+    local viewMode = GetFollowVehicleCamViewMode()
+    local configuredHeightOffset = Config.FollowCam.heightOffsetByViewMode and Config.FollowCam.heightOffsetByViewMode[viewMode] or nil
+
+    if configuredHeightOffset ~= nil then
+        return tonumber(configuredHeightOffset) or 0.5
+    end
+
+    return 0.5
+end
+
+local function syncCameraFov()
+    local gameplayFov = tonumber(GetGameplayCamFov and GetGameplayCamFov() or nil)
+    if gameplayFov and gameplayFov > 0.0 then
+        state.fov = gameplayFov
+    else
+        state.fov = tonumber(Config.FollowCam.defaultFov) or state.fov
+    end
 end
 
 -- Camera lifecycle helpers keep creation, activation, and teardown in one place.
@@ -331,6 +347,7 @@ local function cleanupCamera()
 
     ClearFocus()
     SetFocusEntity(PlayerPedId())
+    DisplayRadar(true)
 
     state.active = false
     state.cam = nil
@@ -361,6 +378,7 @@ end
 -- Activating the camera only needs to happen once per session.
 local function activateCamera()
     ensureCamera()
+    syncCameraFov()
     SetCamActive(state.cam, true)
     SetCamFov(state.cam, state.fov)
     RenderScriptCams(true, true, 200, true, true)
@@ -484,7 +502,7 @@ local function getDesiredFollowData()
     )
 
     local roofHeight = math.max(0.0, tonumber(maxDim.z) or 0.0)
-    local targetHeight = roofHeight + 1.0 + getViewModeHeightOffset()
+    local targetHeight = roofHeight + getViewModeHeightOffset()
     local followDistance = getViewModeTrailingDistance(vehicleHalfLength)
     local currentOffsetFromVehicle = subtractVector(state.position, vehicleCoords)
     local rearwardDirection = scaleVector(lookAheadDirection, -1.0)
@@ -523,7 +541,7 @@ local function getInitialFollowPosition(vehicle)
     local forward = getEntityForwardVectorSafe(vehicle)
     local flatForward = normalize(vector3(forward.x, forward.y, 0.0))
     local rearwardDirection = scaleVector(flatForward, -1.0)
-    local targetHeight = roofHeight + 1.0 + getViewModeHeightOffset()
+    local targetHeight = roofHeight + getViewModeHeightOffset()
 
     if vectorLength(rearwardDirection) <= 0.001 then
         rearwardDirection = vector3(0.0, -1.0, 0.0)
@@ -551,7 +569,7 @@ local function seedFollowState(vehicle)
     state.focus = desiredFocus
     state.rotation = directionToRotation(subtractVector(state.focus, state.position))
     state.rotationSpeed = vector3(0.0, 0.0, 0.0)
-    state.fov = clamp(state.fov, Config.FollowCam.minFov, Config.FollowCam.maxFov)
+    syncCameraFov()
 
     SetCamCoord(state.cam, state.position.x, state.position.y, state.position.z)
     SetCamRot(state.cam, state.rotation.x, state.rotation.y, state.rotation.z, 2)
@@ -583,7 +601,7 @@ end
 -- Gameplay controls are only suppressed while the custom camera is active.
 local function disableGameplayControls()
     DisablePlayerFiring(PlayerId(), true)
-    HideHudAndRadarThisFrame()
+    DisplayRadar(true)
 end
 
 local function drawVirtualMirrorOverlay()
@@ -989,6 +1007,7 @@ local function updateHoodCam(vehicle)
     end
 
     state.position = GetCamCoord(state.cam)
+    syncCameraFov()
     SetCamFov(state.cam, state.fov)
     SetFocusPosAndVel(state.position.x, state.position.y, state.position.z, 0.0, 0.0, 0.0)
 end
@@ -1090,6 +1109,7 @@ local function updateFollowCam()
         )
     end
 
+    syncCameraFov()
     SetCamCoord(state.cam, appliedPosition.x, appliedPosition.y, appliedPosition.z)
     SetCamRot(state.cam, appliedRotation.x, appliedRotation.y, appliedRotation.z, 2)
     SetCamFov(state.cam, state.fov)

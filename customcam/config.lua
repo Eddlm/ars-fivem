@@ -36,7 +36,7 @@ Config.FollowCam = {
     acceleration = 10.0,
     damping = 2.0,
     catchupFactor = 10.0,
-    initialSpawnDistance = 7.0,
+    initialSpawnDistance = 3.5,
     minimumBubblePadding = 1.0,
     minimumBubbleEscapeSpeed = 6.0,
     speedMatchDistance = 4.0,
@@ -45,9 +45,14 @@ Config.FollowCam = {
     rotationSmoothing = 30.0,
     followDistancePadding = 0.1,
     trailingDistanceByViewMode = {
+        [0] = 0.25,
+        [1] = 1.25,
+        [2] = 2.25
+    },
+    heightOffsetByViewMode = {
         [0] = 0.5,
-        [1] = 1.5,
-        [2] = 2.5
+        [1] = 1.3,
+        [2] = 2.1
     },
     viewModePadding = {
         [0] = 0.25,
