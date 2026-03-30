@@ -24,7 +24,6 @@ local raceTimingState = {
     lapStartedAt = nil,
 }
 
-local raceMenuPool
 local raceMenuInitialized = false
 local raceMenuOpen = false
 local raceMainMenu
@@ -32,6 +31,8 @@ local raceInvokeMenu
 local raceJoinMenu
 local raceKillMenu
 local raceEditorMenu
+local raceKillMenuItem
+local raceEditorMenuItem
 local raceRefreshItem
 local raceJoinedStatusItem
 local raceOwnedStatusItem
@@ -40,7 +41,6 @@ local raceQuickLeaveItem
 local raceQuickFinishItem
 local raceInvokeDefinitionItem
 local raceInvokeLapItem
-local raceInvokePiAllowedItem
 local raceInvokeActionItem
 local raceJoinAvailableListItem
 local raceJoinActionItem
@@ -58,7 +58,6 @@ local raceMenuDefinitionOptions = {}
 local raceMenuJoinOptions = {}
 local raceMenuEndOptions = {}
 local raceMenuLapOptions = {}
-local raceMenuPiAllowedOptions = { '500', '600', '700', '800', '900', '1000' }
 local raceMenuEditorOptions = {}
 local raceMenuCheckpointWidthValues = {
     '2.0', '3.0', '4.0', '5.0', '6.0', '7.0', '8.0', '9.0', '10.0', '11.0',
@@ -68,6 +67,7 @@ local raceMenuPendingSelectName = nil
 local clearPredictedRaceProgress
 local raceMenuPendingEditorName = nil
 local raceMenuDeleteConfirmName = nil
+local raceMenuKillItems = {}
 
 local function rebuildRaceMenuLapOptions()
     raceMenuLapOptions = {}
@@ -859,12 +859,6 @@ local function getSelectedInvokeLapCount()
     return math.max(1, lapValue)
 end
 
-local function getSelectedInvokePiAllowed()
-    local selectedIndex = raceInvokePiAllowedItem and raceInvokePiAllowedItem:Index() or 1
-    local piValue = tonumber(raceMenuPiAllowedOptions[selectedIndex]) or 500
-    return math.floor(piValue)
-end
-
 local function rebuildRaceMainMenu(joinedInstance, ownedInstance)
     if not raceMainMenu then
         return
@@ -883,11 +877,11 @@ local function rebuildRaceMainMenu(joinedInstance, ownedInstance)
     end
 
     if hasActiveInstances then
-        raceMainMenu:AddItem(raceKillMenu.Item)
+        raceMainMenu:AddItem(raceKillMenuItem)
     end
 
     if not joinedInstance then
-        raceMainMenu:AddItem(raceEditorMenu.Item)
+        raceMainMenu:AddItem(raceEditorMenuItem)
     end
     raceMainMenu:AddItem(raceRefreshItem)
 end
@@ -920,7 +914,7 @@ local function getCheckpointWidthIndex(radius)
 end
 
 local function getSelectedCheckpointWidth()
-    local selectedIndex = raceEditorWidthItem and raceEditorWidthItem:Index() or getCheckpointWidthIndex(editorState.defaultCheckpointRadius)
+    local selectedIndex = (raceEditorWidthItem and raceEditorWidthItem:Index() + 1) or getCheckpointWidthIndex(editorState.defaultCheckpointRadius)
     return tonumber(raceMenuCheckpointWidthValues[selectedIndex]) or 8.0
 end
 
@@ -939,6 +933,61 @@ end
 
 local function setRaceMenuOpenState(isOpen)
     raceMenuOpen = isOpen == true
+end
+
+local function isRaceMenuVisible()
+    local menus = {
+        raceMainMenu,
+        raceInvokeMenu,
+        raceJoinMenu,
+        raceKillMenu,
+        raceEditorMenu,
+    }
+
+    for _, menu in ipairs(menus) do
+        if menu and menu:Visible() then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function createRaceMenu(title, subtitle)
+    local menu = UIMenu.New(title, subtitle, 20, 20, true)
+    menu:MenuAlignment(MenuAlignment.RIGHT)
+    menu.Children = menu.Children or {}
+    return menu
+end
+
+local function rebuildRaceKillMenu(instances)
+    if not raceKillMenu then
+        return
+    end
+
+    raceKillMenu:Clear()
+    raceMenuEndOptions = {}
+    raceMenuKillItems = {}
+
+    for _, instance in ipairs(instances) do
+        raceMenuEndOptions[#raceMenuEndOptions + 1] = instance
+        local killItem = UIMenuItem.New(
+            getInstanceDisplayName(instance),
+            ('Kill this instance for everyone. State: %s | Entrants: %s'):format(
+                getInstanceStateLabel(instance),
+                getInstanceEntrantCount(instance)
+            )
+        )
+        killItem:RightLabel('Kill')
+        raceKillMenu:AddItem(killItem)
+        raceMenuKillItems[#raceMenuKillItems + 1] = killItem
+    end
+
+    if #raceMenuEndOptions == 0 then
+        local emptyKillItem = UIMenuItem.New('No active race instances', 'There is nothing to kill right now.')
+        emptyKillItem:Enabled(false)
+        raceKillMenu:AddItem(emptyKillItem)
+    end
 end
 
 local function refreshRaceMenu()
@@ -1031,25 +1080,26 @@ local function refreshRaceMenu()
     local normalizedSelectedEditorName = RacingSystem.NormalizeRaceName(selectedEditorName)
     local deleteIsArmed = normalizedDeleteConfirmName ~= nil and normalizedDeleteConfirmName == normalizedSelectedEditorName
     if deleteIsArmed then
-        raceEditorDeleteItem:Text('Delete Selected Race (Confirm)')
+        raceEditorDeleteItem:Label('Delete Selected Race (Confirm)')
         raceEditorDeleteItem:Description(('Press again to permanently delete "%s".'):format(selectedEditorName))
     else
-        raceEditorDeleteItem:Text('Delete Selected Race')
+        raceEditorDeleteItem:Label('Delete Selected Race')
         raceEditorDeleteItem:Description(('Delete "%s" from disk and remove it from the race index.'):format(selectedEditorName))
     end
     raceEditorDeleteItem:Enabled(selectedEditorDefinition ~= nil)
 
     local widthIndex = getCheckpointWidthIndex(editorState.defaultCheckpointRadius)
-    raceEditorWidthItem:Index(widthIndex)
-    raceEditorGrabCheckboxItem.Checked = editorState.grabbedCheckpointIndex ~= nil
+    raceEditorWidthItem:Index(widthIndex - 1)
+    raceEditorWidthItem:Description(('Set width for new or grabbed checkpoints. Current: %.1f'):format(tonumber(editorState.defaultCheckpointRadius) or 8.0))
+    raceEditorGrabCheckboxItem:Checked(editorState.grabbedCheckpointIndex ~= nil)
 
     raceJoinedStatusItem:Description('Browse available race instances. Select one and press accept to join.')
 
     local ownedLabel = 'None'
     local ownedDescription = 'Host a new race instance from a saved race definition.'
-    raceOwnedStatusItem:Text('Host Race')
+    raceOwnedStatusItem:Label('Host Race')
     if ownedInstance then
-        raceOwnedStatusItem:Text('Edit Race')
+        raceOwnedStatusItem:Label('Edit Race')
         ownedLabel = getInstanceStateLabel(ownedInstance)
         ownedDescription = ('Edit your hosted race: %s | State: %s | Entrants: %s'):format(
             tostring(ownedInstance.name or 'Unnamed'),
@@ -1106,101 +1156,106 @@ local function refreshRaceMenu()
     end
     raceJoinedStatusItem:RightLabel(tostring(#raceMenuJoinOptions))
 
-    raceKillMenu.SubMenu:Clear()
-    raceMenuEndOptions = {}
-    for _, instance in ipairs(instances) do
-        raceMenuEndOptions[#raceMenuEndOptions + 1] = instance
-        local killItem = NativeUI.CreateItem(
-            getInstanceDisplayName(instance),
-            ('Kill this instance for everyone. State: %s | Entrants: %s'):format(
-                getInstanceStateLabel(instance),
-                getInstanceEntrantCount(instance)
-            )
-        )
-        killItem:RightLabel('Kill')
-        raceKillMenu.SubMenu:AddItem(killItem)
-    end
-
-    if #raceMenuEndOptions == 0 then
-        local emptyKillItem = NativeUI.CreateItem('No active race instances', 'There is nothing to kill right now.')
-        emptyKillItem:Enabled(false)
-        raceKillMenu.SubMenu:AddItem(emptyKillItem)
-    end
+    rebuildRaceKillMenu(instances)
 
     rebuildRaceMainMenu(joinedInstance, ownedInstance)
-
-    raceMenuPool:RefreshIndex()
     return true
 end
 
 local function initializeRaceMenu()
-    if raceMenuInitialized or type(NativeUI) ~= 'table' or type(NativeUI.CreatePool) ~= 'function' then
+    if raceMenuInitialized then
         return raceMenuInitialized
     end
 
-    raceMenuPool = NativeUI.CreatePool()
-    raceMainMenu = NativeUI.CreateMenu('Race Control', '~b~RACINGSYSTEM', 1420, 0, nil, nil, nil, 255, 255, 255, 210)
-    raceMenuPool:Add(raceMainMenu)
-
-    raceInvokeMenu = raceMenuPool:AddSubMenu(raceMainMenu, 'Create Race', 'Choose a saved race and create a live instance.', true, true)
-    raceJoinMenu = raceMenuPool:AddSubMenu(raceMainMenu, 'Available Races', 'Browse currently active race instances.', true, true)
-    raceKillMenu = raceMenuPool:AddSubMenu(raceMainMenu, 'Kill Instance', 'Kill one of the currently active race instances.', true, true)
-    raceEditorMenu = raceMenuPool:AddSubMenu(raceMainMenu, 'Race Editor', 'Create and edit race checkpoint layouts.', true, true)
-
-    raceRefreshItem = NativeUI.CreateItem('Refresh', 'Refresh the saved race list and active race snapshot.')
-    raceJoinedStatusItem = NativeUI.CreateItem('Available Races', 'Browse available race instances and press accept to join.')
-    raceOwnedStatusItem = NativeUI.CreateItem('Host Race', 'Host a new race instance from a saved race definition.')
-    raceQuickStartItem = NativeUI.CreateItem('Start Countdown', 'Start the 5 second countdown for the race you are currently joined to.')
-    raceQuickLeaveItem = NativeUI.CreateItem('Leave Race', 'Leave the race instance you are currently joined to.')
-    raceQuickFinishItem = NativeUI.CreateItem('Finish Race', 'Finish the race instance you are currently running.')
-    raceInvokeDefinitionItem = NativeUI.CreateListItem('Race', { 'Loading...' }, 1, 'Select which indexed race to create.')
-    raceInvokeLapItem = NativeUI.CreateListItem('Laps', raceMenuLapOptions, 1, 'Choose the lap count for the race instance.')
-    raceInvokePiAllowedItem = NativeUI.CreateListItem('PI Allowed', raceMenuPiAllowedOptions, 1, 'Choose the maximum PI allowed for this race instance.')
-    raceInvokeActionItem = NativeUI.CreateItem('Create Selected Race', 'Create a live race instance from the selected saved race.')
-    raceJoinAvailableListItem = NativeUI.CreateListItem('Available Races', { 'Loading...' }, 1, 'Select an available race.')
-    raceJoinActionItem = NativeUI.CreateItem('Join Selected Race', 'Join the selected race instance.')
-    raceJoinDetailItemOne = NativeUI.CreateItem('Laps', 'Selected race lap count.')
-    raceJoinDetailItemTwo = NativeUI.CreateItem('Entrants', 'Selected race entrant count.')
-    raceJoinDetailItemThree = NativeUI.CreateItem('State', 'Selected race current state.')
-    raceEditorSelectedItem = NativeUI.CreateListItem('Selected Race', { 'Type a race name...' }, 1, 'Use left/right for known names, or press accept to type a custom race name.')
-    raceEditorOpenItem = NativeUI.CreateItem('Open/Create Selected', 'Open the selected race for editing, or create a blank one if it does not exist.')
-    raceEditorWidthItem = NativeUI.CreateSliderItem('Checkpoint Width', raceMenuCheckpointWidthValues, getCheckpointWidthIndex(editorState.defaultCheckpointRadius), 'Sets the checkpoint width used for new checkpoints and the nearest or grabbed checkpoint.')
-    raceEditorAddCheckpointItem = NativeUI.CreateItem('Add Checkpoint', 'Place a checkpoint at your current car or player position.')
-    raceEditorGrabCheckboxItem = NativeUI.CreateCheckboxItem('Grab Checkpoint', false, 'When checked, holds the nearest checkpoint using the existing grab behavior.')
-    raceEditorSaveItem = NativeUI.CreateItem('Save Selected Race', 'Save the current editor checkpoints into the selected race name.')
-    raceEditorDeleteItem = NativeUI.CreateItem('Delete Selected Race', 'Delete the selected indexed race from disk.')
-
-    raceInvokeMenu.SubMenu:AddItem(raceInvokeDefinitionItem)
-    raceInvokeMenu.SubMenu:AddItem(raceInvokeLapItem)
-    raceInvokeMenu.SubMenu:AddItem(raceInvokePiAllowedItem)
-    raceInvokeMenu.SubMenu:AddItem(raceInvokeActionItem)
-    raceJoinMenu.SubMenu:AddItem(raceJoinAvailableListItem)
-    raceJoinMenu.SubMenu:AddItem(raceJoinActionItem)
-    raceJoinMenu.SubMenu:AddItem(raceJoinDetailItemOne)
-    raceJoinMenu.SubMenu:AddItem(raceJoinDetailItemTwo)
-    raceJoinMenu.SubMenu:AddItem(raceJoinDetailItemThree)
-    raceEditorMenu.SubMenu:AddItem(raceEditorSelectedItem)
-    raceEditorMenu.SubMenu:AddItem(raceEditorOpenItem)
-    raceEditorMenu.SubMenu:AddItem(raceEditorWidthItem)
-    raceEditorMenu.SubMenu:AddItem(raceEditorAddCheckpointItem)
-    raceEditorMenu.SubMenu:AddItem(raceEditorGrabCheckboxItem)
-    raceEditorMenu.SubMenu:AddItem(raceEditorSaveItem)
-    raceEditorMenu.SubMenu:AddItem(raceEditorDeleteItem)
-
-    raceMainMenu:ReleaseMenuFromItem(raceInvokeMenu.Item)
-    raceMainMenu:ReleaseMenuFromItem(raceJoinMenu.Item)
-    raceMainMenu:BindMenuToItem(raceInvokeMenu.SubMenu, raceOwnedStatusItem)
-    raceMainMenu:BindMenuToItem(raceJoinMenu.SubMenu, raceJoinedStatusItem)
-
-    raceMainMenu.OnMenuClosed = function()
-        setRaceMenuOpenState(false)
+    if type(UIMenu) ~= 'table' or type(UIMenu.New) ~= 'function' then
+        return false
     end
 
-    raceEditorMenu.SubMenu.OnMenuClosed = function()
+    raceMainMenu = createRaceMenu('Race Control', '~b~RACINGSYSTEM')
+    raceInvokeMenu = createRaceMenu('Create Race', 'Choose a saved race and create a live instance.')
+    raceJoinMenu = createRaceMenu('Available Races', 'Browse currently active race instances.')
+    raceKillMenu = createRaceMenu('Kill Instance', 'Kill one of the currently active race instances.')
+    raceEditorMenu = createRaceMenu('Race Editor', 'Create and edit race checkpoint layouts.')
+
+    raceRefreshItem = UIMenuItem.New('Refresh', 'Refresh the saved race list and active race snapshot.')
+    raceJoinedStatusItem = UIMenuItem.New('Available Races', 'Browse available race instances and press accept to join.')
+    raceOwnedStatusItem = UIMenuItem.New('Host Race', 'Host a new race instance from a saved race definition.')
+    raceKillMenuItem = UIMenuItem.New('Kill Instance', 'Kill one of the currently active race instances.')
+    raceEditorMenuItem = UIMenuItem.New('Race Editor', 'Create and edit race checkpoint layouts.')
+    raceQuickStartItem = UIMenuItem.New('Start Countdown', 'Start the 5 second countdown for the race you are currently joined to.')
+    raceQuickLeaveItem = UIMenuItem.New('Leave Race', 'Leave the race instance you are currently joined to.')
+    raceQuickFinishItem = UIMenuItem.New('Finish Race', 'Finish the race instance you are currently running.')
+    raceInvokeDefinitionItem = UIMenuListItem.New('Race', { 'Loading...' }, 1, 'Select which indexed race to create.')
+    raceInvokeLapItem = UIMenuListItem.New('Laps', raceMenuLapOptions, 1, 'Choose the lap count for the race instance.')
+    raceInvokeActionItem = UIMenuItem.New('Create Selected Race', 'Create a live race instance from the selected saved race.')
+    raceJoinAvailableListItem = UIMenuListItem.New('Available Races', { 'Loading...' }, 1, 'Select an available race.')
+    raceJoinActionItem = UIMenuItem.New('Join Selected Race', 'Join the selected race instance.')
+    raceJoinDetailItemOne = UIMenuItem.New('Laps', 'Selected race lap count.')
+    raceJoinDetailItemTwo = UIMenuItem.New('Entrants', 'Selected race entrant count.')
+    raceJoinDetailItemThree = UIMenuItem.New('State', 'Selected race current state.')
+    raceEditorSelectedItem = UIMenuListItem.New('Selected Race', { 'Type a race name...' }, 1, 'Use left/right for known names, or press accept to type a custom race name.')
+    raceEditorOpenItem = UIMenuItem.New('Open/Create Selected', 'Open the selected race for editing, or create a blank one if it does not exist.')
+    raceEditorWidthItem = UIMenuSliderItem.New('Checkpoint Width', #raceMenuCheckpointWidthValues - 1, 1, getCheckpointWidthIndex(editorState.defaultCheckpointRadius) - 1, false, 'Sets the checkpoint width used for new checkpoints and the nearest or grabbed checkpoint.')
+    raceEditorAddCheckpointItem = UIMenuItem.New('Add Checkpoint', 'Place a checkpoint at your current car or player position.')
+    raceEditorGrabCheckboxItem = UIMenuCheckboxItem.New('Grab Checkpoint', false, 1, 'When checked, holds the nearest checkpoint using the existing grab behavior.')
+    raceEditorSaveItem = UIMenuItem.New('Save Selected Race', 'Save the current editor checkpoints into the selected race name.')
+    raceEditorDeleteItem = UIMenuItem.New('Delete Selected Race', 'Delete the selected indexed race from disk.')
+
+    raceInvokeMenu:AddItem(raceInvokeDefinitionItem)
+    raceInvokeMenu:AddItem(raceInvokeLapItem)
+    raceInvokeMenu:AddItem(raceInvokeActionItem)
+    raceJoinMenu:AddItem(raceJoinAvailableListItem)
+    raceJoinMenu:AddItem(raceJoinActionItem)
+    raceJoinMenu:AddItem(raceJoinDetailItemOne)
+    raceJoinMenu:AddItem(raceJoinDetailItemTwo)
+    raceJoinMenu:AddItem(raceJoinDetailItemThree)
+    raceEditorMenu:AddItem(raceEditorSelectedItem)
+    raceEditorMenu:AddItem(raceEditorOpenItem)
+    raceEditorMenu:AddItem(raceEditorWidthItem)
+    raceEditorMenu:AddItem(raceEditorAddCheckpointItem)
+    raceEditorMenu:AddItem(raceEditorGrabCheckboxItem)
+    raceEditorMenu:AddItem(raceEditorSaveItem)
+    raceEditorMenu:AddItem(raceEditorDeleteItem)
+
+    raceMainMenu:BindMenuToItem(raceInvokeMenu, raceOwnedStatusItem)
+    raceMainMenu:BindMenuToItem(raceJoinMenu, raceJoinedStatusItem)
+    raceMainMenu:BindMenuToItem(raceKillMenu, raceKillMenuItem)
+    raceMainMenu:BindMenuToItem(raceEditorMenu, raceEditorMenuItem)
+    raceOwnedStatusItem.Activated = function(menu)
+        menu:SwitchTo(raceInvokeMenu, 1, true)
+    end
+    raceJoinedStatusItem.Activated = function(menu)
+        menu:SwitchTo(raceJoinMenu, 1, true)
+    end
+    raceKillMenuItem.Activated = function(menu)
+        menu:SwitchTo(raceKillMenu, 1, true)
+    end
+    raceEditorMenuItem.Activated = function(menu)
+        menu:SwitchTo(raceEditorMenu, 1, true)
+    end
+
+    raceMainMenu.OnMenuClose = function()
+        setRaceMenuOpenState(isRaceMenuVisible())
+    end
+
+    raceInvokeMenu.OnMenuClose = function()
+        setRaceMenuOpenState(isRaceMenuVisible())
+    end
+
+    raceJoinMenu.OnMenuClose = function()
+        setRaceMenuOpenState(isRaceMenuVisible())
+    end
+
+    raceKillMenu.OnMenuClose = function()
+        setRaceMenuOpenState(isRaceMenuVisible())
+    end
+
+    raceEditorMenu.OnMenuClose = function()
         if editorState.active then
             endEditorSession()
             refreshRaceMenu()
         end
+        setRaceMenuOpenState(isRaceMenuVisible())
     end
 
     raceMainMenu.OnItemSelect = function(_, item, index)
@@ -1216,7 +1271,7 @@ local function initializeRaceMenu()
         end
     end
 
-    raceEditorMenu.SubMenu.OnListChange = function(_, item, index)
+    raceEditorMenu.OnListChange = function(_, item, index)
         if item ~= raceEditorSelectedItem then
             return
         end
@@ -1229,7 +1284,7 @@ local function initializeRaceMenu()
         end
     end
 
-    raceEditorMenu.SubMenu.OnListSelect = function(_, item, index)
+    raceEditorMenu.OnListSelect = function(_, item, index)
         if item ~= raceEditorSelectedItem then
             return
         end
@@ -1263,7 +1318,7 @@ local function initializeRaceMenu()
         refreshRaceMenu()
     end
 
-    raceInvokeMenu.SubMenu.OnItemSelect = function(_, item, index)
+    raceInvokeMenu.OnItemSelect = function(_, item, index)
         if item ~= raceInvokeActionItem then
             return
         end
@@ -1274,11 +1329,11 @@ local function initializeRaceMenu()
             return
         end
 
-        TriggerServerEvent('racingsystem:invokeRace', definition.name, getSelectedInvokeLapCount(), getSelectedInvokePiAllowed())
-        raceInvokeMenu.SubMenu:GoBack()
+        TriggerServerEvent('racingsystem:invokeRace', definition.name, getSelectedInvokeLapCount())
+        raceInvokeMenu:GoBack()
     end
 
-    raceJoinMenu.SubMenu.OnListChange = function(_, item, index)
+    raceJoinMenu.OnListChange = function(_, item, index)
         if item ~= raceJoinAvailableListItem then
             return
         end
@@ -1304,13 +1359,7 @@ local function initializeRaceMenu()
         end
     end
 
-    raceJoinMenu.SubMenu.OnListSelect = function(_, item, index)
-        if item ~= raceJoinAvailableListItem then
-            return
-        end
-    end
-
-    raceJoinMenu.SubMenu.OnItemSelect = function(_, item, index)
+    raceJoinMenu.OnItemSelect = function(_, item, index)
         if item ~= raceJoinActionItem then
             return
         end
@@ -1329,14 +1378,14 @@ local function initializeRaceMenu()
         TriggerServerEvent('racingsystem:joinRace', instance.name)
     end
 
-    raceKillMenu.SubMenu.OnItemSelect = function(_, item, index)
+    raceKillMenu.OnItemSelect = function(_, item, index)
         local instance = raceMenuEndOptions[index]
         if instance then
             TriggerServerEvent('racingsystem:killRace', instance.name)
         end
     end
 
-    raceEditorMenu.SubMenu.OnItemSelect = function(_, item, index)
+    raceEditorMenu.OnItemSelect = function(_, item, index)
         if item == raceEditorOpenItem then
             local selectedDefinition = raceMenuEditorOptions[raceEditorSelectedItem:Index()]
             local raceName = editorState.selectedName ~= '' and editorState.selectedName or (selectedDefinition and selectedDefinition.name or '')
@@ -1385,7 +1434,7 @@ local function initializeRaceMenu()
         end
     end
 
-    raceEditorMenu.SubMenu.OnSliderChange = function(_, item, index)
+    raceEditorMenu.OnSliderChange = function(_, item, index)
         if item ~= raceEditorWidthItem then
             return
         end
@@ -1398,20 +1447,7 @@ local function initializeRaceMenu()
         end
     end
 
-    raceEditorMenu.SubMenu.OnSliderSelect = function(_, item, index)
-        if item ~= raceEditorWidthItem then
-            return
-        end
-
-        local selectedWidth = getSelectedCheckpointWidth()
-        editorState.defaultCheckpointRadius = selectedWidth
-        local checkpoint = getEditorTargetCheckpoint()
-        if checkpoint then
-            checkpoint.radius = selectedWidth
-        end
-    end
-
-    raceEditorMenu.SubMenu.OnCheckboxChange = function(_, item, checked)
+    raceEditorMenu.OnCheckboxChange = function(_, item, checked)
         if item ~= raceEditorGrabCheckboxItem then
             return
         end
@@ -1421,7 +1457,7 @@ local function initializeRaceMenu()
             toggleGrabClosestCheckpoint()
         end
 
-        raceEditorGrabCheckboxItem.Checked = editorState.grabbedCheckpointIndex ~= nil
+        raceEditorGrabCheckboxItem:Checked(editorState.grabbedCheckpointIndex ~= nil)
     end
 
     raceJoinActionItem:Enabled(false)
@@ -1430,13 +1466,12 @@ local function initializeRaceMenu()
     raceJoinDetailItemThree:Enabled(false)
 
     raceMenuInitialized = true
-    raceMenuPool:RefreshIndex()
     return true
 end
 
 local function openRaceMenu()
     if not initializeRaceMenu() then
-        notify('NativeUI is not available.')
+        notify('ScaleformUI is not available.')
         return
     end
 
@@ -1604,7 +1639,7 @@ RegisterNetEvent('racingsystem:stateSnapshot', function(snapshot)
 
     raceCountdownLocalEndByInstanceId = activeCountdowns
 
-    if raceMenuInitialized and raceMenuOpen then
+    if raceMenuInitialized and isRaceMenuVisible() then
         refreshRaceMenu()
     end
 end)
@@ -1857,17 +1892,6 @@ CreateThread(function()
             end
 
             Wait(0)
-        end
-    end
-end)
-
-CreateThread(function()
-    while true do
-        if raceMenuInitialized and raceMenuPool then
-            raceMenuPool:ProcessMenus()
-            Wait(raceMenuOpen and 0 or 250)
-        else
-            Wait(500)
         end
     end
 end)
