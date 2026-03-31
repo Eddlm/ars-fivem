@@ -380,6 +380,7 @@ local function drawPanelInstanceInternal(vehicle, displayState, stateKey, option
     local rowGap = panelH * 0.235
     local trackH = panelH * 0.062
     local rowStartY = panelY - (rowGap * 1.32)
+    local headerY = panelY - (panelH * 0.45)
     local segmentGap = trackW * 0.016
     local segmentCount = 5
     local segmentW = (trackW - (segmentGap * (segmentCount - 1))) / segmentCount
@@ -394,6 +395,7 @@ local function drawPanelInstanceInternal(vehicle, displayState, stateKey, option
     end
 
     DrawRect(panelX, panelY, panelW, panelH, 0, 0, 0, panelAlpha)
+    drawPiCenteredText(panelX, headerY, 0.28 * panelScale, ('PI %d'):format(math.max(0, math.floor((tonumber(panelMetrics.total) or 0) + 0.5))))
 
     local orderedLabels = { 'Brake', 'Grip', 'Power', 'Speed' }
     local orderedFills = {
