@@ -19,7 +19,7 @@
 
 | Github | Discord | FiveM Server |
 | --- | --- | --- |
-| a | b | c |
+| Use the [issues](https://github.com/Eddlm/ars-fivem/issues) system, **NOT** pull requests. | I am available on [The Nation]() and [Vanillaworks]()#handling-help |  |
 
 # Resources
 
