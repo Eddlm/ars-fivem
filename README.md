@@ -4,6 +4,8 @@
 `[ars-fivem]` is a racing/car oriented resource pack for Fivem. "ARS" comes from my ongoing singleplayer project, [Autosport Racing System](https://www.gta5-mods.com/scripts/autosport-racing-system).
 
 
+**This is FiveM only, Server-install only. no SP.**
+
 | Resource | Requirements | Features | Hotkey | Interfunctionality |
 | --- | --- | --- | --- | --- |
 | racingsystem | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | Create and host checkpoint races | `F7` | Can load GTAO races |
@@ -13,6 +15,12 @@
 | customphysics | None | Powerslides, wheelies, rollovers, offroad and overspeed fixes | None | Reads `performancetuning` state for rev limiter and top-speed baseline when available |
 
 ---
+<br>
+
+# Installation
+Each resource can go anywhere inside `server-data\resources`, ensure them one by one. I reccomend `[eddlm]` or `[ars-fivem]` for clarity when going through your folders. Do not ensure the entire folder, they need a special order to load. 
+
+[Proper Handling](https://github.com/Eddlm/TheNewHandlingProject) goes well with this pack.
 
 ### Load Order
 
