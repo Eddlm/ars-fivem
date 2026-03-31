@@ -1,0 +1,108 @@
+{
+    "scaffoldVersion": 1,
+    "vehicle": {
+        "modelHash": -1045541610,
+        "vehicleProperties": {
+            "bulletProofTyres": false,
+            "engineOn": false,
+            "colours": {
+                "modColor2": {
+                    "paintType": 1,
+                    "color": 0
+                },
+                "tyreSmoke": {
+                    "g": 255,
+                    "r": 255,
+                    "b": 255
+                },
+                "secondary": 0,
+                "xenonHeadlights": 255,
+                "dashboard": 0,
+                "isPrimaryColourCustom": false,
+                "interior": 0,
+                "primary": 0,
+                "modColor1": {
+                    "color": 0,
+                    "paintType": 1,
+                    "pearlescent": 0
+                },
+                "pearl": 0,
+                "rim": 0,
+                "isSecondaryColourCustom": false
+            },
+            "neons": {
+                "back": false,
+                "right": false,
+                "left": false,
+                "color": {
+                    "g": 0,
+                    "r": 255,
+                    "b": 255
+                },
+                "front": false
+            },
+            "numberPlateIndex": 3,
+            "mods": {
+                "23": {
+                    "variation": false,
+                    "type": "index",
+                    "index": 0
+                }
+            },
+            "lockStatus": 1,
+            "sirenActive": false,
+            "wheelType": 1,
+            "windowTint": -1,
+            "modExtras": []
+        }
+    },
+    "format": {
+        "variant": "menyoo-inspired-json",
+        "name": "VehicleManagerSavedVehicle"
+    },
+    "owner": {
+        "license": "steam:110000104cdc171",
+        "key": "steam_110000104cdc171"
+    },
+    "source": "VehicleManager",
+    "saveId": "COMET2B",
+    "identity": {
+        "performancePi": 782,
+        "localizedName": "Comet",
+        "primaryColorLabel": "Black",
+        "plate": "61ROT014",
+        "plateIndex": 3,
+        "class": 6,
+        "model": -1045541610,
+        "displayName": "COMET2"
+    },
+    "tuning": {
+        "selections": {
+            "nitrousLevel": "level_1",
+            "suspensionBiasFront": 0.4,
+            "antirollForce": 1.0,
+            "antirollBiasFront": 0.0,
+            "suspensionPack": "race",
+            "enginePack": "stage_1",
+            "transmissionPack": "tuned",
+            "tireCompoundCategory": "road",
+            "suspensionRaise": 0.025,
+            "brakePack": "stock",
+            "steeringLockMode": "balanced",
+            "tireCompoundQuality": "high_end",
+            "revLimiterEnabled": false,
+            "tireCompoundPack": "race_soft",
+            "brakeBiasFront": 0.5,
+            "gripBiasFront": 0.49,
+            "nitrousShotStrength": 1.0
+        },
+        "version": 1
+    },
+    "server": {
+        "savedBy": 1,
+        "resource": "vehiclemanager",
+        "receivedAt": "2026-03-30T18:33:06Z"
+    },
+    "savedAt": "2026-03-30T18:33:06Z",
+    "updatedAt": "2026-03-30T21:13:43Z"
+}

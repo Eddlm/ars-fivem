@@ -1,0 +1,116 @@
+{
+    "identity": {
+        "displayName": "PRAIRIE",
+        "plate": "20BXI455",
+        "localizedName": "Prairie",
+        "model": -1450650718,
+        "primaryColorLabel": "Midnight Silver",
+        "class": 0,
+        "plateIndex": 0,
+        "performancePi": 689
+    },
+    "vehicle": {
+        "modelHash": -1450650718,
+        "vehicleProperties": {
+            "numberPlateIndex": 0,
+            "bulletProofTyres": false,
+            "lockStatus": 1,
+            "sirenActive": false,
+            "windowTint": -1,
+            "mods": {
+                "23": {
+                    "variation": false,
+                    "type": "index",
+                    "index": 14
+                },
+                "48": {
+                    "variation": false,
+                    "type": "index",
+                    "index": 6
+                }
+            },
+            "wheelType": 1,
+            "modExtras": {
+                "10": false,
+                "11": 1
+            },
+            "neons": {
+                "right": false,
+                "color": {
+                    "b": 255,
+                    "g": 0,
+                    "r": 255
+                },
+                "front": false,
+                "left": false,
+                "back": false
+            },
+            "colours": {
+                "interior": 0,
+                "pearl": 62,
+                "dashboard": 0,
+                "rim": 120,
+                "modColor1": {
+                    "pearlescent": 37,
+                    "color": 11,
+                    "paintType": 0
+                },
+                "modColor2": {
+                    "color": -1,
+                    "paintType": 7
+                },
+                "isPrimaryColourCustom": false,
+                "isSecondaryColourCustom": false,
+                "primary": 9,
+                "tyreSmoke": {
+                    "b": 255,
+                    "g": 255,
+                    "r": 255
+                },
+                "secondary": 0,
+                "xenonHeadlights": 255
+            },
+            "engineOn": false
+        }
+    },
+    "savedAt": "2026-03-30T21:20:09Z",
+    "tuning": {
+        "selections": {
+            "gripBiasFront": 0.495,
+            "steeringLockMode": "smooth",
+            "brakePack": "stock",
+            "tireCompoundCategory": "road",
+            "nitrousLevel": "level_1",
+            "suspensionRaise": 0.0,
+            "antirollForce": 0.0,
+            "suspensionPack": "race",
+            "enginePack": "stage_1",
+            "revLimiterEnabled": true,
+            "antirollBiasFront": 0.5,
+            "nitrousShotStrength": 1.0,
+            "tireCompoundPack": "sport",
+            "tireCompoundQuality": "mid_end",
+            "brakeBiasFront": 0.65,
+            "suspensionBiasFront": 0.5,
+            "transmissionPack": "tuned"
+        },
+        "version": 1
+    },
+    "updatedAt": "2026-03-30T22:39:10Z",
+    "source": "VehicleManager",
+    "saveId": "PRAIRIE",
+    "owner": {
+        "license": "steam:110000104cdc171",
+        "key": "steam_110000104cdc171"
+    },
+    "server": {
+        "savedBy": 1,
+        "receivedAt": "2026-03-30T21:20:09Z",
+        "resource": "vehiclemanager"
+    },
+    "format": {
+        "variant": "menyoo-inspired-json",
+        "name": "VehicleManagerSavedVehicle"
+    },
+    "scaffoldVersion": 1
+}

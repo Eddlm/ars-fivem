@@ -593,23 +593,6 @@ local function saveEditorRace(optionalName)
     })
 end
 
-local function draw3dText(x, y, z, text)
-    local onScreen, screenX, screenY = GetScreenCoordFromWorldCoord(x, y, z)
-    if not onScreen then
-        return
-    end
-
-    SetTextScale(0.3, 0.3)
-    SetTextFont(4)
-    SetTextProportional(true)
-    SetTextColour(255, 255, 255, 220)
-    SetTextCentre(true)
-    SetTextOutline()
-    BeginTextCommandDisplayText('STRING')
-    AddTextComponentSubstringPlayerName(text)
-    EndTextCommandDisplayText(screenX, screenY)
-end
-
 local function formatDurationMs(totalMs)
     local durationMs = math.max(0, math.floor(tonumber(totalMs) or 0))
     local minutes = math.floor(durationMs / 60000)
@@ -1868,12 +1851,6 @@ CreateThread(function()
                         false
                     )
 
-                    local label = ('CP %s | R %.1f'):format(index, checkpoint.radius)
-                    if isGrabbed then
-                        label = label .. ' | GRABBED'
-                    end
-                    draw3dText(checkpoint.x, checkpoint.y, checkpoint.z + 1.1, label)
-
                     if editorState.checkpoints[index + 1] then
                         DrawLine(
                             checkpoint.x,
@@ -2037,13 +2014,6 @@ CreateThread(function()
                         nil,
                         nil,
                         false
-                    )
-
-                    draw3dText(
-                        targetCheckpoint.x,
-                        targetCheckpoint.y,
-                        targetCheckpoint.z + 1.1,
-                        ('CP %s/%s | %s'):format(targetIndex, totalCheckpoints, joinedInstance.name or 'Race')
                     )
                 end
 
