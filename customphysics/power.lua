@@ -32,7 +32,15 @@ local Offroad = {
 }
 
 local Suspension = {
-    penaltyRecoveryPerSecond = 4.0,
+    stabilitySampleIntervalMs = 100,
+    stabilitySampleCount = 5,
+    stabilityErrorThreshold = 1.0,
+    penaltyRecoveryPerSecond = 1.0,
+    minimumAntiBoostMultiplier = 0.2,
+    speedGuardStartMph = 5.0,
+    speedGuardEndMph = 30.0,
+    speedGuardStartMultiplier = 1.0,
+    speedGuardEndMultiplier = 0.2,
 }
 
 local RevLimiter = {
@@ -56,11 +64,20 @@ local state = {
     antiBoostMultiplier = 1.0,
     lastRpm = 0.0,
     lastPlanarSpeed = 0.0,
+    lastStabilityVelocity = nil,
+    lastStabilitySampleAt = 0,
     offroadUpdateAt = 0,
     lastDrivenWheelPower = 0.0,
     lastOffroadGear = 0,
     offroadShiftBlockedUntil = 0,
     lastAccelerationToPowerFactor = 0.0,
+    stabilitySamples = {},
+    stabilityError = 0.0,
+    stabilityEditable = false,
+    stabilityCatchingSpike = false,
+    lastDrivenWheelPowerSample = 0.0,
+    lastReferenceWheelPowerSample = 0.0,
+    lastMeasuredAccelerationMetersPerSecondSquared = 0.0,
     engineSmokeFx = nil,
     engineSmokeBone = -1,
 }
@@ -362,49 +379,80 @@ local function getOffroadMultiplier(snapshot, now)
     return advanceOffroadMultiplier(updateDeltaSeconds, offroadMaxMultiplier)
 end
 
--- Suspension penalty helpers
+-- Stability monitor helpers
 
--- Applies the acceleration-vs-wheel-power penalty portion of the suspension system.
-local function applyAccelerationFactorPenalty(planarAcceleration, drivenWheelPower)
-    if drivenWheelPower > 0.000001 then
-        state.lastAccelerationToPowerFactor = math.max(0.0, planarAcceleration) / drivenWheelPower
+local function getSpeedBasedMinimumAntiBoostMultiplier(vehicle)
+    local currentSpeedMph = CustomPhysicsUtil.getVehiclePlanarSpeed(vehicle) * Units.metersPerSecondToMph
+    local startMph = tonumber(Suspension.speedGuardStartMph) or 5.0
+    local endMph = tonumber(Suspension.speedGuardEndMph) or 30.0
+    local startMultiplier = tonumber(Suspension.speedGuardStartMultiplier) or 1.0
+    local endMultiplier = tonumber(Suspension.speedGuardEndMultiplier) or 0.2
+    return CustomPhysicsUtil.mapValue(currentSpeedMph, startMph, endMph, startMultiplier, endMultiplier, true)
+end
+
+-- Samples absolute acceleration from the full velocity vector and compares the current sample to the trailing 5-sample average.
+function CustomPhysicsPower.sampleStability(vehicle, now)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+        return
+    end
+
+    local currentVelocity = GetEntityVelocity(vehicle)
+    local currentForward = GetEntityForwardVector(vehicle)
+    if state.lastStabilitySampleAt <= 0 then
+        state.lastStabilityVelocity = currentVelocity
+        state.lastStabilitySampleAt = now
+        state.stabilitySamples = {}
+        state.stabilityError = 0.0
+        return
+    end
+
+    local deltaSeconds = math.max((now - state.lastStabilitySampleAt) / 1000.0, 0.000001)
+    local lastVelocity = state.lastStabilityVelocity or currentVelocity
+    local deltaVelocityX = currentVelocity.x - lastVelocity.x
+    local deltaVelocityY = currentVelocity.y - lastVelocity.y
+    local deltaVelocityZ = currentVelocity.z - lastVelocity.z
+    local currentAcceleration = (
+        (deltaVelocityX * currentForward.x) +
+        (deltaVelocityY * currentForward.y) +
+        (deltaVelocityZ * currentForward.z)
+    ) / deltaSeconds
+    local drivenWheelPower = CustomPhysicsUtil.getDrivenWheelPowerTotal(vehicle)
+    -- Wheel power is treated as a G-based signal, so convert it to m/s^2 before
+    -- comparing it against measured forward acceleration or other wheel samples.
+    local expectedAcceleration = drivenWheelPower * Units.metersPerSecondSquaredPerG
+    local samples = state.stabilitySamples
+    local sampleCount = #samples
+    local referenceWheelPower = sampleCount > 0 and samples[1] or expectedAcceleration
+    state.lastMeasuredAccelerationMetersPerSecondSquared = currentAcceleration
+    state.lastDrivenWheelPowerSample = expectedAcceleration
+    state.lastReferenceWheelPowerSample = referenceWheelPower
+
+    state.stabilityError = math.abs(expectedAcceleration - referenceWheelPower)
+    state.stabilityEditable = state.stabilityError < (tonumber(Suspension.stabilityErrorThreshold) or 1.0)
+    if state.stabilityEditable then
+        state.lastAccelerationToPowerFactor = math.max(0.0, currentAcceleration - expectedAcceleration)
     else
         state.lastAccelerationToPowerFactor = 0.0
     end
+    state.stabilityCatchingSpike = state.stabilityEditable and state.lastAccelerationToPowerFactor >= 0.5
 
-    local factorPenalty = CustomPhysicsUtil.mapValue(state.lastAccelerationToPowerFactor, 1.5, 2.0, 0.0, 1.0, true)
-    state.antiBoostMultiplier = state.antiBoostMultiplier - factorPenalty
-end
+    local targetAntiBoostMultiplier = CustomPhysicsUtil.mapValue(state.lastAccelerationToPowerFactor, 0.5, 2.0, 1.0, 0.0, true)
+    local recoveryStep = (tonumber(Suspension.penaltyRecoveryPerSecond) or 0.5) * deltaSeconds
+    if targetAntiBoostMultiplier < state.antiBoostMultiplier then
+        state.antiBoostMultiplier = targetAntiBoostMultiplier
+    else
+        state.antiBoostMultiplier = math.min(targetAntiBoostMultiplier, state.antiBoostMultiplier + recoveryStep)
+    end
+    state.antiBoostMultiplier = math.max(getSpeedBasedMinimumAntiBoostMultiplier(vehicle), state.antiBoostMultiplier)
 
--- Gradually restores the suspension penalty multiplier back toward normal.
-local function recoverSuspensionPenalty()
-    if state.antiBoostMultiplier < 1.0 then
-        state.antiBoostMultiplier = state.antiBoostMultiplier + (Suspension.penaltyRecoveryPerSecond * CustomPhysicsUtil.getDeltaSeconds())
+    samples[sampleCount + 1] = expectedAcceleration
+    local maxSamples = math.max(tonumber(Suspension.stabilitySampleCount) or 5, 1)
+    while #samples > maxSamples do
+        table.remove(samples, 1)
     end
 
-    state.antiBoostMultiplier = CustomPhysicsUtil.clamp(state.antiBoostMultiplier, 0.1, 1.0)
-end
-
--- Computes the current suspension penalty multiplier and its recovery behavior.
-local function getSuspensionPenalty(vehicle, snapshot, slideAngle)
-    local penaltyStrength = tonumber(CustomPhysics.Config.suspensionBoostPenaltyStrength) or 0
-    if penaltyStrength <= 0 then
-        state.lastRpm = snapshot.currentRpm
-        state.antiBoostMultiplier = 1.0
-        state.lastAccelerationToPowerFactor = 0.0
-        return 1.0
-    end
-
-    local drivenWheelPower = snapshot.wheelSnapshot and snapshot.wheelSnapshot.drivenWheelPower or 0.0
-    applyAccelerationFactorPenalty(snapshot.planarAcceleration, drivenWheelPower)
-
-    state.lastRpm = snapshot.currentRpm
-    recoverSuspensionPenalty()
-    if math.abs(slideAngle or 0.0) < 10.0 then
-        return state.antiBoostMultiplier
-    end
-
-    return 1.0
+    state.lastStabilityVelocity = currentVelocity
+    state.lastStabilitySampleAt = now
 end
 
 -- Rev limiter helpers
@@ -446,11 +494,9 @@ end
 -- Builds the full cheat-power multiplier stack for the current update.
 local function updatePowerMultiplierStack(vehicle, now)
     local snapshot = buildVehicleUpdateSnapshot(vehicle)
-    local slideMultiplier, slideAngle = calculateSlideMultiplier(vehicle)
+    local slideMultiplier = calculateSlideMultiplier(vehicle)
     local offroadMultiplier = getOffroadMultiplier(snapshot, now)
-    local suspensionPenalty = getSuspensionPenalty(vehicle, snapshot, slideAngle or 0.0)
-
-    SetVehicleCheatPowerIncrease(vehicle, slideMultiplier * offroadMultiplier * suspensionPenalty * state.overspeedPowerMultiplier)
+    SetVehicleCheatPowerIncrease(vehicle, slideMultiplier * offroadMultiplier * state.antiBoostMultiplier * state.overspeedPowerMultiplier)
 end
 
 -- Runs all power-related subsystems for the current vehicle update.
@@ -458,6 +504,35 @@ function CustomPhysicsPower.update(vehicle, now)
     updateRpmLimiter(vehicle, now)
     updateOverspeedPower(vehicle, GetVehicleCurrentRpm(vehicle))
     updatePowerMultiplierStack(vehicle, now)
+end
+
+function CustomPhysicsPower.getAntiBoostMultiplier()
+    return state.antiBoostMultiplier or 1.0
+end
+
+function CustomPhysicsPower.getStabilityError()
+    return state.stabilityError or 0.0
+end
+
+function CustomPhysicsPower.isStabilityEditable()
+    return state.stabilityEditable == true
+end
+
+function CustomPhysicsPower.isCatchingSpike()
+    return state.stabilityCatchingSpike == true
+end
+
+function CustomPhysicsPower.getDebugSnapshot()
+    return {
+        antiBoostMultiplier = state.antiBoostMultiplier or 1.0,
+        stabilityError = state.stabilityError or 0.0,
+        stabilityEditable = state.stabilityEditable == true,
+        stabilityCatchingSpike = state.stabilityCatchingSpike == true,
+        measuredAccelerationMetersPerSecondSquared = state.lastMeasuredAccelerationMetersPerSecondSquared or 0.0,
+        drivenWheelPower = state.lastDrivenWheelPowerSample or 0.0,
+        referenceWheelPower = state.lastReferenceWheelPowerSample or 0.0,
+        accelerationToWheelRatio = state.lastAccelerationToPowerFactor or 0.0,
+    }
 end
 
 -- Clears all cached power state and restores default vehicle power when possible.
@@ -475,9 +550,18 @@ function CustomPhysicsPower.reset(vehicle)
     state.antiBoostMultiplier = 1.0
     state.lastRpm = 0.0
     state.lastPlanarSpeed = 0.0
+    state.lastStabilityVelocity = nil
+    state.lastStabilitySampleAt = 0
     state.offroadUpdateAt = 0
     state.lastDrivenWheelPower = 0.0
     state.lastOffroadGear = 0
     state.offroadShiftBlockedUntil = 0
     state.lastAccelerationToPowerFactor = 0.0
+    state.stabilitySamples = {}
+    state.stabilityError = 0.0
+    state.stabilityEditable = false
+    state.stabilityCatchingSpike = false
+    state.lastDrivenWheelPowerSample = 0.0
+    state.lastReferenceWheelPowerSample = 0.0
+    state.lastMeasuredAccelerationMetersPerSecondSquared = 0.0
 end

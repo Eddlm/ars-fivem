@@ -23,6 +23,18 @@ end
 
 -- Runtime entrypoints
 
+-- Runs the low-rate acceleration stability sampler separately from the main per-frame power stack.
+CreateThread(function()
+    while true do
+        local vehicle = getDriverVehicle()
+        if vehicle then
+            CustomPhysicsPower.sampleStability(vehicle, GetGameTimer())
+        end
+
+        Wait(100)
+    end
+end)
+
 -- Runs the main per-frame coordinator loop for the local player vehicle.
 CreateThread(function()
     while true do
