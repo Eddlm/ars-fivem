@@ -88,10 +88,10 @@ How aggresively it combats the bugs is configurable.
 - Integrates with `performancetuning` for customization and stats access.
 - Uses persistent saved vehicle JSON files stored inside the resource.
 
-# Credits / Attributions
+# Credits / Attributions / References
 
 | Author | Content | Link |
 | --- | --- | --- |
 | MAFINS & itsjustcurtis | The entire vehicle save/load system I ripped off the Menyoo Repo. | [Menyoo Repo](https://github.com/itsjustcurtis/MenyooSP) |
 | Jaymo1011 | I learned GTAO's jobs are a JSON on their site thanks to his repo. Wrote my own loader though. | [mission-json-loader Repo](https://github.com/jaymo1011/mission-json-loader) |
-| Author 3 | Content 3 | Link 3 |
+| ![medal](media/obamamedal_100h.jpg) | A big chunk here is a rewrite of my own older content from SP. | [My SP content](https://www.gta5-mods.com/users/eddlm) |
