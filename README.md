@@ -7,7 +7,7 @@
 | Resource | Requirements | Features | Hotkey | Interfunctionality |
 | --- | --- | --- | --- | --- |
 | racingsystem | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | Create and host checkpoint races | `F7` | Can load GTAO races |
-| performancetuning | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | Live tuning, nitrous, PI system, handling exports | `/ptune` or via Vehicle Manager | Can be opened through `vehiclemanager` instead \| Needs `customphysics` to apply Nitro |
+| performancetuning | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | Live tuning, nitrous, PI system, handling exports | `/ptune` | Can be opened through `vehiclemanager` instead. Needs `customphysics` to apply Nitro |
 | vehiclemanager | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | Handy save/load/tune menu | `F5` | Saved cars retain `performancetuning` tweaks |
 | customcam | None | Freeform follow camera, hood view, rear-look support | Hold Change Camera (`V` on PC) | None |
 | customphysics | None | Powerslides, wheelies, rollovers, offroad and overspeed fixes | None | Reads `performancetuning` state for rev limiter and top-speed baseline when available |
@@ -87,3 +87,11 @@ How aggresively it combats the bugs is configurable.
 - Acts as the main vehicle hub/menu for save, load, and vehicle utility flows.
 - Integrates with `performancetuning` for customization and stats access.
 - Uses persistent saved vehicle JSON files stored inside the resource.
+
+# Credits / Attributions
+
+| Author | Content | Link |
+| --- | --- | --- |
+| MAFINS & itsjustcurtis | The entire vehicle save/load system I ripped off the Menyoo Repo. | [Menyoo Repo](https://github.com/itsjustcurtis/MenyooSP) |
+| Jaymo1011 | I learned GTAO's jobs are a JSON on their site thanks to his repo. Wrote my own loader though. | [mission-json-loader Repo](https://github.com/jaymo1011/mission-json-loader) |
+| Author 3 | Content 3 | Link 3 |
