@@ -2,7 +2,26 @@
 
 ![Harvey](media/harvey.jpg)
 
-## Included Resources
+# In brief:
+
+`[ars-fivem]` is a racing/car oriented resource pack for Fivem. "ARS" comes from my ongoing singleplayer project, [Autosport Racing System](https://www.gta5-mods.com/scripts/autosport-racing-system).
+
+
+| Resource | Requirements | Features | Hotkey | Interfunctionality |
+| --- | --- | --- | --- | --- |
+| racingsystem | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | Create and host checkpoint races | `F7` | Can load GTAO races |
+| performancetuning | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | Live tuning, nitrous, PI system, handling exports | `/ptune` or via Vehicle Manager | Can be opened through `vehiclemanager` instead \| Needs `customphysics` to apply Nitro |
+| vehiclemanager | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | Handy save/load/tune menu | `F5` | Saved cars retain `performancetuning` tweaks |
+| customcam | None | Freeform follow camera, hood view, rear-look support | Hold Change Camera (`V` on PC) | None |
+| customphysics | None | Powerslides, wheelies, rollovers, offroad and overspeed fixes | None | Reads `performancetuning` state for rev limiter and top-speed baseline when available |
+---
+## Contributing and Feedback
+
+| Github | Discord | FiveM Server |
+| --- | --- | --- |
+| a | b | c |
+
+# Resources
 
 ## customcam
 
@@ -54,8 +73,7 @@ How aggresively it combats the bugs is configurable.
 # Requirements
 
 - A working FiveM server setup.
-- `ScaleformUI_Assets`
-- `ScaleformUI_Lua`
+- [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) for `ScaleformUI_Assets` and `ScaleformUI_Lua`
 - ScaleformUI is not included in this repository and is expected to exist above this folder in your server resource tree.
 
 # Installation
