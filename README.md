@@ -1,4 +1,6 @@
 
+Safe to be git-cloned into `resources/whatever-you-wanna-call-it`. Main version releases still available.
+
 # In brief:
 
 `[ars-fivem]` is a racing/car oriented resource pack for Fivem. "ARS" comes from my ongoing singleplayer project, [Autosport Racing System](https://www.gta5-mods.com/scripts/autosport-racing-system).
