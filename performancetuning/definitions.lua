@@ -93,7 +93,6 @@ PerformanceTuning.Definitions.runtimeConfig = {
     nitrous = {},
     performancePiMultipliers = {},
     performanceNearbyPanels = {},
-    performancePiClasses = {},
     nitrousRefill = {},
 }
 

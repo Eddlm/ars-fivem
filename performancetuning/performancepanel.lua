@@ -189,21 +189,6 @@ local function getPiScales(runtimeConfig)
     }
 end
 
-local function resolvePiClassLabel(runtimeConfig, piTotal)
-    local classes = (runtimeConfig or {}).performancePiClasses
-    if type(classes) == 'table' then
-        for _, classDef in ipairs(classes) do
-            local minimum = tonumber(type(classDef) == 'table' and classDef.minimum or nil) or 0
-            local label = type(classDef) == 'table' and tostring(classDef.label or '') or ''
-            if label ~= '' and piTotal >= minimum then
-                return label
-            end
-        end
-    end
-
-    return 'N/A'
-end
-
 local function getNearbyPanelConfig(runtimeConfig)
     local config = (runtimeConfig or {}).performanceNearbyPanels or {}
     return {
@@ -497,7 +482,6 @@ function PerformancePanel.buildPerformanceIndex(vehicle, bucket)
     local totalPi = powerPi + topSpeedPi + gripPi + brakePi
     return {
         total = totalPi,
-        class = resolvePiClassLabel(runtimeConfig, totalPi),
         categories = {
             {
                 key = 'power',
@@ -554,7 +538,6 @@ function PerformancePanel.buildMetrics(vehicle)
 
     return {
         total = performanceIndex and performanceIndex.total or 0,
-        class = performanceIndex and performanceIndex.class or 'N/A',
         fills = { powerFill, speedFill, gripFill, brakeFill },
         labels = { 'PWR', 'SPD', 'GRP', 'BRK' },
         values = {

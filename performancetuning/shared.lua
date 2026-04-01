@@ -27,16 +27,6 @@ Config.performanceNearbyPanels = {
     maxPanels = 12,
 }
 
-Config.performancePiClasses = {
-    { label = 'S2', minimum = 901 },
-    { label = 'S1', minimum = 801 },
-    { label = 'A', minimum = 701 },
-    { label = 'B', minimum = 601 },
-    { label = 'C', minimum = 501 },
-    { label = 'D', minimum = 401 },
-    { label = 'E', minimum = 0 },
-}
-
 Config.nitrousRefill = {
     refillIntervalMs = 500,
     refillMaxSpeedMetersPerSecond = 0.5,

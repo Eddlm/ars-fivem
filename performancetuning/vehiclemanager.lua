@@ -275,7 +275,6 @@ function VehicleManager.buildPiState(vehicle)
     local values = type(metrics.values) == 'table' and metrics.values or {}
     return {
         total = math.floor(tonumber(metrics.total) or 0),
-        class = tostring(metrics.class or 'N/A'),
         power = math.floor(tonumber(values[1]) or 0),
         topSpeed = math.floor(tonumber(values[2]) or 0),
         grip = math.floor(tonumber(values[3]) or 0),

@@ -70,7 +70,6 @@ runtimeConfig.nitrous.baseDurationMs = getConfiguredNitrousValue('baseDurationMs
 runtimeConfig.nitrous.nativePowerMultiplier = getConfiguredNitrousValue('nativePowerMultiplier')
 runtimeConfig.performancePiMultipliers = config.performancePiMultipliers or {}
 runtimeConfig.performanceNearbyPanels = config.performanceNearbyPanels or {}
-runtimeConfig.performancePiClasses = config.performancePiClasses or {}
 runtimeConfig.nitrousRefill = config.nitrousRefill or {}
 
 PerformanceTuning.RuntimeConfig = runtimeConfig

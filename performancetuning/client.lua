@@ -509,6 +509,38 @@ exports('OpenPerformanceTuningMenu', function()
     return false
 end)
 
+exports('GetPiDisplayModeIndex', function()
+    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.getPiDisplayModeIndex then
+        return PerformanceTuning.ScaleformUI.getPiDisplayModeIndex()
+    end
+
+    return 1
+end)
+
+exports('SetPiDisplayModeIndex', function(index)
+    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.setPiDisplayModeIndex then
+        return PerformanceTuning.ScaleformUI.setPiDisplayModeIndex(index)
+    end
+
+    return 1
+end)
+
+exports('GetCurrentVehicleRevLimiterEnabled', function()
+    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.getCurrentVehicleRevLimiterEnabled then
+        return PerformanceTuning.ScaleformUI.getCurrentVehicleRevLimiterEnabled()
+    end
+
+    return nil
+end)
+
+exports('SetCurrentVehicleRevLimiterEnabled', function(enabled)
+    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.setCurrentVehicleRevLimiterEnabled then
+        return PerformanceTuning.ScaleformUI.setCurrentVehicleRevLimiterEnabled(enabled)
+    end
+
+    return false
+end)
+
 RegisterCommand('ptune', function()
     if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.openMainMenu then
         PerformanceTuning.ScaleformUI.openMainMenu()
