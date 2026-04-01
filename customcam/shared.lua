@@ -25,7 +25,6 @@ CustomCam.Config.FollowCam = {
         [1] = 1.3,
         [2] = 2.1
     },
-    focusHeightMeters = 0.85,
 }
 
 -- Hood camera attachment tuning.
@@ -33,6 +32,4 @@ CustomCam.Config.HoodCam = {
     forwardOffsetMeters = -2,
     upOffsetMeters = 0.08,
     rotationXDegrees = -10.0,
-    rotationYDegrees = 0.0,
-    rotationZDegrees = 0.0,
 }

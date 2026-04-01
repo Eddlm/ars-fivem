@@ -39,10 +39,13 @@ local FOLLOW_CAM_HOOD_VIEW_MODE_ID = 4
 local FOLLOW_CAM_FLIP_ANGULAR_VELOCITY_X_RADIANS_PER_SECOND = 1.5
 local FOLLOW_CAM_UPRIGHT_THRESHOLD_RATIO = 0.2
 local FOLLOW_CAM_UPRIGHT_RECOVERY_THRESHOLD_RATIO = 0.9
+local FOLLOW_CAM_FOCUS_HEIGHT_METERS = 0.85
 local HOOD_CAM_SCAN_HEIGHT_METERS = 2.5
 local HOOD_CAM_SCAN_STEP_METERS = 0.2
 local HOOD_CAM_SCAN_MAX_AHEAD_METERS = 3.5
 local HOOD_CAM_NORMAL_DOT_THRESHOLD_RATIO = 0.94
+local HOOD_CAM_ROTATION_Y_DEGREES = 0.0
+local HOOD_CAM_ROTATION_Z_DEGREES = 0.0
 
 local state = {
     active = false,
@@ -434,7 +437,7 @@ end
 -- Hood mode hard-attaches the camera to the vehicle and leaves the follow logic idle.
 local function attachHoodCam(vehicle, lookBackActive)
     local localOffset = findHoodAttachOffset(vehicle)
-    local yaw = Config.HoodCam.rotationZDegrees
+    local yaw = HOOD_CAM_ROTATION_Z_DEGREES
 
     if lookBackActive then
         yaw = yaw + 180.0
@@ -451,7 +454,7 @@ local function attachHoodCam(vehicle, lookBackActive)
         state.cam,
         vehicle,
         Config.HoodCam.rotationXDegrees,
-        Config.HoodCam.rotationYDegrees,
+        HOOD_CAM_ROTATION_Y_DEGREES,
         yaw,
         attachOffset.x,
         attachOffset.y,
@@ -539,7 +542,7 @@ local function getDesiredFollowData()
 
     local targetFocus = addVector(
         addVector(vehicleCoords, lookAheadOffset),
-        vector3(0.0, 0.0, Config.FollowCam.focusHeightMeters)
+        vector3(0.0, 0.0, FOLLOW_CAM_FOCUS_HEIGHT_METERS)
     )
 
     local roofHeight = math.max(0.0, tonumber(maxDim.z) or 0.0)
