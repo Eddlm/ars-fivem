@@ -19,55 +19,55 @@ local TIRE_COMPOUND_TUNING_MATRIX = {
     -- Matrix is intentionally sparse so we can scale from 3x1 to 3x3 progressively.
     road = {
         low_end = {
-            gripTargetProgress = 0.60,
+            gripBarProgressRatio = 0.60,
             tractionLossMultiplier = 0.2222222222,
         },
         mid_end = {
-            gripTargetProgress = 0.7333333333,
+            gripBarProgressRatio = 0.7333333333,
             tractionLossMultiplier = 0.7878787879,
         },
         high_end = {
-            gripTargetProgress = 0.8666666667,
+            gripBarProgressRatio = 0.8666666667,
             tractionLossMultiplier = 1.1794871795,
         },
         top_end = {
-            gripTargetProgress = 1.00,
+            gripBarProgressRatio = 1.00,
             tractionLossMultiplier = 1.4666666667,
         },
     },
     rally = {
         low_end = {
-            gripTargetProgress = 0.58,
+            gripBarProgressRatio = 0.58,
             tractionLossMultiplier = 0.1149425287,
         },
         mid_end = {
-            gripTargetProgress = 0.68,
+            gripBarProgressRatio = 0.68,
             tractionLossMultiplier = 0.3267973856,
         },
         high_end = {
-            gripTargetProgress = 0.78,
+            gripBarProgressRatio = 0.78,
             tractionLossMultiplier = 0.4843304843,
         },
         top_end = {
-            gripTargetProgress = 0.88,
+            gripBarProgressRatio = 0.88,
             tractionLossMultiplier = 0.6060606061,
         },
     },
     offroad = {
         low_end = {
-            gripTargetProgress = 0.58,
+            gripBarProgressRatio = 0.58,
             tractionLossMultiplier = 0.1149425287,
         },
         mid_end = {
-            gripTargetProgress = 0.6533333333,
+            gripBarProgressRatio = 0.6533333333,
             tractionLossMultiplier = 0.0748299320,
         },
         high_end = {
-            gripTargetProgress = 0.7266666667,
+            gripBarProgressRatio = 0.7266666667,
             tractionLossMultiplier = 0.0428134557,
         },
         top_end = {
-            gripTargetProgress = 0.8,
+            gripBarProgressRatio = 0.8,
             tractionLossMultiplier = 0.0166666667,
         },
     },
@@ -98,12 +98,12 @@ local function isUnavailableTirePackForGrip(pack, baseTireMax, isFiniteNumber, p
         return true
     end
 
-    if pack.id == 'stock' or pack.id == 'rally' or not isFiniteNumber(baseTireMax) or pack.gripTargetProgress == nil then
+    if pack.id == 'stock' or pack.id == 'rally' or not isFiniteNumber(baseTireMax) or pack.gripBarProgressRatio == nil then
         return false
     end
 
-    local gripTargetProgress = math.max(0.0, math.min(1.0, tonumber(pack.gripTargetProgress) or 0.0))
-    local targetGripValue = (gripTargetProgress * performance.barSegments) / performance.gripFactor
+    local gripBarProgressRatio = math.max(0.0, math.min(1.0, tonumber(pack.gripBarProgressRatio) or 0.0))
+    local targetGripValue = (gripBarProgressRatio * performance.barSegmentCount) / performance.gripBarScaleFactor
     return targetGripValue < baseTireMax
 end
 
@@ -984,12 +984,12 @@ function TuningPackManager.applyTransmissionPack(vehicle, packId, options)
 
         if selectedPack.id ~= 'stock' then
             if fieldName == gearField then
-                value = value + (selectedPack.gearOffset or 0)
+                value = value + (selectedPack.gearCountOffset or 0)
                 if value > maxUpgradedGears then
                     value = maxUpgradedGears
                 end
             else
-                value = value + (selectedPack.clutchOffset or 0.0)
+                value = value + (selectedPack.clutchRateOffset or 0.0)
             end
         end
 
@@ -1066,13 +1066,13 @@ function TuningPackManager.applyEnginePack(vehicle, packId, options)
             elseif fieldName == internals.POWER_FIELD then
                 local basePower = tonumber(bucket.baseEngine[internals.POWER_FIELD]) or 0.0
                 local baseTopSpeed = tonumber(bucket.baseEngine[internals.TOP_SPEED_FIELD]) or 0.0
-                local baseProgress = ((baseTopSpeed * internals.Performance.flatVelToMph) * internals.Performance.topSpeedFactor) / internals.Performance.barSegments
+                local baseProgress = ((baseTopSpeed * internals.Performance.flatVelToMphFactor) * internals.Performance.topSpeedBarScaleFactor) / internals.Performance.barSegmentCount
                 local remainingProgress = math.max(0.0, 1.0 - baseProgress)
                 local upgradeIndex = 0
                 local upgradeCount = 0
 
                 for _, pack in ipairs(internals.ENGINE_PACKS) do
-                    if pack.id ~= 'stock' and not pack.swapModel and pack.enabled ~= false and pack.powerOffset ~= nil then
+                    if pack.id ~= 'stock' and not pack.swapModel and pack.enabled ~= false and pack.driveForceOffset ~= nil then
                         upgradeCount = upgradeCount + 1
                         if pack.id == selectedPack.id then
                             upgradeIndex = upgradeCount
@@ -1082,11 +1082,11 @@ function TuningPackManager.applyEnginePack(vehicle, packId, options)
 
                 if upgradeIndex > 0 and upgradeCount > 0 and basePower > 0.0 and baseTopSpeed > 0.0 then
                     local targetProgress = baseProgress + (remainingProgress * (upgradeIndex / upgradeCount))
-                    local targetTopSpeedMph = (targetProgress * internals.Performance.barSegments) / internals.Performance.topSpeedFactor
-                    local targetTopSpeed = targetTopSpeedMph / internals.Performance.flatVelToMph
+                    local targetTopSpeedMph = (targetProgress * internals.Performance.barSegmentCount) / internals.Performance.topSpeedBarScaleFactor
+                    local targetTopSpeed = targetTopSpeedMph / internals.Performance.flatVelToMphFactor
                     value = basePower * (targetTopSpeed / baseTopSpeed)
                 else
-                    value = basePower + (selectedPack.powerOffset or 0.0)
+                    value = basePower + (selectedPack.driveForceOffset or 0.0)
                 end
             elseif fieldName == internals.TOP_SPEED_FIELD then
                 local basePower = tonumber(bucket.baseEngine[internals.POWER_FIELD]) or 0.0
@@ -1176,13 +1176,13 @@ function TuningPackManager.applyTireCompoundPack(vehicle, packId, options)
     local effectiveCompoundLossMultiplier = tonumber(selectedPack.compoundLossMultiplier) or 1.0
     local targetGripValue = nil
 
-    if shouldApplyCompoundProfile and selectedPack.gripTargetProgress ~= nil then
-        local gripTargetProgress = math.max(0.0, math.min(1.0, tonumber(selectedPack.gripTargetProgress) or 0.0))
-        targetGripValue = (gripTargetProgress * internals.Performance.barSegments) / internals.Performance.gripFactor
+    if shouldApplyCompoundProfile and selectedPack.gripBarProgressRatio ~= nil then
+        local gripBarProgressRatio = math.max(0.0, math.min(1.0, tonumber(selectedPack.gripBarProgressRatio) or 0.0))
+        targetGripValue = (gripBarProgressRatio * internals.Performance.barSegmentCount) / internals.Performance.gripBarScaleFactor
     end
-    if shouldApplyCompoundProfile and type(qualityProfile) == 'table' and qualityProfile.gripTargetProgress ~= nil then
-        local gripTargetProgress = math.max(0.0, math.min(1.0, tonumber(qualityProfile.gripTargetProgress) or 0.0))
-        targetGripValue = (gripTargetProgress * internals.Performance.barSegments) / internals.Performance.gripFactor
+    if shouldApplyCompoundProfile and type(qualityProfile) == 'table' and qualityProfile.gripBarProgressRatio ~= nil then
+        local gripBarProgressRatio = math.max(0.0, math.min(1.0, tonumber(qualityProfile.gripBarProgressRatio) or 0.0))
+        targetGripValue = (gripBarProgressRatio * internals.Performance.barSegmentCount) / internals.Performance.gripBarScaleFactor
     end
 
     for _, fieldName in ipairs(internals.TIRE_FIELDS) do
@@ -1329,7 +1329,7 @@ function TuningPackManager.applyBrakePack(vehicle, packId, options)
         if upgradeIndex > 0 and upgradeCount > 0 then
             local targetProgress = baseProgress + (remainingProgress * (upgradeIndex / upgradeCount))
             local wheelCount = math.max(1, GetVehicleNumberOfWheels(vehicle) or 1)
-            local targetComputedBrakeValue = targetProgress * internals.BRAKE_SCALING.barTopValue
+            local targetComputedBrakeValue = targetProgress * internals.BRAKE_SCALING.barTopValueUnits
             value = targetComputedBrakeValue / wheelCount
         end
     end
@@ -1371,7 +1371,7 @@ function TuningPackManager.applyNitrousPack(vehicle, packId, options)
     end
 
     bucket.nitrousLevel = selectedPack.id
-    local selectedMultiplier = tonumber(selectedPack.multiplier) or 0.0
+    local selectedMultiplier = tonumber(selectedPack.powerMultiplier) or 0.0
     if selectedMultiplier <= 0.0 then
         bucket.nitrousAvailableCharge = 0.0
         bucket.nitrousActiveUntil = 0

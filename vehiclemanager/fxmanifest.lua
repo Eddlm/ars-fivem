@@ -15,6 +15,8 @@ lua54 'yes'
 dependency 'ScaleformUI_Assets'
 dependency 'ScaleformUI_Lua'
 
+shared_script 'shared.lua'
+
 client_scripts {
     '@ScaleformUI_Lua/ScaleformUI.lua',
     'client/vehiclemanager.lua'

@@ -3,8 +3,14 @@ local Definitions = PerformanceTuning.Definitions or {}
 local StateBagKeys = Definitions.stateBagKeys
 local HandlingFields = Definitions.handlingFields
 local RuntimeConfig = PerformanceTuning.RuntimeConfig or Definitions.runtimeConfig
-local Performance = Definitions.performance
-local TIRE_COMPOUND_PACKS = (Definitions.packDefinitions or {}).tires
+local Performance = {
+    barSegmentCount = 20,
+    powerBarScaleFactor = 33.3333333333,
+    topSpeedBarScaleFactor = 0.0909090909,
+    gripBarScaleFactor = 8.0,
+    flatVelToMphFactor = 145.0 / 176.0,
+}
+local TIRE_COMPOUND_PACKS = (((PerformanceTuning.Config or {}).packDefinitions) or {}).tires
 
 local RuntimeState = {
     originalHandlingByVehicle = {},
@@ -315,11 +321,11 @@ local function buildNativeListState(context)
             return true
         end
 
-        if pack.id == 'stock' or pack.id == 'rally' or not isFiniteNumber(baseTireMax) or pack.gripTargetProgress == nil then
+        if pack.id == 'stock' or pack.id == 'rally' or not isFiniteNumber(baseTireMax) or pack.gripBarProgressRatio == nil then
             return false
         end
 
-        local targetGripValue = (math.max(0.0, math.min(1.0, tonumber(pack.gripTargetProgress) or 0.0)) * Performance.barSegments) / Performance.gripFactor
+        local targetGripValue = (math.max(0.0, math.min(1.0, tonumber(pack.gripBarProgressRatio) or 0.0)) * Performance.barSegmentCount) / Performance.gripBarScaleFactor
         return targetGripValue < baseTireMax
     end
 

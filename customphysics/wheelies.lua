@@ -17,6 +17,9 @@ local prevBrake = false
 local prevHandbrake = false
 local wheelieStage = WheelieStage.off
 local wheelieForce = 0.0
+local CUSTOM_WHEELIE_ARM_SPEED_THRESHOLD_METERS_PER_SECOND = 1.0
+local CUSTOM_WHEELIE_FORCE_MULTIPLIER = 0.4
+local CUSTOM_WHEELIE_FRONT_OFFSET_LENGTH_MULTIPLIER = 2.0
 
 -- State helpers
 
@@ -208,10 +211,10 @@ function CustomPhysicsWheelies.update(vehicle)
         elseif prevHandbrake
             and not handbrakeActive
             and GetVehicleCurrentRpm(vehicle) > 0.9
-            and GetEntitySpeed(vehicle) <= (tonumber(CustomPhysics.Config.customWheelieArmSpeedThreshold) or 1.0)
+            and GetEntitySpeed(vehicle) <= CUSTOM_WHEELIE_ARM_SPEED_THRESHOLD_METERS_PER_SECOND
         then
             wheelieStage = WheelieStage.active
-            local baseForce = tonumber(CustomPhysics.Config.customWheelieForce) or 0.8
+            local baseForce = CUSTOM_WHEELIE_FORCE_MULTIPLIER
             wheelieForce = math.max(wheelieForce, baseForce)
         end
     end
@@ -223,7 +226,7 @@ function CustomPhysicsWheelies.update(vehicle)
         return
     end
 
-    local frontOffsetScale = tonumber(CustomPhysics.Config.customWheelieFrontOffset) or 1.6
+    local frontOffsetScale = CUSTOM_WHEELIE_FRONT_OFFSET_LENGTH_MULTIPLIER
     local frontOffset = frontOffsetScale * getVehicleLength(vehicle)
     local frameTime = GetFrameTime()
     if frameTime <= 0.000001 then

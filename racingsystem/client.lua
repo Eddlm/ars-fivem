@@ -23,6 +23,9 @@ local raceTimingState = {
     raceStartedAt = nil,
     lapStartedAt = nil,
 }
+local CHECKPOINT_RADIUS_STEP_METERS = 1.0
+local EDITOR_PITCH_UP_CONTROL_ID = 111
+local EDITOR_PITCH_DOWN_CONTROL_ID = 112
 
 local raceMenuInitialized = false
 local raceMenuOpen = false
@@ -538,9 +541,9 @@ local function adjustClosestCheckpointRadius(direction)
     end
 
     local checkpoint = editorState.checkpoints[targetIndex]
-    local step = RacingSystem.Config.checkpointRadiusStep or 1.0
-    local minimum = RacingSystem.Config.checkpointRadiusMin or 2.0
-    local maximum = RacingSystem.Config.checkpointRadiusMax or 40.0
+    local step = CHECKPOINT_RADIUS_STEP_METERS
+    local minimum = RacingSystem.Config.checkpointRadiusMinMeters or 2.0
+    local maximum = RacingSystem.Config.checkpointRadiusMaxMeters or 40.0
     local updatedRadius = checkpoint.radius + (step * direction)
 
     checkpoint.radius = math.max(minimum, math.min(maximum, updatedRadius))
@@ -1807,15 +1810,15 @@ CreateThread(function()
                 end
             end
 
-            if wasEditorControlJustPressed(RacingSystem.Config.controls.pitchUp) then
+            if wasEditorControlJustPressed(EDITOR_PITCH_UP_CONTROL_ID) then
                 adjustClosestCheckpointRadius(1)
-            elseif wasEditorControlJustPressed(RacingSystem.Config.controls.pitchDown) then
+            elseif wasEditorControlJustPressed(EDITOR_PITCH_DOWN_CONTROL_ID) then
                 adjustClosestCheckpointRadius(-1)
             end
 
             for index, checkpoint in ipairs(editorState.checkpoints) do
                 local distance = #(origin - vector3(checkpoint.x, checkpoint.y, checkpoint.z))
-                if distance <= RacingSystem.Config.checkpointDrawDistance then
+                if distance <= RacingSystem.Config.checkpointDrawDistanceMeters then
                     local isClosest = index == closestIndex
                     local isGrabbed = index == grabbedIndex
                     local red = isGrabbed and 255 or (isClosest and 255 or (index == 1 and 80 or 240))
@@ -1825,7 +1828,7 @@ CreateThread(function()
                     local visualRadius = getVisualCheckpointRadius(checkpoint)
 
                     DrawMarker(
-                        RacingSystem.Config.markerType,
+                        RacingSystem.Config.markerTypeId,
                         markerDraw.x,
                         markerDraw.y,
                         markerDraw.z,
@@ -1982,7 +1985,7 @@ CreateThread(function()
                 local checkpointCoords = vector3(targetCheckpoint.x or 0.0, targetCheckpoint.y or 0.0, targetCheckpoint.z or 0.0)
                 local distance = #(origin - checkpointCoords)
 
-                if distance <= RacingSystem.Config.checkpointDrawDistance then
+                if distance <= RacingSystem.Config.checkpointDrawDistanceMeters then
                     local totalLaps = math.max(1, tonumber(joinedInstance.laps) or 1)
                     local lapTriggerCheckpoint = (totalLaps > 1 and totalCheckpoints > 1) and 1 or totalCheckpoints
                     local isStart = targetIndex == 1
@@ -1990,7 +1993,7 @@ CreateThread(function()
                     local markerDraw = getPreviewCheckpointMarker(targetCheckpoint)
                     local visualRadius = getVisualCheckpointRadius(targetCheckpoint)
                     DrawMarker(
-                        RacingSystem.Config.markerType,
+                        RacingSystem.Config.markerTypeId,
                         markerDraw.x,
                         markerDraw.y,
                         markerDraw.z,

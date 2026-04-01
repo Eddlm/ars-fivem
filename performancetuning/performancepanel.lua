@@ -3,14 +3,21 @@ PerformanceTuning = PerformanceTuning or {}
 PerformanceTuning.PerformancePanel = PerformanceTuning.PerformancePanel or {}
 
 local PerformancePanel = PerformanceTuning.PerformancePanel
+local INTERNAL_PERFORMANCE = {
+    barSegmentCount = 20,
+    powerBarScaleFactor = 33.3333333333,
+    topSpeedBarScaleFactor = 0.0909090909,
+    gripBarScaleFactor = 8.0,
+}
+local BRAKE_BAR_TOP_VALUE_UNITS = 2.5
 
 local function getNitrousPowerBonusPoints(bucket)
-    local packs = ((PerformanceTuning.Definitions or {}).packDefinitions or {}).nitrous or {}
+    local packs = ((PerformanceTuning.Config or {}).packDefinitions or {}).nitrous or {}
     local selectedLevel = type(bucket) == 'table' and bucket.nitrousLevel or 'stock'
 
     for _, pack in ipairs(packs) do
         if pack.id == selectedLevel then
-            return math.max(0.0, tonumber(pack.multiplier) or 0.0) * 25.0
+            return math.max(0.0, tonumber(pack.powerMultiplier) or 0.0) * 25.0
         end
     end
 
@@ -129,16 +136,13 @@ function PerformancePanel.resetDisplayState()
 end
 
 function PerformancePanel.computeBrakeBarProgressForVehicle(vehicle, brakeForce)
-    local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    local brakeScaling = runtimeConfig.brakeScaling or {}
     local wheelCount = math.max(1, GetVehicleNumberOfWheels(vehicle) or 1)
     local computedBrakeValue = (tonumber(brakeForce) or 0.0) * wheelCount
-    return math.max(0.0, math.min(1.0, computedBrakeValue / (tonumber(brakeScaling.barTopValue) or 1.0)))
+    return math.max(0.0, math.min(1.0, computedBrakeValue / BRAKE_BAR_TOP_VALUE_UNITS))
 end
 
 local function scaleMetricProgress(currentValue, factor)
     local isFiniteNumber = PerformanceTuning.ClientBindings and PerformanceTuning.ClientBindings.isFiniteNumber or nil
-    local performance = (PerformanceTuning.Definitions or {}).performance or {}
     if not isFiniteNumber or not isFiniteNumber(currentValue) then
         return 0.0
     end
@@ -147,13 +151,12 @@ local function scaleMetricProgress(currentValue, factor)
         factor = 1.0
     end
 
-    return math.max(0.0, (currentValue * factor) / (tonumber(performance.barSegments) or 1.0))
+    return math.max(0.0, (currentValue * factor) / INTERNAL_PERFORMANCE.barSegmentCount)
 end
 
 local function scaleMetricLevel(currentValue, factor)
-    local performance = (PerformanceTuning.Definitions or {}).performance or {}
     local progress = scaleMetricProgress(currentValue, factor)
-    return math.floor((progress * (tonumber(performance.barSegments) or 10)) + 0.5)
+    return math.floor((progress * INTERNAL_PERFORMANCE.barSegmentCount) + 0.5)
 end
 
 local function scaleMetricPi(currentValue, factor, piMultiplier)
@@ -447,14 +450,14 @@ local function getFlatVelTopSpeedMph(vehicle)
         return 0.0
     end
 
-    return flatVel * ((PerformanceTuning.Definitions or {}).performance or {}).flatVelToMph
+    return flatVel * (((PerformanceTuning.Config or {}).performance or {}).flatVelToMphFactor or 0.0)
 end
 
 function PerformancePanel.buildPerformanceIndex(vehicle, bucket)
     local bindings = PerformanceTuning.ClientBindings or {}
     local definitions = PerformanceTuning.Definitions or {}
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    local performance = definitions.performance or {}
+    local performance = INTERNAL_PERFORMANCE
     local handlingFields = definitions.handlingFields or {}
     local transmissionFields = handlingFields.transmission or {}
     local engineFields = handlingFields.engine or {}
@@ -477,17 +480,17 @@ function PerformancePanel.buildPerformanceIndex(vehicle, bucket)
     local currentTractionLoss = readHandlingValue and readHandlingValue(vehicle, 'float', tireFields.tractionLoss) or 0.0
     local brakeForce = GetVehicleHandlingFloat(vehicle, definitions.handlingClass, brakeFields.force) or 0.0
     local currentBrakeProgress = PerformancePanel.computeBrakeBarProgressForVehicle(vehicle, brakeForce)
-    local powerLevel = scaleMetricLevel(currentPower, performance.powerFactor)
-    local topSpeedLevel = scaleMetricLevel(currentTopSpeed, performance.topSpeedFactor)
-    local powerProgress = scaleMetricProgress(currentPower, performance.powerFactor)
-    local topSpeedProgress = scaleMetricProgress(currentTopSpeed, performance.topSpeedFactor)
-    local gripProgressFromMax = scaleMetricProgress(currentGrip, performance.gripFactor)
+    local powerLevel = scaleMetricLevel(currentPower, performance.powerBarScaleFactor)
+    local topSpeedLevel = scaleMetricLevel(currentTopSpeed, performance.topSpeedBarScaleFactor)
+    local powerProgress = scaleMetricProgress(currentPower, performance.powerBarScaleFactor)
+    local topSpeedProgress = scaleMetricProgress(currentTopSpeed, performance.topSpeedBarScaleFactor)
+    local gripProgressFromMax = scaleMetricProgress(currentGrip, performance.gripBarScaleFactor)
     local normalizedTractionLoss = clampUnit((tonumber(currentTractionLoss) or 0.0) / 3.0)
     local tractionLossProgress = 1.0 - normalizedTractionLoss
     local gripProgress = clampUnit((gripProgressFromMax * 0.75) + (tractionLossProgress * 0.25))
-    local gripLevel = math.floor((gripProgress * (tonumber(performance.barSegments) or 10)) + 0.5)
-    local powerPi = scaleMetricPi(currentPower, performance.powerFactor, piScales.power)
-    local topSpeedPi = scaleMetricPi(currentTopSpeed, performance.topSpeedFactor, piScales.topSpeed)
+    local gripLevel = math.floor((gripProgress * (tonumber(performance.barSegmentCount) or 10)) + 0.5)
+    local powerPi = scaleMetricPi(currentPower, performance.powerBarScaleFactor, piScales.power)
+    local topSpeedPi = scaleMetricPi(currentTopSpeed, performance.topSpeedBarScaleFactor, piScales.topSpeed)
     local gripPi = math.floor((gripProgress * 100.0 * piScales.grip) + 0.5)
     local brakePi = math.floor((currentBrakeProgress * 100.0 * piScales.brake) + 0.5)
 
@@ -500,7 +503,7 @@ function PerformancePanel.buildPerformanceIndex(vehicle, bucket)
                 key = 'power',
                 label = 'POWER',
                 level = powerLevel,
-                maxLevel = performance.barSegments,
+                maxLevel = performance.barSegmentCount,
                 progress = powerProgress,
                 pi = powerPi,
                 value = currentPower,
@@ -510,7 +513,7 @@ function PerformancePanel.buildPerformanceIndex(vehicle, bucket)
                 key = 'top_speed',
                 label = 'TOP SPEED',
                 level = topSpeedLevel,
-                maxLevel = performance.barSegments,
+                maxLevel = performance.barSegmentCount,
                 progress = topSpeedProgress,
                 pi = topSpeedPi,
                 value = currentTopSpeed,
@@ -520,7 +523,7 @@ function PerformancePanel.buildPerformanceIndex(vehicle, bucket)
                 key = 'grip',
                 label = 'GRIP',
                 level = gripLevel,
-                maxLevel = performance.barSegments,
+                maxLevel = performance.barSegmentCount,
                 progress = gripProgress,
                 pi = gripPi,
                 value = currentGrip,

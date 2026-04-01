@@ -29,6 +29,8 @@ local Offroad = {
     targetAccelerationToPowerFactor = 0.5,
     accelerationToPowerFactorCap = 2.0,
     minimumAccelerationToPowerFactor = 0.01,
+    rampStepPerSecond = 2.0,
+    fallStepPerSecond = 100.0,
 }
 
 local Suspension = {
@@ -116,7 +118,7 @@ local function calculateSlideMultiplier(vehicle)
     local velocity = GetEntityVelocity(vehicle)
     local slipAngle, planarSpeed = CustomPhysicsUtil.getPlanarAngleDegrees(forward, velocity)
 
-    if planarSpeed < (CustomPhysics.Config.slideSpeedThreshold or 3.0) then
+    if planarSpeed < (CustomPhysics.Config.slideSpeedThresholdMetersPerSecond or 3.0) then
         return 1.0, slipAngle
     end
 
@@ -333,14 +335,14 @@ end
 -- Moves the live offroad multiplier toward its current target at configured rise and fall rates.
 local function advanceOffroadMultiplier(updateDeltaSeconds, offroadMaxMultiplier)
     if state.offroadPowerMultiplier < state.offroadTargetMultiplier then
-        local maxRisePerSecond = math.max(tonumber(CustomPhysics.Config.offroadRampStep) or 0.5, 0.0)
+        local maxRisePerSecond = math.max(Offroad.rampStepPerSecond, 0.0)
         local maxRiseStep = maxRisePerSecond * updateDeltaSeconds
         state.offroadPowerMultiplier = math.min(
             state.offroadPowerMultiplier + maxRiseStep,
             state.offroadTargetMultiplier
         )
     elseif state.offroadPowerMultiplier > state.offroadTargetMultiplier then
-        local maxFallPerSecond = math.max(tonumber(CustomPhysics.Config.offroadFallStep) or 100.0, 0.0)
+        local maxFallPerSecond = math.max(Offroad.fallStepPerSecond, 0.0)
         local maxFallStep = maxFallPerSecond * updateDeltaSeconds
         state.offroadPowerMultiplier = math.max(
             state.offroadPowerMultiplier - maxFallStep,

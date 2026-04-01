@@ -1,7 +1,53 @@
+local Config = (CustomCam or {}).Config or {}
+local LOOK_BACK_CONTROL = 79 -- INPUT_VEH_LOOK_BEHIND
+local DEFAULT_GAMEPLAY_CAM_FOV = 60.0
+local VIRTUAL_MIRROR_HORIZONTAL_FOV_DEGREES = 90.0
+local VIRTUAL_MIRROR_VERTICAL_FOV_DEGREES = 15.0
+local VIRTUAL_MIRROR_TRACKING_HORIZONTAL_PADDING_DEGREES = 90.0
+local VIRTUAL_MIRROR_VEHICLE_POLL_RADIUS_METERS = 200.0
+local VIRTUAL_MIRROR_MAX_TRACKED_VEHICLES = 24
+local VIRTUAL_MIRROR_FRAME_THICKNESS_NORMALIZED = 0.006
+local VIRTUAL_MIRROR_FRAME_COLOR = { r = 20, g = 20, b = 20, a = 230 }
+local VIRTUAL_MIRROR_FILL_COLOR = { r = 65, g = 75, b = 90, a = 120 }
+local VIRTUAL_MIRROR_DOT_SIZE_NORMALIZED = 0.007
+local VIRTUAL_MIRROR_DOT_SIZE_NEAR_MULTIPLIER = 7.5
+local VIRTUAL_MIRROR_DOT_SCALE_EXPONENT = 4.0
+local VIRTUAL_MIRROR_DOT_SEPARATION_FALLOFF_EXPONENT = 22.0
+local VIRTUAL_MIRROR_DOT_WIDTH_SCALE = 0.65
+local VIRTUAL_MIRROR_DOT_CLIP_PADDING_PIXELS = 4.0
+local VIRTUAL_MIRROR_DOT_TEXTURE_DICT = 'mpinventory'
+local VIRTUAL_MIRROR_DOT_TEXTURE_NAME = 'in_world_circle'
+local VIRTUAL_MIRROR_DOT_COLOR = { r = 255, g = 220, b = 80, a = 235 }
+local VIRTUAL_MIRROR_DOT_REAR_COLOR = { r = 255, g = 70, b = 60, a = 235 }
+local FOLLOW_CAM_MINIMUM_BUBBLE_PADDING_METERS = 1.0
+local FOLLOW_CAM_MINIMUM_BUBBLE_ESCAPE_SPEED_METERS_PER_SECOND = 6.0
+local FOLLOW_CAM_SPEED_MATCH_DISTANCE_METERS = 4.0
+local FOLLOW_CAM_ACCELERATION_FACTOR = 10.0
+local FOLLOW_CAM_DAMPING_FACTOR = 2.0
+local FOLLOW_CAM_CATCHUP_FACTOR = 10.0
+local FOLLOW_CAM_ROTATION_ACCELERATION_DEGREES_PER_SECOND_SQUARED = 1800.0
+local FOLLOW_CAM_ROTATION_DAMPING_FACTOR = 8.0
+local FOLLOW_CAM_ROTATION_SMOOTHING_FACTOR = 30.0
+local FOLLOW_CAM_VIEW_MODE_PADDING_METERS = {
+    [0] = 0.25,
+    [1] = 0.5,
+    [2] = 0.75
+}
+local FOLLOW_CAM_FALLBACK_DISTANCE_PADDING_METERS = 0.1
+local FOLLOW_CAM_VELOCITY_LOOK_AHEAD_FACTOR = 0.5
+local FOLLOW_CAM_HOOD_VIEW_MODE_ID = 4
+local FOLLOW_CAM_FLIP_ANGULAR_VELOCITY_X_RADIANS_PER_SECOND = 1.5
+local FOLLOW_CAM_UPRIGHT_THRESHOLD_RATIO = 0.2
+local FOLLOW_CAM_UPRIGHT_RECOVERY_THRESHOLD_RATIO = 0.9
+local HOOD_CAM_SCAN_HEIGHT_METERS = 2.5
+local HOOD_CAM_SCAN_STEP_METERS = 0.2
+local HOOD_CAM_SCAN_MAX_AHEAD_METERS = 3.5
+local HOOD_CAM_NORMAL_DOT_THRESHOLD_RATIO = 0.94
+
 local state = {
     active = false,
     cam = nil,
-    fov = Config.FollowCam.defaultFov,
+    fov = DEFAULT_GAMEPLAY_CAM_FOV,
     velocity = vector3(0.0, 0.0, 0.0),
     lookAheadEnabled = true,
     hoodAttached = false,
@@ -217,7 +263,7 @@ end
 
 -- Hood camera helpers probe the vehicle body so the camera can snap cleanly.
 local function raycastVehicleDown(vehicle, localY, minDim, maxDim)
-    local startWorld = GetOffsetFromEntityInWorldCoords(vehicle, 0.0, localY, maxDim.z + Config.HoodCam.scanHeight)
+    local startWorld = GetOffsetFromEntityInWorldCoords(vehicle, 0.0, localY, maxDim.z + HOOD_CAM_SCAN_HEIGHT_METERS)
     local endWorld = GetOffsetFromEntityInWorldCoords(vehicle, 0.0, localY, minDim.z - 1.0)
     local rayHandle = StartExpensiveSynchronousShapeTestLosProbe(
         startWorld.x, startWorld.y, startWorld.z,
@@ -239,7 +285,7 @@ local function findHoodAttachOffset(vehicle)
     local minDim, maxDim = GetModelDimensions(GetEntityModel(vehicle))
     local bestOffset = vector3(0.0, maxDim.y, maxDim.z)
     local localY = 0.0
-    local scanEndY = maxDim.y + Config.HoodCam.scanMaxAhead
+    local scanEndY = maxDim.y + HOOD_CAM_SCAN_MAX_AHEAD_METERS
 
     while localY <= scanEndY do
         local hitCoords, surfaceNormal = raycastVehicleDown(vehicle, localY, minDim, maxDim)
@@ -248,12 +294,12 @@ local function findHoodAttachOffset(vehicle)
             local localOffset = GetOffsetFromEntityGivenWorldCoords(vehicle, hitCoords.x, hitCoords.y, hitCoords.z)
             bestOffset = localOffset
 
-            if dot(surfaceNormal, vector3(0.0, 0.0, 1.0)) < Config.HoodCam.hoodNormalDotThreshold then
+            if dot(surfaceNormal, vector3(0.0, 0.0, 1.0)) < HOOD_CAM_NORMAL_DOT_THRESHOLD_RATIO then
                 return localOffset
             end
         end
 
-        localY = localY + Config.HoodCam.scanStep
+        localY = localY + HOOD_CAM_SCAN_STEP_METERS
     end
 
     return bestOffset
@@ -262,9 +308,9 @@ end
 -- Follow camera motion uses a spring-like controller instead of a hard snap.
 local function smoothAxis(currentAngle, currentSpeed, targetAngle, dt)
     local delta = angleDelta(targetAngle, currentAngle)
-    local angularAccel = delta * Config.FollowCam.rotationSmoothing
-    angularAccel = clamp(angularAccel, -Config.FollowCam.rotationAcceleration, Config.FollowCam.rotationAcceleration)
-    angularAccel = angularAccel - (currentSpeed * Config.FollowCam.rotationDamping)
+    local angularAccel = delta * FOLLOW_CAM_ROTATION_SMOOTHING_FACTOR
+    angularAccel = clamp(angularAccel, -FOLLOW_CAM_ROTATION_ACCELERATION_DEGREES_PER_SECOND_SQUARED, FOLLOW_CAM_ROTATION_ACCELERATION_DEGREES_PER_SECOND_SQUARED)
+    angularAccel = angularAccel - (currentSpeed * FOLLOW_CAM_ROTATION_DAMPING_FACTOR)
 
     currentSpeed = currentSpeed + (angularAccel * dt)
     currentAngle = currentAngle + (currentSpeed * dt)
@@ -287,15 +333,15 @@ end
 
 -- View mode checks let the hood camera and follow camera share the same entrypoint.
 local function isHoodViewMode()
-    return GetFollowVehicleCamViewMode() == Config.FollowCam.hoodViewMode
+    return GetFollowVehicleCamViewMode() == FOLLOW_CAM_HOOD_VIEW_MODE_ID
 end
 
 local function getViewModeFollowPadding()
     local viewMode = GetFollowVehicleCamViewMode()
-    local padding = Config.FollowCam.viewModePadding[viewMode]
+    local padding = FOLLOW_CAM_VIEW_MODE_PADDING_METERS[viewMode]
 
     if padding == nil then
-        padding = Config.FollowCam.followDistancePadding
+        padding = FOLLOW_CAM_FALLBACK_DISTANCE_PADDING_METERS
     end
 
     return padding
@@ -303,23 +349,23 @@ end
 
 local function getViewModeTrailingDistance(vehicleLength)
     local viewMode = GetFollowVehicleCamViewMode()
-    local configuredDistance = Config.FollowCam.trailingDistanceByViewMode and Config.FollowCam.trailingDistanceByViewMode[viewMode] or nil
+    local configuredDistance = Config.FollowCam.trailingDistanceByViewModeMeters and Config.FollowCam.trailingDistanceByViewModeMeters[viewMode] or nil
     local baseVehicleDistance = math.max(0.0, tonumber(vehicleLength) or 0.0) * 0.5
 
     if configuredDistance ~= nil then
-        return baseVehicleDistance + (tonumber(configuredDistance) or Config.FollowCam.initialSpawnDistance)
+        return baseVehicleDistance + (tonumber(configuredDistance) or Config.FollowCam.initialSpawnDistanceMeters)
     end
 
     return baseVehicleDistance + getViewModeFollowPadding()
 end
 
 local function getMinimumBubbleDistance(vehicleLength)
-    return math.max(0.0, tonumber(vehicleLength) or 0.0) + (tonumber(Config.FollowCam.minimumBubblePadding) or 1.0)
+    return math.max(0.0, tonumber(vehicleLength) or 0.0) + FOLLOW_CAM_MINIMUM_BUBBLE_PADDING_METERS
 end
 
 local function getViewModeHeightOffset()
     local viewMode = GetFollowVehicleCamViewMode()
-    local configuredHeightOffset = Config.FollowCam.heightOffsetByViewMode and Config.FollowCam.heightOffsetByViewMode[viewMode] or nil
+    local configuredHeightOffset = Config.FollowCam.heightOffsetByViewModeMeters and Config.FollowCam.heightOffsetByViewModeMeters[viewMode] or nil
 
     if configuredHeightOffset ~= nil then
         return tonumber(configuredHeightOffset) or 0.5
@@ -333,7 +379,7 @@ local function syncCameraFov()
     if gameplayFov and gameplayFov > 0.0 then
         state.fov = gameplayFov
     else
-        state.fov = tonumber(Config.FollowCam.defaultFov) or state.fov
+        state.fov = DEFAULT_GAMEPLAY_CAM_FOV
     end
 end
 
@@ -388,7 +434,7 @@ end
 -- Hood mode hard-attaches the camera to the vehicle and leaves the follow logic idle.
 local function attachHoodCam(vehicle, lookBackActive)
     local localOffset = findHoodAttachOffset(vehicle)
-    local yaw = Config.HoodCam.rotationZ
+    local yaw = Config.HoodCam.rotationZDegrees
 
     if lookBackActive then
         yaw = yaw + 180.0
@@ -396,16 +442,16 @@ local function attachHoodCam(vehicle, lookBackActive)
 
     local attachOffset = vector3(
         localOffset.x,
-        localOffset.y + Config.HoodCam.forwardOffset,
-        localOffset.z + Config.HoodCam.upOffset
+        localOffset.y + Config.HoodCam.forwardOffsetMeters,
+        localOffset.z + Config.HoodCam.upOffsetMeters
     )
 
     DetachCam(state.cam)
     HardAttachCamToEntity(
         state.cam,
         vehicle,
-        Config.HoodCam.rotationX,
-        Config.HoodCam.rotationY,
+        Config.HoodCam.rotationXDegrees,
+        Config.HoodCam.rotationYDegrees,
         yaw,
         attachOffset.x,
         attachOffset.y,
@@ -444,14 +490,10 @@ local function isControlJustReleasedAnyPad(controlId)
 end
 
 local function updateLookBackState()
-    local configuredLookBackControl = tonumber(Config.LookBackControl) or 79
-    local vehicleLookBackControl = 79
     local previousLookBackState = state.lookBackActive
 
-    local justPressed = isControlJustPressedAnyPad(configuredLookBackControl)
-        or isControlJustPressedAnyPad(vehicleLookBackControl)
-    local justReleased = isControlJustReleasedAnyPad(configuredLookBackControl)
-        or isControlJustReleasedAnyPad(vehicleLookBackControl)
+    local justPressed = isControlJustPressedAnyPad(LOOK_BACK_CONTROL)
+    local justReleased = isControlJustReleasedAnyPad(LOOK_BACK_CONTROL)
 
     if justPressed then
         state.lookBackActive = true
@@ -459,8 +501,7 @@ local function updateLookBackState()
         state.lookBackActive = false
     elseif state.lookBackActive then
         -- Keep the state sticky only while the key remains held.
-        state.lookBackActive = isControlPressedAnyPad(configuredLookBackControl)
-            or isControlPressedAnyPad(vehicleLookBackControl)
+        state.lookBackActive = isControlPressedAnyPad(LOOK_BACK_CONTROL)
     end
 
     return previousLookBackState ~= state.lookBackActive
@@ -487,7 +528,7 @@ local function getDesiredFollowData()
     local lookAheadOffset = vector3(0.0, 0.0, 0.0)
 
     if state.lookAheadEnabled then
-        local rawLookAheadOffset = scaleVector(lookAheadDirection, forwardSpeed * Config.FollowCam.velocityLookAhead)
+        local rawLookAheadOffset = scaleVector(lookAheadDirection, forwardSpeed * FOLLOW_CAM_VELOCITY_LOOK_AHEAD_FACTOR)
         local rawLookAheadDistance = vectorLength(rawLookAheadOffset)
         lookAheadOffset = rawLookAheadOffset
 
@@ -498,7 +539,7 @@ local function getDesiredFollowData()
 
     local targetFocus = addVector(
         addVector(vehicleCoords, lookAheadOffset),
-        vector3(0.0, 0.0, Config.FollowCam.focusHeight)
+        vector3(0.0, 0.0, Config.FollowCam.focusHeightMeters)
     )
 
     local roofHeight = math.max(0.0, tonumber(maxDim.z) or 0.0)
@@ -548,7 +589,7 @@ local function getInitialFollowPosition(vehicle)
     end
 
     local initialDistance = math.max(
-        tonumber(Config.FollowCam.initialSpawnDistance) or 7.0,
+        tonumber(Config.FollowCam.initialSpawnDistanceMeters) or 7.0,
         getViewModeTrailingDistance(vehicleLength)
     )
 
@@ -610,30 +651,30 @@ local function drawVirtualMirrorOverlay()
         return
     end
 
-    local centerX = tonumber(mirror.centerX) or 0.5
-    local centerY = tonumber(mirror.centerY) or 0.08
-    local width = tonumber(mirror.width) or 0.42
-    local height = tonumber(mirror.height) or 0.08
-    local frameThickness = tonumber(mirror.frameThickness) or 0.006
-    local frameColor = mirror.frameColor or {}
-    local fillColor = mirror.fillColor or {}
-    local horizontalFovDegrees = math.max(tonumber(mirror.horizontalFovDegrees) or 45.0, 1.0)
-    local verticalFovDegrees = math.max(tonumber(mirror.verticalFovDegrees) or 30.0, 1.0)
-    local trackingHorizontalPaddingDegrees = math.max(tonumber(mirror.trackingHorizontalPaddingDegrees) or 0.0, 0.0)
+    local centerX = tonumber(mirror.centerXNormalized) or 0.5
+    local centerY = tonumber(mirror.centerYNormalized) or 0.08
+    local width = tonumber(mirror.widthNormalized) or 0.42
+    local height = tonumber(mirror.heightNormalized) or 0.08
+    local frameThickness = VIRTUAL_MIRROR_FRAME_THICKNESS_NORMALIZED
+    local frameColor = VIRTUAL_MIRROR_FRAME_COLOR
+    local fillColor = VIRTUAL_MIRROR_FILL_COLOR
+    local horizontalFovDegrees = math.max(VIRTUAL_MIRROR_HORIZONTAL_FOV_DEGREES, 1.0)
+    local verticalFovDegrees = math.max(VIRTUAL_MIRROR_VERTICAL_FOV_DEGREES, 1.0)
+    local trackingHorizontalPaddingDegrees = math.max(VIRTUAL_MIRROR_TRACKING_HORIZONTAL_PADDING_DEGREES, 0.0)
     local horizontalHalfFov = math.rad(horizontalFovDegrees * 0.5)
     local verticalHalfFov = math.rad(verticalFovDegrees * 0.5)
     local trackingHorizontalHalfFov = horizontalHalfFov + math.rad(trackingHorizontalPaddingDegrees)
-    local dotSize = math.max(tonumber(mirror.dotSize) or 0.004, 0.001)
-    local dotSizeNearMultiplier = math.max(tonumber(mirror.dotSizeNearMultiplier) or 3.0, 1.0)
-    local dotScaleExponent = math.max(tonumber(mirror.dotScaleExponent) or 0.7, 0.1)
-    local dotSeparationFalloffExponent = math.max(tonumber(mirror.dotSeparationFalloffExponent) or 6.0, 0.1)
-    local dotWidthScale = math.max(tonumber(mirror.dotWidthScale) or 1.0, 0.1)
-    local dotClipPaddingPixels = math.max(tonumber(mirror.dotClipPaddingPixels) or 0.0, 0.0)
-    local dotTextureDict = tostring(mirror.dotTextureDict or 'mpinventory')
-    local dotTextureName = tostring(mirror.dotTextureName or 'in_world_circle')
-    local dotColor = mirror.dotColor or {}
-    local dotRearColor = mirror.dotRearColor or {}
-    local dotScaleDistance = math.max(tonumber(mirror.vehiclePollRadius) or 200.0, 0.001)
+    local dotSize = math.max(VIRTUAL_MIRROR_DOT_SIZE_NORMALIZED, 0.001)
+    local dotSizeNearMultiplier = math.max(VIRTUAL_MIRROR_DOT_SIZE_NEAR_MULTIPLIER, 1.0)
+    local dotScaleExponent = math.max(VIRTUAL_MIRROR_DOT_SCALE_EXPONENT, 0.1)
+    local dotSeparationFalloffExponent = math.max(VIRTUAL_MIRROR_DOT_SEPARATION_FALLOFF_EXPONENT, 0.1)
+    local dotWidthScale = math.max(VIRTUAL_MIRROR_DOT_WIDTH_SCALE, 0.1)
+    local dotClipPaddingPixels = math.max(VIRTUAL_MIRROR_DOT_CLIP_PADDING_PIXELS, 0.0)
+    local dotTextureDict = VIRTUAL_MIRROR_DOT_TEXTURE_DICT
+    local dotTextureName = VIRTUAL_MIRROR_DOT_TEXTURE_NAME
+    local dotColor = VIRTUAL_MIRROR_DOT_COLOR
+    local dotRearColor = VIRTUAL_MIRROR_DOT_REAR_COLOR
+    local dotScaleDistance = math.max(VIRTUAL_MIRROR_VEHICLE_POLL_RADIUS_METERS, 0.001)
     local canUseDotSprite = false
 
     if type(HasStreamedTextureDictLoaded) == 'function' and type(RequestStreamedTextureDict) == 'function' then
@@ -915,10 +956,10 @@ local function updateVirtualMirrorVehiclePollRoundRobin(playerVehicle)
         return
     end
 
-    local searchRadius = math.max(tonumber(mirror.vehiclePollRadius) or 200.0, 0.0)
+    local searchRadius = math.max(VIRTUAL_MIRROR_VEHICLE_POLL_RADIUS_METERS, 0.0)
     local searchRadiusSquared = searchRadius * searchRadius
     local checksPerSecond = math.max(tonumber(mirror.roundRobinChecksPerSecond) or 100.0, 1.0)
-    local maxTrackedVehicles = math.max(math.floor(tonumber(mirror.maxTrackedVehicles) or 24), 1)
+    local maxTrackedVehicles = math.max(math.floor(VIRTUAL_MIRROR_MAX_TRACKED_VEHICLES), 1)
     local playerCoords = getVehicleCenterCoordsSafe(playerVehicle)
     local playerForward = getEntityForwardVectorSafe(playerVehicle)
     local playerForwardFlat = normalize(vector3(playerForward.x, playerForward.y, 0.0))
@@ -1045,14 +1086,14 @@ local function updateFollowCam()
 
     local rotationVelocity = GetEntityRotationVelocity(vehicle)
     local uprightValue = GetEntityUprightValue(vehicle)
-    local upsideDown = uprightValue <= Config.FollowCam.uprightThreshold
+    local upsideDown = uprightValue <= FOLLOW_CAM_UPRIGHT_THRESHOLD_RATIO
     local onAllWheels = IsVehicleOnAllWheels(vehicle)
 
     if state.lookAheadEnabled then
-        if upsideDown or math.abs(rotationVelocity.x) >= Config.FollowCam.flipAngularVelocityX then
+        if upsideDown or math.abs(rotationVelocity.x) >= FOLLOW_CAM_FLIP_ANGULAR_VELOCITY_X_RADIANS_PER_SECOND then
             state.lookAheadEnabled = false
         end
-    elseif onAllWheels and uprightValue >= Config.FollowCam.uprightRecoveryThreshold then
+    elseif onAllWheels and uprightValue >= FOLLOW_CAM_UPRIGHT_RECOVERY_THRESHOLD_RATIO then
         state.lookAheadEnabled = true
     end
 
@@ -1067,10 +1108,10 @@ local function updateFollowCam()
     local currentVehicleDistance = vectorLength(currentOffsetFromVehicle)
     local minBubbleDistance = getMinimumBubbleDistance(vehicleLength)
     local vehicleSpeed = GetEntitySpeed(vehicle)
-    local distanceOffset = distance - Config.FollowCam.speedMatchDistance
-    local signedDistanceGain = signedPower(distanceOffset, 1.35) * Config.FollowCam.catchupFactor
+    local distanceOffset = distance - FOLLOW_CAM_SPEED_MATCH_DISTANCE_METERS
+    local signedDistanceGain = signedPower(distanceOffset, 1.35) * FOLLOW_CAM_CATCHUP_FACTOR
     local desiredScalarSpeed = vehicleSpeed + signedDistanceGain
-    local bubbleEscapeSpeed = tonumber(Config.FollowCam.minimumBubbleEscapeSpeed) or 6.0
+    local bubbleEscapeSpeed = FOLLOW_CAM_MINIMUM_BUBBLE_ESCAPE_SPEED_METERS_PER_SECOND
 
     if currentVehicleDistance < minBubbleDistance then
         desiredScalarSpeed = math.max(desiredScalarSpeed, bubbleEscapeSpeed)
@@ -1082,8 +1123,8 @@ local function updateFollowCam()
     )
     local velocityError = subtractVector(desiredVelocity, state.velocity)
     local acceleration = subtractVector(
-        scaleVector(velocityError, Config.FollowCam.acceleration),
-        scaleVector(state.velocity, Config.FollowCam.damping)
+        scaleVector(velocityError, FOLLOW_CAM_ACCELERATION_FACTOR),
+        scaleVector(state.velocity, FOLLOW_CAM_DAMPING_FACTOR)
     )
 
     state.velocity = addVector(state.velocity, scaleVector(acceleration, dt))
@@ -1146,7 +1187,7 @@ local function updateToggleHoldState()
         return true
     end
 
-    if (GetGameTimer() - toggleHoldState.heldSince) < (Config.ToggleHoldMs or 1000) then
+    if (GetGameTimer() - toggleHoldState.heldSince) < (Config.toggleHoldMs or 1000) then
         return true
     end
 

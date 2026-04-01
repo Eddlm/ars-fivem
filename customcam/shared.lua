@@ -1,0 +1,38 @@
+CustomCam = CustomCam or {}
+CustomCam.Config = {}
+
+-- Camera hold timing.
+CustomCam.Config.toggleHoldMs = 1000
+
+CustomCam.Config.VirtualMirror = {
+    enabled = true,
+    centerXNormalized = 0.5,
+    centerYNormalized = 0.08,
+    widthNormalized = 0.315,
+    heightNormalized = 0.08,
+}
+
+-- Smooth follow camera tuning.
+CustomCam.Config.FollowCam = {
+    initialSpawnDistanceMeters = 3.5,
+    trailingDistanceByViewModeMeters = {
+        [0] = 0.25,
+        [1] = 1.25,
+        [2] = 2.25
+    },
+    heightOffsetByViewModeMeters = {
+        [0] = 0.5,
+        [1] = 1.3,
+        [2] = 2.1
+    },
+    focusHeightMeters = 0.85,
+}
+
+-- Hood camera attachment tuning.
+CustomCam.Config.HoodCam = {
+    forwardOffsetMeters = -2,
+    upOffsetMeters = 0.08,
+    rotationXDegrees = -10.0,
+    rotationYDegrees = 0.0,
+    rotationZDegrees = 0.0,
+}

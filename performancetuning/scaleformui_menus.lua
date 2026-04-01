@@ -1,6 +1,45 @@
 -- Builds and runs the full ScaleformUI tuning menu hierarchy.
 PerformanceTuning = PerformanceTuning or {}
 PerformanceTuning.ScaleformUI = PerformanceTuning.ScaleformUI or {}
+local MENU_DESCRIPTIONS = {
+    engine = 'Affects raw acceleration and top speed.',
+    transmission = 'Affects shift speed, gear spread, and power delivery between gears.',
+    suspension = 'Affects body control, weight transfer, and cornering stability.',
+    tires = 'Affects grip level and how traction falls away at the limit.',
+    tireCompoundCategory = 'Selects the tire compound family (Road, Rally, Offroad).',
+    tireCompoundQuality = 'Selects the tire quality tier (Low-End, Mid-End, High-End).',
+    brakes = 'Affects stopping force and braking confidence into corners.',
+    nitrous = 'Adds temporary power on demand for stronger acceleration.',
+    revLimiter = 'Cuts throttle near redline below top gear when enabled.',
+    antirollBars = 'Adjusts roll stiffness to control body lean and responsiveness.',
+    nitrousShotStrength = 'Trades nitrous duration for a stronger burst of acceleration.',
+    brakeBiasFront = 'Moves braking balance toward the front or rear axle.',
+    gripBiasFront = 'Moves front-to-rear traction balance using the handling grip bias field.',
+    antirollBiasFront = 'Shifts roll stiffness balance toward the front or rear.',
+    suspensionRaise = 'Shows clearance as upper limit minus suspension raise.',
+    suspensionBiasFront = 'Moves suspension balance toward the front or rear of the car.',
+    steeringLockMode = 'Scales steering lock from traction lateral. Stock keeps original steering lock.',
+    piDisplayMode = 'Selects how PI panel targets should be displayed.',
+}
+local LIST_OPTION_DESCRIPTIONS = {
+    revLimiter = {
+        [1] = 'Leaves throttle response untouched near redline.',
+        [2] = 'Cuts throttle near redline below top gear to help traction and stability.',
+    },
+    steeringLockMode = {
+        [1] = 'Keeps stock steering lock behavior.',
+        [2] = 'Balanced steering lock scaling (2.0x traction lateral).',
+        [3] = 'Aggro steering lock scaling (2.5x traction lateral).',
+        [4] = 'Very aggro steering lock scaling (3.0x traction lateral).',
+        [5] = 'Very smooth steering lock scaling (1.0x traction lateral).',
+        [6] = 'Smooth steering lock scaling (1.5x traction lateral).',
+    },
+    piDisplayMode = {
+        [1] = 'Display PI for your current car.',
+        [2] = 'Display PI targets for nearby tuned cars with PT state.',
+        [3] = 'Display PI targets for any nearby cars.',
+    },
+}
 
 local function getScaleformUIState()
     local scaleformUI = PerformanceTuning.ScaleformUI
@@ -33,10 +72,7 @@ local function getNearestSuspensionProfileIndex(profile, value)
 end
 
 local function getMenuDescription(key)
-    local definitions = PerformanceTuning.Definitions or {}
-    local uiText = definitions.uiText or {}
-    local descriptions = uiText.menuDescriptions or {}
-    return descriptions[key] or ''
+    return MENU_DESCRIPTIONS[key] or ''
 end
 
 local function getListOptionDescription(listKey, option, currentValue)
@@ -524,19 +560,19 @@ function PerformanceTuning.ScaleformUI.refreshMenu()
 
     if state.items.revLimiter then
         local revLimiterIndex = bucket.revLimiterEnabled == true and 2 or 1
-        local revLimiterDescriptions = (((PerformanceTuning.Definitions or {}).uiText or {}).listOptionDescriptions or {}).revLimiter or {}
+        local revLimiterDescriptions = LIST_OPTION_DESCRIPTIONS.revLimiter or {}
         state.items.revLimiter:Index(revLimiterIndex)
         state.items.revLimiter:Description(revLimiterDescriptions[revLimiterIndex] or getMenuDescription('revLimiter'))
     end
     if state.items.steeringLockMode then
         local steeringModeIndex = getSteeringLockModeIndex(bucket.steeringLockMode)
-        local steeringModeDescriptions = (((PerformanceTuning.Definitions or {}).uiText or {}).listOptionDescriptions or {}).steeringLockMode or {}
+        local steeringModeDescriptions = LIST_OPTION_DESCRIPTIONS.steeringLockMode or {}
         state.items.steeringLockMode:Index(steeringModeIndex)
         state.items.steeringLockMode:Description(steeringModeDescriptions[steeringModeIndex] or getMenuDescription('steeringLockMode'))
     end
     if state.items.piDisplayMode then
         local piDisplayModeIndex = math.max(1, math.min(3, math.floor(tonumber(state.piDisplayModeIndex) or 1)))
-        local piDisplayModeDescriptions = (((PerformanceTuning.Definitions or {}).uiText or {}).listOptionDescriptions or {}).piDisplayMode or {}
+        local piDisplayModeDescriptions = LIST_OPTION_DESCRIPTIONS.piDisplayMode or {}
         state.items.piDisplayMode:Index(piDisplayModeIndex)
         state.items.piDisplayMode:Description(piDisplayModeDescriptions[piDisplayModeIndex] or getMenuDescription('piDisplayMode'))
     end
@@ -663,7 +699,7 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     state.menus.main.OnListChange = function(_, item, index)
         if item == state.items.piDisplayMode then
             state.piDisplayModeIndex = math.max(1, math.min(3, math.floor(tonumber(index) or 1)))
-            local piDisplayModeDescriptions = (((PerformanceTuning.Definitions or {}).uiText or {}).listOptionDescriptions or {}).piDisplayMode or {}
+            local piDisplayModeDescriptions = LIST_OPTION_DESCRIPTIONS.piDisplayMode or {}
             item:Description(piDisplayModeDescriptions[state.piDisplayModeIndex] or getMenuDescription('piDisplayMode'))
             return
         end

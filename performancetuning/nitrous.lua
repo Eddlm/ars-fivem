@@ -8,7 +8,7 @@ local function getNitrousLevelMultiplier(nitrousLevel)
     local packs = (PerformanceTuning._internals or {}).NITROUS_PACKS or {}
     for _, pack in ipairs(packs) do
         if pack.id == nitrousLevel then
-            return tonumber(pack.multiplier) or 0.0
+            return tonumber(pack.powerMultiplier) or 0.0
         end
     end
 
@@ -75,7 +75,7 @@ function Nitrous.refillAvailability(vehicle, now)
         return
     end
 
-    if GetEntitySpeed(vehicle) > (tonumber(nitrousRefillConfig.refillMaxSpeed) or 0.5) then
+    if GetEntitySpeed(vehicle) > (tonumber(nitrousRefillConfig.refillMaxSpeedMetersPerSecond) or 0.5) then
         return
     end
 
@@ -93,7 +93,7 @@ function Nitrous.refillAvailability(vehicle, now)
         return
     end
 
-    local refillAmount = refillIntervalMs / ((tonumber(nitrousRefillConfig.refillSeconds) or 2.0) * 1000.0)
+    local refillAmount = refillIntervalMs / ((tonumber(nitrousRefillConfig.refillDurationSeconds) or 2.0) * 1000.0)
     local previousAvailableCharge = tonumber(nitrousState.nitrousAvailableCharge) or 0.0
     nitrousState.nitrousAvailableCharge = math.min(1.0, previousAvailableCharge + refillAmount)
     nitrousState.nitrousLastRefillAt = now

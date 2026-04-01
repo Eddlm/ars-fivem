@@ -1,4 +1,53 @@
-local menuX = 20
+local Config = VehicleManager.Config or {}
+local MenuConfig = Config.menu or {}
+local AppearanceConfig = Config.appearance or {}
+local CategoryConfig = Config.categories or {}
+local TextConfig = {
+    helpLabel = "Help",
+    helpOptions = { "Fix Vehicle", "Teleport To Nearest Road" },
+    helpDescription = "Handy tools for getting your vehicle back in shape.",
+    saveVehicleLabel = "Save Vehicle",
+    saveVehicleDescription = "Save your current vehicle and setup for later.",
+    paintCategoryLabel = "Paint Category",
+    paintCategoryDescription = "Choose the paint finish for your body colors.",
+    primaryPaintLabel = "Primary",
+    primaryPaintDescription = "Set the main paint color.",
+    secondaryPaintLabel = "Secondary",
+    secondaryPaintDescription = "Set the secondary paint color.",
+    pearlescentLabel = "Pearlescent",
+    pearlescentDescription = "Add a pearl finish over the paint.",
+    interiorLabel = "Interior",
+    interiorDescription = "Change the interior color.",
+    dashboardLabel = "Dashboard",
+    dashboardDescription = "Change the dashboard color.",
+    xenonLabel = "Xenon",
+    xenonDescription = "Set the xenon headlight color.",
+    liveryLabel = "Livery",
+    liveryDescription = "Apply a livery if this vehicle supports one.",
+    wheelCategoryLabel = "Wheel Category",
+    wheelCategoryDescription = "Choose a wheel family to browse.",
+    wheelLabel = "Wheel",
+    wheelDescription = "Pick a wheel style from this category.",
+    wheelColorLabel = "Wheel Color",
+    wheelColorDescription = "Change the wheel color.",
+    customTyresLabel = "Custom Tyres",
+    customTyresDescription = "Toggle custom tyres for this wheel setup.",
+    noVehicleLabel = "No vehicle",
+    noVehicleDescription = "Get into a vehicle to see options here.",
+    noLiveriesLabel = "No liveries available",
+    partsEmptyTitle = "No parts available",
+    partsEmptyDescription = "This vehicle doesn't have any customizable parts here.",
+    statsEmptyTitle = "No stats upgrades",
+    statsEmptyDescription = "This vehicle doesn't have any upgrade options here.",
+    stockLabel = "Stock",
+    unknownColorLabel = "Unknown",
+}
+local MENU_X_POSITION = 20
+local MENU_TITLE = "Vehicle Manager"
+local MENU_SUBTITLE = "~b~CURRENT VEHICLE"
+local MENU_KEYBIND_RELEASE_COMMAND = "-vehiclemanager_menu"
+local MENU_KEYBIND_DESCRIPTION = "Open the vehicle manager menu"
+local MENU_AVAILABILITY_REFRESH_MS = 200
 
 local VMUI = {}
 
@@ -15,7 +64,7 @@ function VMUI.CreatePool()
     function pool:AddSubMenu(parentMenu, title, description)
         local item = VMUI.CreateItem(title, description)
         parentMenu:AddItem(item)
-        local submenu = VMUI.CreateMenu(title, description, menuX, 0, nil, nil, nil, 255, 255, 255, 210)
+        local submenu = VMUI.CreateMenu(title, description, MENU_X_POSITION, 0, nil, nil, nil, 255, 255, 255, 210)
         submenu:MenuAlignment(MenuAlignment.RIGHT)
         item.Activated = function(menu)
             menu:SwitchTo(submenu, 1, true)
@@ -66,10 +115,10 @@ function VMUI.CreateColouredItem(text, description)
     return item
 end
 local vehicleMenuPool = VMUI.CreatePool()
-local vehicleMainMenu = VMUI.CreateMenu("Vehicle Manager", "~b~CURRENT VEHICLE", menuX, 0, nil, nil, nil, 255, 255, 255, 210)
+local vehicleMainMenu = VMUI.CreateMenu(MENU_TITLE, MENU_SUBTITLE, MENU_X_POSITION, 0, nil, nil, nil, 255, 255, 255, 210)
 
-local helpListItem = VMUI.CreateListItem("Help", { "Fix Vehicle", "Teleport To Nearest Road" }, 1, "Handy tools for getting your vehicle back in shape.")
-local saveVehicleItem = VMUI.CreateItem("Save Vehicle", "Save your current vehicle and setup for later.")
+local helpListItem = VMUI.CreateListItem(TextConfig.helpLabel or "Help", TextConfig.helpOptions or { "Fix Vehicle", "Teleport To Nearest Road" }, 1, TextConfig.helpDescription or "Handy tools for getting your vehicle back in shape.")
+local saveVehicleItem = VMUI.CreateItem(TextConfig.saveVehicleLabel or "Save Vehicle", TextConfig.saveVehicleDescription or "Save your current vehicle and setup for later.")
 local saveLoadSubMenu = nil
 local deleteVehiclesSubMenu = nil
 local customizeSubMenu = nil
@@ -81,18 +130,18 @@ local statsLocalMenu = nil
 local statsLocalSubMenu = nil
 local returnToCustomizeAfterPerformanceTuningClose = false
 local pendingVehicleMenuCloseSaveId = 0
-local paintCategoryListItem = VMUI.CreateListItem("Paint Category", { "Classic" }, 1, "Choose the paint finish for your body colors.")
-local primaryPaintColorListItem = VMUI.CreateListItem("Primary", { "Black" }, 1, "Set the main paint color.")
-local secondaryPaintColorListItem = VMUI.CreateListItem("Secondary", { "Black" }, 1, "Set the secondary paint color.")
-local pearlescentColorListItem = VMUI.CreateListItem("Pearlescent", { "Black" }, 1, "Add a pearl finish over the paint.")
-local interiorColorListItem = VMUI.CreateListItem("Interior", { "Black" }, 1, "Change the interior color.")
-local dashboardColorListItem = VMUI.CreateListItem("Dashboard", { "Black" }, 1, "Change the dashboard color.")
-local xenonColorListItem = VMUI.CreateListItem("Xenon", { "Default" }, 1, "Set the xenon headlight color.")
-local liveryListItem = VMUI.CreateListItem("Livery", { "No liveries available" }, 1, "Apply a livery if this vehicle supports one.")
-local wheelCategoryListItem = VMUI.CreateListItem("Wheel Category", { "Sport" }, 1, "Choose a wheel family to browse.")
-local wheelListItem = VMUI.CreateListItem("Wheel", { "Stock" }, 1, "Pick a wheel style from this category.")
-local wheelColorListItem = VMUI.CreateListItem("Wheel Color", { "Black" }, 1, "Change the wheel color.")
-local customTyresItem = UIMenuCheckboxItem.New("Custom Tyres", false, 1, "Toggle custom tyres for this wheel setup.")
+local paintCategoryListItem = VMUI.CreateListItem(TextConfig.paintCategoryLabel or "Paint Category", { "Classic" }, 1, TextConfig.paintCategoryDescription or "Choose the paint finish for your body colors.")
+local primaryPaintColorListItem = VMUI.CreateListItem(TextConfig.primaryPaintLabel or "Primary", { "Black" }, 1, TextConfig.primaryPaintDescription or "Set the main paint color.")
+local secondaryPaintColorListItem = VMUI.CreateListItem(TextConfig.secondaryPaintLabel or "Secondary", { "Black" }, 1, TextConfig.secondaryPaintDescription or "Set the secondary paint color.")
+local pearlescentColorListItem = VMUI.CreateListItem(TextConfig.pearlescentLabel or "Pearlescent", { "Black" }, 1, TextConfig.pearlescentDescription or "Add a pearl finish over the paint.")
+local interiorColorListItem = VMUI.CreateListItem(TextConfig.interiorLabel or "Interior", { "Black" }, 1, TextConfig.interiorDescription or "Change the interior color.")
+local dashboardColorListItem = VMUI.CreateListItem(TextConfig.dashboardLabel or "Dashboard", { "Black" }, 1, TextConfig.dashboardDescription or "Change the dashboard color.")
+local xenonColorListItem = VMUI.CreateListItem(TextConfig.xenonLabel or "Xenon", { "Default" }, 1, TextConfig.xenonDescription or "Set the xenon headlight color.")
+local liveryListItem = VMUI.CreateListItem(TextConfig.liveryLabel or "Livery", { TextConfig.noLiveriesLabel or "No liveries available" }, 1, TextConfig.liveryDescription or "Apply a livery if this vehicle supports one.")
+local wheelCategoryListItem = VMUI.CreateListItem(TextConfig.wheelCategoryLabel or "Wheel Category", { "Sport" }, 1, TextConfig.wheelCategoryDescription or "Choose a wheel family to browse.")
+local wheelListItem = VMUI.CreateListItem(TextConfig.wheelLabel or "Wheel", { TextConfig.stockLabel or "Stock" }, 1, TextConfig.wheelDescription or "Pick a wheel style from this category.")
+local wheelColorListItem = VMUI.CreateListItem(TextConfig.wheelColorLabel or "Wheel Color", { "Black" }, 1, TextConfig.wheelColorDescription or "Change the wheel color.")
+local customTyresItem = UIMenuCheckboxItem.New(TextConfig.customTyresLabel or "Custom Tyres", false, 1, TextConfig.customTyresDescription or "Toggle custom tyres for this wheel setup.")
 customTyresItem.Activated = customTyresItem.Activated or function() end
 
 local currentPrimaryColorOptions = {}
@@ -118,171 +167,24 @@ local TUNE_STATE_BAG_KEY = "performancetuning:tuneState"
 local HANDLING_STATE_BAG_KEY = "performancetuning:handlingState"
 local SAVE_ID_STATE_BAG_KEY = "vehiclemanager:saveId"
 
-local baseGlossColorOptions = {
-    { label = "Black", colorId = 0 },
-    { label = "Carbon Black", colorId = 147 },
-    { label = "Graphite", colorId = 1 },
-    { label = "Anthracite Black", colorId = 11 },
-    { label = "Silver", colorId = 4 },
-    { label = "Blue Silver", colorId = 5 },
-    { label = "Rolled Steel", colorId = 6 },
-    { label = "Shadow Silver", colorId = 7 },
-    { label = "Stone Silver", colorId = 8 },
-    { label = "Midnight Silver", colorId = 9 },
-    { label = "Cast Iron Silver", colorId = 10 },
-    { label = "Red", colorId = 27 },
-    { label = "Torino Red", colorId = 28 },
-    { label = "Formula Red", colorId = 29 },
-    { label = "Lava Red", colorId = 150 },
-    { label = "Blaze Red", colorId = 30 },
-    { label = "Grace Red", colorId = 31 },
-    { label = "Garnet Red", colorId = 32 },
-    { label = "Sunset Red", colorId = 33 },
-    { label = "Cabernet Red", colorId = 34 },
-    { label = "Wine Red", colorId = 143 },
-    { label = "Candy Red", colorId = 35 },
-    { label = "Sunrise Orange", colorId = 36 },
-    { label = "Classic Gold", colorId = 37 },
-    { label = "Orange", colorId = 38 },
-    { label = "Dark Green", colorId = 49 },
-    { label = "Racing Green", colorId = 50 },
-    { label = "Sea Green", colorId = 51 },
-    { label = "Olive Green", colorId = 52 },
-    { label = "Bright Green", colorId = 53 },
-    { label = "Gasoline Green", colorId = 54 },
-    { label = "Lime Green", colorId = 92 },
-    { label = "Midnight Blue", colorId = 141 },
-    { label = "Galaxy Blue", colorId = 61 },
-    { label = "Dark Blue", colorId = 62 },
-    { label = "Saxon Blue", colorId = 63 },
-    { label = "Blue", colorId = 64 },
-    { label = "Mariner Blue", colorId = 65 },
-    { label = "Harbor Blue", colorId = 66 },
-    { label = "Diamond Blue", colorId = 67 },
-    { label = "Surf Blue", colorId = 68 },
-    { label = "Nautical Blue", colorId = 69 },
-    { label = "Racing Blue", colorId = 73 },
-    { label = "Ultra Blue", colorId = 70 },
-    { label = "Light Blue", colorId = 74 },
-    { label = "Chocolate Brown", colorId = 96 },
-    { label = "Bison Brown", colorId = 101 },
-    { label = "Creek Brown", colorId = 95 },
-    { label = "Feltzer Brown", colorId = 94 },
-    { label = "Maple Brown", colorId = 97 },
-    { label = "Beechwood Brown", colorId = 103 },
-    { label = "Sienna Brown", colorId = 104 },
-    { label = "Saddle Brown", colorId = 98 },
-    { label = "Moss Brown", colorId = 100 },
-    { label = "Woodbeech Brown", colorId = 102 },
-    { label = "Straw Brown", colorId = 99 },
-    { label = "Sandy Brown", colorId = 105 },
-    { label = "Bleached Brown", colorId = 106 },
-    { label = "Schafter Purple", colorId = 71 },
-    { label = "Spinnaker Purple", colorId = 72 },
-    { label = "Midnight Purple", colorId = 142 },
-    { label = "Bright Purple", colorId = 145 },
-    { label = "Cream", colorId = 107 },
-    { label = "Ice White", colorId = 111 },
-    { label = "Frost White", colorId = 112 },
-    { label = "Yellow", colorId = 88 },
-    { label = "Race Yellow", colorId = 89 },
-    { label = "Bronze", colorId = 90 },
-    { label = "Dew Yellow", colorId = 91 },
-}
-
-local matteColorOptions = {
-    { label = "Matte Black", colorId = 12 },
-    { label = "Matte Gray", colorId = 13 },
-    { label = "Matte Light Gray", colorId = 14 },
-    { label = "Matte Ice White", colorId = 131 },
-    { label = "Matte Blue", colorId = 83 },
-    { label = "Matte Dark Blue", colorId = 82 },
-    { label = "Matte Midnight Blue", colorId = 84 },
-    { label = "Matte Midnight Purple", colorId = 149 },
-    { label = "Matte Schafter Purple", colorId = 148 },
-    { label = "Matte Red", colorId = 39 },
-    { label = "Matte Dark Red", colorId = 40 },
-    { label = "Matte Orange", colorId = 41 },
-    { label = "Matte Yellow", colorId = 42 },
-    { label = "Matte Lime Green", colorId = 55 },
-    { label = "Matte Green", colorId = 128 },
-    { label = "Matte Forest Green", colorId = 151 },
-    { label = "Matte Foliage Green", colorId = 155 },
-    { label = "Matte Olive Drab", colorId = 152 },
-    { label = "Matte Dark Earth", colorId = 153 },
-    { label = "Matte Desert Tan", colorId = 154 },
-}
-
-local utilColorOptions = {
-    { label = "Util Black", colorId = 15 },
-    { label = "Util Black Poly", colorId = 16 },
-    { label = "Util Dark Silver", colorId = 17 },
-    { label = "Util Silver", colorId = 18 },
-    { label = "Util Gun Metal", colorId = 19 },
-    { label = "Util Shadow Silver", colorId = 20 },
-    { label = "Util Red", colorId = 43 },
-    { label = "Util Bright Red", colorId = 44 },
-    { label = "Util Garnet Red", colorId = 45 },
-    { label = "Util Dark Green", colorId = 56 },
-    { label = "Util Green", colorId = 57 },
-    { label = "Util Dark Blue", colorId = 75 },
-    { label = "Util Midnight Blue", colorId = 76 },
-    { label = "Util Blue", colorId = 77 },
-    { label = "Util Sea Foam Blue", colorId = 78 },
-    { label = "Util Lightning Blue", colorId = 79 },
-    { label = "Util Maui Blue Poly", colorId = 80 },
-    { label = "Util Bright Blue", colorId = 81 },
-    { label = "Util Brown", colorId = 108 },
-    { label = "Util Medium Brown", colorId = 109 },
-    { label = "Util Light Brown", colorId = 110 },
-}
-
-local wornColorOptions = {
-    { label = "Worn Black", colorId = 21 },
-    { label = "Worn Graphite", colorId = 22 },
-    { label = "Worn Silver Gray", colorId = 23 },
-    { label = "Worn Silver", colorId = 24 },
-    { label = "Worn Blue Silver", colorId = 25 },
-    { label = "Worn Shadow Silver", colorId = 26 },
-    { label = "Worn Red", colorId = 46 },
-    { label = "Worn Golden Red", colorId = 47 },
-    { label = "Worn Dark Red", colorId = 48 },
-    { label = "Worn Dark Green", colorId = 58 },
-    { label = "Worn Green", colorId = 59 },
-    { label = "Worn Sea Wash", colorId = 60 },
-    { label = "Worn Dark Blue", colorId = 85 },
-    { label = "Worn Blue", colorId = 86 },
-    { label = "Worn Light Blue", colorId = 87 },
-    { label = "Worn Honey Beige", colorId = 113 },
-    { label = "Worn Brown", colorId = 114 },
-    { label = "Worn Dark Brown", colorId = 115 },
-    { label = "Worn Straw Beige", colorId = 116 },
-    { label = "Worn Off White", colorId = 121 },
-    { label = "Worn Orange", colorId = 123 },
-    { label = "Worn Light Orange", colorId = 124 },
-}
-
-local metalColorOptions = {
-    { label = "Brushed Steel", colorId = 117 },
-    { label = "Brushed Black Steel", colorId = 118 },
-    { label = "Brushed Aluminium", colorId = 119 },
-    { label = "Pure Gold", colorId = 158 },
-    { label = "Brushed Gold", colorId = 159 },
-}
-
-local chromeColorOptions = {
-    { label = "Chrome", colorId = 120 },
-}
-
-local paintCategories = {
-    { key = "classic", label = "Classic", paintType = 0, colors = baseGlossColorOptions },
-    { key = "metallic", label = "Metallic", paintType = 1, colors = baseGlossColorOptions },
-    { key = "matte", label = "Matte", paintType = 3, colors = matteColorOptions },
-    { key = "util", label = "Util", paintType = 0, colors = utilColorOptions },
-    { key = "worn", label = "Worn", paintType = 0, colors = wornColorOptions },
-    { key = "metal", label = "Metal", paintType = 4, colors = metalColorOptions },
-    { key = "chrome", label = "Chrome", paintType = 5, colors = chromeColorOptions },
-}
+local baseGlossColorOptions = AppearanceConfig.baseGlossColorOptions or {}
+local matteColorOptions = AppearanceConfig.matteColorOptions or {}
+local utilColorOptions = AppearanceConfig.utilColorOptions or {}
+local wornColorOptions = AppearanceConfig.wornColorOptions or {}
+local metalColorOptions = AppearanceConfig.metalColorOptions or {}
+local chromeColorOptions = AppearanceConfig.chromeColorOptions or {}
+local xenonColorOptions = AppearanceConfig.xenonColorOptions or {}
+local paintCategories = {}
+for index = 1, #(AppearanceConfig.paintCategories or {}) do
+    local category = (AppearanceConfig.paintCategories or {})[index]
+    local resolvedColors = AppearanceConfig[category.colorSet or ""] or baseGlossColorOptions
+    paintCategories[index] = {
+        key = category.key,
+        label = category.label,
+        paintType = category.paintType,
+        colors = resolvedColors,
+    }
+end
 
 local paintCategoryLabels = {}
 for index = 1, #paintCategories do
@@ -319,23 +221,6 @@ local extraColorOptions = buildMergedColorOptions(
     metalColorOptions,
     chromeColorOptions
 )
-
-local xenonColorOptions = {
-    { label = "Default", colorId = 255 },
-    { label = "White", colorId = 0 },
-    { label = "Blue", colorId = 1 },
-    { label = "Electric Blue", colorId = 2 },
-    { label = "Mint Green", colorId = 3 },
-    { label = "Lime Green", colorId = 4 },
-    { label = "Yellow", colorId = 5 },
-    { label = "Golden Shower", colorId = 6 },
-    { label = "Orange", colorId = 7 },
-    { label = "Red", colorId = 8 },
-    { label = "Pony Pink", colorId = 9 },
-    { label = "Hot Pink", colorId = 10 },
-    { label = "Purple", colorId = 11 },
-    { label = "Blacklight", colorId = 12 },
-}
 
 local function buildColorLabels(options)
     local labels = {}
@@ -395,7 +280,7 @@ end
 local function getColorLabelById(colorId)
     local resolvedColorId = tonumber(colorId)
     if resolvedColorId == nil then
-        return "Unknown"
+        return TextConfig.unknownColorLabel or "Unknown"
     end
 
     return fullColorLabelById[resolvedColorId] or ("Color %s"):format(resolvedColorId)
@@ -421,66 +306,9 @@ local function getVehiclePerformancePi(vehicle)
     return math.max(0, math.floor(total + 0.5))
 end
 
-local partsVehicleModCategories = {
-    { modType = 0, label = "Spoilers" },
-    { modType = 1, label = "Front Bumper" },
-    { modType = 2, label = "Rear Bumper" },
-    { modType = 3, label = "Side Skirt" },
-    { modType = 4, label = "Exhaust" },
-    { modType = 5, label = "Frame" },
-    { modType = 6, label = "Grille" },
-    { modType = 7, label = "Hood" },
-    { modType = 8, label = "Left Fender" },
-    { modType = 9, label = "Right Fender" },
-    { modType = 10, label = "Roof" },
-    { modType = 14, label = "Horns" },
-    { modType = 25, label = "Plate Holders" },
-    { modType = 26, label = "Vanity Plates" },
-    { modType = 27, label = "Trim A" },
-    { modType = 28, label = "Ornaments" },
-    { modType = 29, label = "Dashboard" },
-    { modType = 30, label = "Dial" },
-    { modType = 31, label = "Door Speaker" },
-    { modType = 32, label = "Seats" },
-    { modType = 33, label = "Steering Wheel" },
-    { modType = 34, label = "Shifter" },
-    { modType = 35, label = "Plaques" },
-    { modType = 36, label = "Speakers" },
-    { modType = 37, label = "Trunk" },
-    { modType = 38, label = "Hydraulics" },
-    { modType = 39, label = "Engine Block" },
-    { modType = 40, label = "Air Filter" },
-    { modType = 41, label = "Struts" },
-    { modType = 42, label = "Arch Cover" },
-    { modType = 43, label = "Aerials" },
-    { modType = 44, label = "Trim B" },
-    { modType = 45, label = "Tank" },
-    { modType = 46, label = "Windows" },
-}
-
-local statsVehicleModCategories = {
-    { modType = 11, label = "Engine" },
-    { modType = 12, label = "Brakes" },
-    { modType = 13, label = "Transmission" },
-    { modType = 15, label = "Suspension" },
-    { modType = 16, label = "Armor" },
-}
-
-local wheelCategories = {
-    { wheelType = 0, label = "Sport" },
-    { wheelType = 1, label = "Muscle" },
-    { wheelType = 2, label = "Lowrider" },
-    { wheelType = 3, label = "SUV" },
-    { wheelType = 4, label = "Offroad" },
-    { wheelType = 5, label = "Tuner" },
-    { wheelType = 6, label = "Bike" },
-    { wheelType = 7, label = "High End" },
-    { wheelType = 8, label = "Benny's Original" },
-    { wheelType = 9, label = "Benny's Bespoke" },
-    { wheelType = 10, label = "Open Wheel" },
-    { wheelType = 11, label = "Street" },
-    { wheelType = 12, label = "Track" },
-}
+local partsVehicleModCategories = CategoryConfig.partsVehicleModCategories or {}
+local statsVehicleModCategories = CategoryConfig.statsVehicleModCategories or {}
+local wheelCategories = CategoryConfig.wheelCategories or {}
 
 local wheelCategoryLabels = {}
 for index = 1, #wheelCategories do
@@ -635,8 +463,8 @@ local function rebuildLiveryList(vehicle)
     liveryListItem.Items = {}
 
     if not vehicle then
-        currentLiveryOptions[1] = { label = "No vehicle", available = false }
-        liveryListItem.Items[1] = "No vehicle"
+        currentLiveryOptions[1] = { label = TextConfig.noVehicleLabel or "No vehicle", available = false }
+        liveryListItem.Items[1] = TextConfig.noVehicleLabel or "No vehicle"
         liveryListItem:Index(1)
         return
     end
@@ -663,12 +491,12 @@ local function rebuildLiveryList(vehicle)
     local modCount = GetNumVehicleMods(vehicle, 48)
     if modCount and modCount > 0 then
         currentLiveryOptions[1] = {
-            label = "Stock",
+            label = TextConfig.stockLabel or "Stock",
             available = true,
             mode = "mod",
             value = -1,
         }
-        liveryListItem.Items[1] = "Stock"
+        liveryListItem.Items[1] = TextConfig.stockLabel or "Stock"
 
         for modIndex = 0, modCount - 1 do
             local listIndex = #currentLiveryOptions + 1
@@ -685,8 +513,8 @@ local function rebuildLiveryList(vehicle)
         return
     end
 
-    currentLiveryOptions[1] = { label = "No liveries available", available = false }
-    liveryListItem.Items[1] = "No liveries available"
+    currentLiveryOptions[1] = { label = TextConfig.noLiveriesLabel or "No liveries available", available = false }
+    liveryListItem.Items[1] = TextConfig.noLiveriesLabel or "No liveries available"
 end
 
 local function rebuildModMenu(subMenu, categories, emptyTitle, emptyDescription)
@@ -701,7 +529,7 @@ local function rebuildModMenu(subMenu, categories, emptyTitle, emptyDescription)
     targetMenu:Clear()
     local vehicle = getManagedVehicle(false)
     if not vehicle then
-        local emptyItem = VMUI.CreateItem("No vehicle", "Get into a vehicle to see options here.")
+        local emptyItem = VMUI.CreateItem(TextConfig.noVehicleLabel or "No vehicle", TextConfig.noVehicleDescription or "Get into a vehicle to see options here.")
         emptyItem:Enabled(false)
         targetMenu:AddItem(emptyItem)
         vehicleMenuPool:RefreshIndex()
@@ -717,9 +545,9 @@ local function rebuildModMenu(subMenu, categories, emptyTitle, emptyDescription)
         local modCount = GetNumVehicleMods(vehicle, category.modType)
         if modCount and modCount > 0 then
             local options = {
-                { label = "Stock", value = -1 },
+                { label = TextConfig.stockLabel or "Stock", value = -1 },
             }
-            local optionLabels = { "Stock" }
+            local optionLabels = { TextConfig.stockLabel or "Stock" }
 
             for modIndex = 0, modCount - 1 do
                 local label = getDisplayLabel(GetModTextLabel(vehicle, category.modType, modIndex), ("%s %d"):format(category.label, modIndex + 1))
@@ -764,8 +592,8 @@ local function rebuildPartsMenu()
     partsModItems, partsModEntries = rebuildModMenu(
         partsSubMenu,
         partsVehicleModCategories,
-        "No parts available",
-        "This vehicle doesn't have any customizable parts here."
+        TextConfig.partsEmptyTitle or "No parts available",
+        TextConfig.partsEmptyDescription or "This vehicle doesn't have any customizable parts here."
     )
 end
 
@@ -773,8 +601,8 @@ local function rebuildStatsMenu()
     statsModItems, statsModEntries = rebuildModMenu(
         statsLocalMenu,
         statsVehicleModCategories,
-        "No stats upgrades",
-        "This vehicle doesn't have any upgrade options here."
+        TextConfig.statsEmptyTitle or "No stats upgrades",
+        TextConfig.statsEmptyDescription or "This vehicle doesn't have any upgrade options here."
     )
 end
 
@@ -875,7 +703,7 @@ local function rebuildWheelList(categoryIndex)
 
     local vehicle = getManagedVehicle(false)
     if not vehicle then
-        wheelListItem.Items[1] = "No vehicle"
+        wheelListItem.Items[1] = TextConfig.noVehicleLabel or "No vehicle"
         wheelListItem:Index(1)
         customTyresItem:Checked(false)
         return
@@ -890,8 +718,8 @@ local function rebuildWheelList(categoryIndex)
     SetVehicleWheelType(vehicle, wheelCategory.wheelType)
 
     local modCount = GetNumVehicleMods(vehicle, wheelModType)
-    currentWheelOptions[1] = { label = "Stock", value = -1 }
-    wheelListItem.Items[1] = "Stock"
+    currentWheelOptions[1] = { label = TextConfig.stockLabel or "Stock", value = -1 }
+    wheelListItem.Items[1] = TextConfig.stockLabel or "Stock"
 
     if modCount and modCount > 0 then
         for modIndex = 0, modCount - 1 do
@@ -1786,7 +1614,7 @@ end
 local function buildSavedVehicleLabel(entry)
     local piValue = tonumber(entry and entry.pi)
     local piLabel = piValue and tostring(math.max(0, math.floor(piValue + 0.5))) or "--"
-    local colorLabel = tostring((entry and (entry.primaryColorLabel or entry.colorLabel)) or "Unknown")
+    local colorLabel = tostring((entry and (entry.primaryColorLabel or entry.colorLabel)) or (TextConfig.unknownColorLabel or "Unknown"))
     local vehicleName = tostring((entry and (entry.localizedName or entry.displayName)) or "Saved Vehicle")
     return ("%s | %s %s"):format(piLabel, colorLabel, vehicleName)
 end
@@ -2420,7 +2248,7 @@ RegisterNetEvent("vehiclemanager:vehicleSaved", function(saveId)
     requestSavedVehicleIndex()
 end)
 
-RegisterCommand("+vehiclemanager_menu", function()
+RegisterCommand(MenuConfig.keybindCommand or "+vehiclemanager_menu", function()
     updateVehicleAvailabilityState(true)
     if MenuHandler:IsAnyMenuOpen() then
         vehicleMenuPool:CloseAllMenus()
@@ -2429,10 +2257,15 @@ RegisterCommand("+vehiclemanager_menu", function()
     end
 end, false)
 
-RegisterCommand("-vehiclemanager_menu", function()
+RegisterCommand(MENU_KEYBIND_RELEASE_COMMAND, function()
 end, false)
 
-RegisterKeyMapping("+vehiclemanager_menu", "Open the vehicle manager menu", "keyboard", "F5")
+RegisterKeyMapping(
+    MenuConfig.keybindCommand or "+vehiclemanager_menu",
+    MENU_KEYBIND_DESCRIPTION,
+    "keyboard",
+    MenuConfig.defaultKey or "F5"
+)
 
 CreateThread(function()
     local nextAvailabilityRefreshAt = 0
@@ -2442,7 +2275,7 @@ CreateThread(function()
 
         if GetGameTimer() >= nextAvailabilityRefreshAt then
             updateVehicleAvailabilityState(false)
-            nextAvailabilityRefreshAt = GetGameTimer() + 200
+            nextAvailabilityRefreshAt = GetGameTimer() + MENU_AVAILABILITY_REFRESH_MS
         end
     end
 end)

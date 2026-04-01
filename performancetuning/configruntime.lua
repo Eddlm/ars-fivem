@@ -3,11 +3,19 @@ PerformanceTuning = PerformanceTuning or {}
 
 local definitions = PerformanceTuning.Definitions or {}
 local runtimeConfig = definitions.runtimeConfig or {}
+local config = PerformanceTuning.Config or {}
+local INTERNAL_SLIDER_RANGES = {
+    antirollBars = { min = 0.0, max = 1.0, step = 0.025 },
+    brakeBiasFront = { min = 0.3, max = 0.7, step = 0.01 },
+    gripBiasFront = { min = 0.3, max = 0.7, step = 0.01 },
+    antirollBiasFront = { min = 0.0, max = 1.0, step = 0.025 },
+    suspensionBiasFront = { min = 0.3, max = 0.7, step = 0.01 },
+}
 
 local function getConfiguredSliderRange(key)
-    local configuredRanges = PerformanceTuningConfig and PerformanceTuningConfig.sliderRanges or {}
+    local configuredRanges = config.sliderRanges or {}
     local configured = configuredRanges[key] or {}
-    local fallback = { min = 0.0, max = 1.0, step = 0.1 }
+    local fallback = INTERNAL_SLIDER_RANGES[key] or { min = 0.0, max = 1.0, step = 0.1 }
     local minValue = tonumber(configured.min)
     local maxValue = tonumber(configured.max)
     local stepValue = tonumber(configured.step)
@@ -32,7 +40,7 @@ local function getConfiguredSliderRange(key)
 end
 
 local function getConfiguredNitrousValue(key)
-    local configuredNitrous = PerformanceTuningConfig and PerformanceTuningConfig.nitrous or {}
+    local configuredNitrous = config.nitrous or {}
     local configuredValue = tonumber(configuredNitrous[key])
     local fallbackValue = key == 'baseDurationMs' and 4000 or 0.5
 
@@ -60,5 +68,9 @@ runtimeConfig.sliderRanges.suspensionRaise = getConfiguredSliderRange('suspensio
 runtimeConfig.sliderRanges.suspensionBiasFront = getConfiguredSliderRange('suspensionBiasFront')
 runtimeConfig.nitrous.baseDurationMs = getConfiguredNitrousValue('baseDurationMs')
 runtimeConfig.nitrous.nativePowerMultiplier = getConfiguredNitrousValue('nativePowerMultiplier')
+runtimeConfig.performancePiMultipliers = config.performancePiMultipliers or {}
+runtimeConfig.performanceNearbyPanels = config.performanceNearbyPanels or {}
+runtimeConfig.performancePiClasses = config.performancePiClasses or {}
+runtimeConfig.nitrousRefill = config.nitrousRefill or {}
 
 PerformanceTuning.RuntimeConfig = runtimeConfig

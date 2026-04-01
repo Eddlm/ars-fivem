@@ -46,6 +46,19 @@ Remember you do not need to install all, they don't require each other. You can 
 
 ### Focus on improvements and not new features.
 
+## Config Reference
+
+| Resource | Main config location | Notes |
+| --- | --- | --- |
+| customcam | [customcam/shared.lua](customcam/shared.lua) | camera toggle hold time, virtual mirror enable and placement, follow camera placement, hood camera placement |
+| customphysics | [customphysics/shared.lua](customphysics/shared.lua) | wheelie policy, rollover toggle, offroad boost toggle and cap, fallback rev limiter, powerslide tuning, material tyre drag table |
+| performancetuning | [performancetuning/shared.lua](performancetuning/shared.lua) | nitrous settings, nearby PI panel settings, PI classes, PI multipliers, nitrous refill timing, selected slider ranges, tuning pack definitions |
+| racingsystem | [racingsystem/shared.lua](racingsystem/shared.lua) | checkpoint draw distance, marker type, checkpoint radius limits, lap count limits, race ownership rules, countdown |
+| vehiclemanager | [vehiclemanager/shared.lua](vehiclemanager/shared.lua) | keybind defaults, owner identifier priority, paint categories, part/stat/wheel category tables |
+
+Only the Lua files above are intended config surfaces. The JSON files under racingsystem and the saved vehicle JSON files under vehiclemanager are data, not config.
+Config values now try to encode their measure directly in the name, using suffixes like `Meters`, `Degrees`, `Normalized`, `Ms`, and `Id`, while internal tuning, UI copy, and static implementation data are kept in code.
+
 # In Depth
 
 ## Resource customcam

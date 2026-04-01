@@ -5,6 +5,9 @@ local getSavedRaceCounts
 local buildSavedRaceDefinitions
 local knownRaceDefinitionsByName = {}
 local RACE_INDEX_FILE = 'race_index.json'
+local RESOURCE_NAME = 'racingsystem'
+local CUSTOM_RACE_FOLDER = 'CustomRaces'
+local ONLINE_RACE_FOLDER = 'OnlineRaces'
 
 local function log(message)
     return
@@ -89,7 +92,7 @@ local function saveRaceIndex()
         definitions = definitions,
     })
 
-    local saveOk = SaveResourceFile(RacingSystem.Config.resourceName, RACE_INDEX_FILE, encoded, -1)
+    local saveOk = SaveResourceFile(RESOURCE_NAME, RACE_INDEX_FILE, encoded, -1)
     if not saveOk then
         log(('Failed to save %s'):format(RACE_INDEX_FILE))
         return false
@@ -102,7 +105,7 @@ end
 local function loadRaceIndex()
     knownRaceDefinitionsByName = {}
 
-    local rawIndex = LoadResourceFile(RacingSystem.Config.resourceName, RACE_INDEX_FILE)
+    local rawIndex = LoadResourceFile(RESOURCE_NAME, RACE_INDEX_FILE)
     if not rawIndex or rawIndex == '' then
         log(('%s was not found. Starting with an empty race index.'):format(RACE_INDEX_FILE))
         return
@@ -654,11 +657,11 @@ local function sanitizeUGCId(value)
 end
 
 local function buildOnlineRaceFilePath(fileName)
-    return ('%s/%s.json'):format(RacingSystem.Config.onlineRaceFolder, fileName)
+    return ('%s/%s.json'):format(ONLINE_RACE_FOLDER, fileName)
 end
 
 local function buildCustomRaceFilePath(fileName)
-    return ('%s/%s.json'):format(RacingSystem.Config.customRaceFolder, fileName)
+    return ('%s/%s.json'):format(CUSTOM_RACE_FOLDER, fileName)
 end
 
 local function buildSavedRaceSnapshot(definition)
@@ -678,7 +681,7 @@ local function buildSavedRaceSnapshot(definition)
 end
 
 local function iterateJsonFilesInFolder(folderName, handleLine)
-    local resourcePath = GetResourcePath(RacingSystem.Config.resourceName)
+    local resourcePath = GetResourcePath(RESOURCE_NAME)
     if type(resourcePath) ~= 'string' or resourcePath == '' or type(folderName) ~= 'string' or folderName == '' then
         return false
     end
@@ -762,8 +765,8 @@ local function syncKnownRaceDefinitionsFromFiles()
         end
     end
 
-    registerDefinitionsFromFolder(RacingSystem.Config.onlineRaceFolder, 'online')
-    registerDefinitionsFromFolder(RacingSystem.Config.customRaceFolder, 'custom')
+    registerDefinitionsFromFolder(ONLINE_RACE_FOLDER, 'online')
+    registerDefinitionsFromFolder(CUSTOM_RACE_FOLDER, 'custom')
 
     local syncedDefinitionCount = 0
     for _ in pairs(syncedDefinitionsByName) do
@@ -839,8 +842,8 @@ buildSavedRaceDefinitions = function()
 end
 
 getSavedRaceCounts = function()
-    local customRaceCount = countJsonFilesInFolder(RacingSystem.Config.customRaceFolder)
-    local onlineRaceCount = countJsonFilesInFolder(RacingSystem.Config.onlineRaceFolder)
+    local customRaceCount = countJsonFilesInFolder(CUSTOM_RACE_FOLDER)
+    local onlineRaceCount = countJsonFilesInFolder(ONLINE_RACE_FOLDER)
     return customRaceCount, onlineRaceCount
 end
 
@@ -946,7 +949,7 @@ local function saveBundledUGCById(ugcId)
     local modelHides = buildOnlineRaceModelHidesFromMission(mission.dhprop)
 
     local filePath = buildOnlineRaceFilePath(normalizedUGCId)
-    local saveOk = SaveResourceFile(RacingSystem.Config.resourceName, filePath, rawMissionJson, -1)
+    local saveOk = SaveResourceFile(RESOURCE_NAME, filePath, rawMissionJson, -1)
     if not saveOk then
         return nil, ('Could not save %s.'):format(filePath)
     end
@@ -1062,13 +1065,13 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
     end
 
     local filePath
-    if folderName == RacingSystem.Config.customRaceFolder then
+    if folderName == CUSTOM_RACE_FOLDER then
         filePath = buildCustomRaceFilePath(fileName)
     else
         filePath = buildOnlineRaceFilePath(fileName)
     end
 
-    local rawMissionJson = LoadResourceFile(RacingSystem.Config.resourceName, filePath)
+    local rawMissionJson = LoadResourceFile(RESOURCE_NAME, filePath)
     if not rawMissionJson or rawMissionJson == '' then
         return nil, ('No %s race named "%s" was found.'):format(label, fileName)
     end
@@ -1094,11 +1097,11 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
 end
 
 local function loadCustomRace(raceName)
-    return loadMissionRaceFromFolder(raceName, RacingSystem.Config.customRaceFolder, 'custom')
+    return loadMissionRaceFromFolder(raceName, CUSTOM_RACE_FOLDER, 'custom')
 end
 
 local function loadBundledOnlineRace(raceName)
-    return loadMissionRaceFromFolder(raceName, RacingSystem.Config.onlineRaceFolder, 'online')
+    return loadMissionRaceFromFolder(raceName, ONLINE_RACE_FOLDER, 'online')
 end
 
 local function registerRaceDefinitionIfValid(raceName)
@@ -1145,7 +1148,7 @@ local function deleteRaceDefinition(raceName)
         return nil, 'That race could not be found for deletion.'
     end
 
-    local resourcePath = GetResourcePath(RacingSystem.Config.resourceName)
+    local resourcePath = GetResourcePath(RESOURCE_NAME)
     if type(resourcePath) ~= 'string' or resourcePath == '' then
         return nil, 'Could not resolve the resource path.'
     end
@@ -1187,13 +1190,13 @@ local function saveRaceDefinition(ownerSource, raceName, checkpoints)
     end
 
     local filePath = buildCustomRaceFilePath(fileName)
-    local existingMissionJson = LoadResourceFile(RacingSystem.Config.resourceName, filePath)
+    local existingMissionJson = LoadResourceFile(RESOURCE_NAME, filePath)
     if (not existingMissionJson or existingMissionJson == '') then
         local existingOnlinePath = buildOnlineRaceFilePath(fileName)
-        existingMissionJson = LoadResourceFile(RacingSystem.Config.resourceName, existingOnlinePath)
+        existingMissionJson = LoadResourceFile(RESOURCE_NAME, existingOnlinePath)
     end
     local missionJson = buildMissionJsonFromCheckpoints(sanitizedCheckpoints, existingMissionJson)
-    local saveOk = SaveResourceFile(RacingSystem.Config.resourceName, filePath, missionJson, -1)
+    local saveOk = SaveResourceFile(RESOURCE_NAME, filePath, missionJson, -1)
     if not saveOk then
         return nil, ('Could not save %s.'):format(filePath)
     end

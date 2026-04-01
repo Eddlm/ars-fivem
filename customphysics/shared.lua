@@ -5,9 +5,6 @@ CustomPhysics.Config = {
     nativeWheeliesDisabled = true,
     customWheelieEnabled = true,    
     wheeliesMuscleOnly = true,
-    customWheelieForce = 0.4, -- TO DO - Consider making the wheelie force dependent on true acceleration, not wheel acceleration.
-    customWheelieFrontOffset = 2,
-    customWheelieArmSpeedThreshold = 1.0,
 
 -- Rollovers
 rolloversEnabled = true,
@@ -15,19 +12,14 @@ rolloversEnabled = true,
     -- Offroad speed 
     offroadBoostEnabled = true,
     offroadMaxMultiplier = 5.0,
-    offroadFallStep = 100.0,
-    offroadRampStep = 2.0,
 
     -- Fallback value in case the car does not get a rev limiter state bag from performancetuning.
     fallbackRevLimiterEnabled = false,
-    
-    -- Anti kerb and suspension boost
-    suspensionBoostPenaltyStrength = 5.0,
 
     -- Powerslides
     slideAngleStepDegrees = 20.0,
     slideMaxMultiplier = 5.0,
-    slideSpeedThreshold = 3.0,    
+    slideSpeedThresholdMetersPerSecond = 3.0,
 
     materialTyreDragByIndex = {
         [0] = -0.15,

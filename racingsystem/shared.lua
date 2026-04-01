@@ -1,23 +1,15 @@
 RacingSystem = RacingSystem or {}
 
 RacingSystem.Config = {
-    resourceName = 'racingsystem',
-    customRaceFolder = 'CustomRaces',
-    onlineRaceFolder = 'OnlineRaces',
-    checkpointDrawDistance = 250.0,
-    markerType = 1,
+    checkpointDrawDistanceMeters = 250.0,
+    markerTypeId = 1,
     visualCheckpointRadiusScale = 1.5,
-    checkpointRadiusStep = 1.0,
-    checkpointRadiusMin = 2.0,
-    checkpointRadiusMax = 40.0,
+    checkpointRadiusMinMeters = 2.0,
+    checkpointRadiusMaxMeters = 40.0,
     minLapCount = 1,
     maxLapCount = 10,
     playerCanInvokeMultipleRaces = false,
     countdownMs = 5000,
-    controls = {
-        pitchUp = 111,
-        pitchDown = 112,
-    },
 }
 
 RacingSystem.States = {

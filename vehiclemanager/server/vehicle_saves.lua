@@ -1,5 +1,7 @@
+local Config = VehicleManager.Config or {}
+local SaveConfig = Config.save or {}
 local saveDirectory = "savedvehicles"
-local ownerIdentifierPrefixes = {
+local ownerIdentifierPrefixes = SaveConfig.ownerIdentifierPrefixes or {
     "license:",
     "license2:",
     "fivem:",
@@ -82,7 +84,7 @@ local function getOwnerDirectory(playerSource)
 end
 
 local function getIndexFileName(ownerKey)
-    return ("%s/index_%s.json"):format(saveDirectory, ownerKey)
+    return ("%s/%s_%s.json"):format(saveDirectory, "index", ownerKey)
 end
 
 local function buildSaveFileName(ownerKey, vehicleData)
