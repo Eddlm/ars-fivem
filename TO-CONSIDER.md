@@ -1,5 +1,3 @@
-# TO-DOs
-
 I make sure to not lose track of the user/admin experience by regularly asking Codex to do sanity checks on features, gameplay, settings and overall experience. I keep its suggestions here, authored and adjusted by me.
 
 # For `customcam`
