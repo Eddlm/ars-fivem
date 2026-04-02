@@ -4,10 +4,10 @@ PerformanceTuning.TuningPackManager = PerformanceTuning.TuningPackManager or {}
 
 local TuningPackManager = PerformanceTuning.TuningPackManager
 local TIRE_COMPOUND_CATEGORY_OPTIONS = {
-    { id = 'stock', label = 'Stock', description = 'Use factory tire profile.' },
-    { id = 'road', label = 'Road', description = 'Road compound profile family.' },
-    { id = 'rally', label = 'Rally', description = 'Rally compound profile family.' },
-    { id = 'offroad', label = 'Offroad', description = 'Offroad compound profile family.' },
+    { id = 'stock', label = 'Stock', description = 'Factory. Quality has no effect.' },
+    { id = 'road', label = 'Road', description = "Tarmac focused, don't go off the road." },
+    { id = 'rally', label = 'Mixed', description = 'Compromise between tarmac grip and offroad grip loss.' },
+    { id = 'offroad', label = 'Offroad', description = 'Least griploss offroad, not much grip on tarmac.' },
 }
 local TIRE_COMPOUND_QUALITY_OPTIONS = {
     { id = 'low_end', label = 'Low-End', description = 'Entry-level compound quality.' },
@@ -20,55 +20,55 @@ local TIRE_COMPOUND_TUNING_MATRIX = {
     road = {
         low_end = {
             gripBarProgressRatio = 0.60,
-            tractionLossMultiplier = 0.2222222222,
+            tractionLossMultiplier = 1.3,
         },
         mid_end = {
             gripBarProgressRatio = 0.7333333333,
-            tractionLossMultiplier = 0.7878787879,
+            tractionLossMultiplier = 1.6,
         },
         high_end = {
             gripBarProgressRatio = 0.8666666667,
-            tractionLossMultiplier = 1.1794871795,
+            tractionLossMultiplier = 1.9,
         },
         top_end = {
             gripBarProgressRatio = 1.00,
-            tractionLossMultiplier = 1.4666666667,
+            tractionLossMultiplier = 2.2,
         },
     },
     rally = {
         low_end = {
             gripBarProgressRatio = 0.58,
-            tractionLossMultiplier = 0.1149425287,
+            tractionLossMultiplier = 0.726,
         },
         mid_end = {
             gripBarProgressRatio = 0.68,
-            tractionLossMultiplier = 0.3267973856,
+            tractionLossMultiplier = 0.52272,
         },
         high_end = {
             gripBarProgressRatio = 0.78,
-            tractionLossMultiplier = 0.4843304843,
+            tractionLossMultiplier = 0.373745,
         },
         top_end = {
             gripBarProgressRatio = 0.88,
-            tractionLossMultiplier = 0.6060606061,
+            tractionLossMultiplier = 0.265646,
         },
     },
     offroad = {
         low_end = {
             gripBarProgressRatio = 0.58,
-            tractionLossMultiplier = 0.1149425287,
+            tractionLossMultiplier = 0.363,
         },
         mid_end = {
             gripBarProgressRatio = 0.6533333333,
-            tractionLossMultiplier = 0.0748299320,
+            tractionLossMultiplier = 0.13068,
         },
         high_end = {
             gripBarProgressRatio = 0.7266666667,
-            tractionLossMultiplier = 0.0428134557,
+            tractionLossMultiplier = 0.046718,
         },
         top_end = {
             gripBarProgressRatio = 0.8,
-            tractionLossMultiplier = 0.0166666667,
+            tractionLossMultiplier = 0.016603,
         },
     },
 }
@@ -156,10 +156,68 @@ local function getEngineCombinedPacks()
     return combined
 end
 
+local function getBaseEnginePackId()
+    local internals = PerformanceTuning._internals or {}
+    local enginePacks = internals.ENGINE_PACKS or {}
+    local firstPack = enginePacks[1]
+    local firstPackId = type(firstPack) == 'table' and firstPack.id or nil
+    if type(firstPackId) == 'string' and firstPackId ~= '' then
+        return firstPackId
+    end
+    return 'stock'
+end
+
+local function isBaseEnginePackId(packId)
+    return tostring(packId or '') == tostring(getBaseEnginePackId())
+end
+
+local function getBaseBrakePackId()
+    local internals = PerformanceTuning._internals or {}
+    local brakePacks = internals.BRAKE_PACKS or {}
+    local firstPack = brakePacks[1]
+    local firstPackId = type(firstPack) == 'table' and firstPack.id or nil
+    if type(firstPackId) == 'string' and firstPackId ~= '' then
+        return firstPackId
+    end
+    return 'stock'
+end
+
+local function isBaseBrakePackId(packId)
+    return tostring(packId or '') == tostring(getBaseBrakePackId())
+end
+
+local function getBrakeUpgradeProgress(selectedPackId)
+    local packs = PerformanceTuning._internals.BRAKE_PACKS or {}
+    local selectedId = tostring(selectedPackId or '')
+    local totalUpgrades = 0
+    local selectedLevel = 0
+
+    for index, pack in ipairs(packs) do
+        local isEligible = type(pack) == 'table' and pack.enabled ~= false
+        if isEligible then
+            if index > 1 then
+                totalUpgrades = totalUpgrades + 1
+                if pack.id == selectedId then
+                    selectedLevel = totalUpgrades
+                end
+            elseif pack.id == selectedId then
+                selectedLevel = 0
+            end
+        end
+    end
+
+    return selectedLevel, totalUpgrades
+end
+
 function TuningPackManager.normalizeEnginePackId(packId)
-    local normalized = tostring(packId or 'stock')
+    local normalized = tostring(packId or getBaseEnginePackId())
+    local basePackId = getBaseEnginePackId()
     if normalized == '' then
-        return 'stock'
+        return basePackId
+    end
+
+    if normalized:lower() == 'stock' then
+        return basePackId
     end
 
     if normalized:sub(-5):lower() == '_swap' then
@@ -330,6 +388,26 @@ local function getLowSpeedLossMultiplierForQuality(qualityId)
         return 0.2
     end
     return nil
+end
+
+local function getRelativeGripTargetValue(baseGrip, categoryId, qualityId)
+    local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
+    local performanceBars = runtimeConfig.performanceBars or {}
+    local gripConfig = performanceBars.grip or {}
+    local qualityLadder = gripConfig.qualityLadder or {}
+    local compoundRoadOffset = gripConfig.compoundRoadOffset or {}
+
+    local resolvedBaseGrip = tonumber(baseGrip) or 0.0
+    if resolvedBaseGrip <= 0.0 then
+        return 0.0
+    end
+
+    local normalizedCategory = TuningPackManager.normalizeTireCompoundCategory(categoryId)
+    local normalizedQuality = TuningPackManager.normalizeTireCompoundQuality(qualityId)
+    local qualityOffset = tonumber(qualityLadder[normalizedQuality]) or 0.0
+    local roadQualityTarget = resolvedBaseGrip + qualityOffset
+    local compoundOffset = tonumber(compoundRoadOffset[normalizedCategory]) or 0.0
+    return math.max(0.1, roadQualityTarget + compoundOffset)
 end
 
 function TuningPackManager.inferTireCompoundQualityFromPackId(packId)
@@ -586,7 +664,42 @@ local function getTransmissionUpgradeIndexForPack(packId)
 end
 
 local function getTransmissionPowerBonusForPack(packId)
-    return getTransmissionUpgradeIndexForPack(packId) * TRANSMISSION_POWER_BONUS_PER_UPGRADE
+    local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
+    local configuredBonus = tonumber(((((runtimeConfig.performanceBars or {}).power or {}).transmission or {}).powerBonusPerUpgrade))
+    local perUpgradeBonus = configuredBonus
+    if perUpgradeBonus == nil then
+        perUpgradeBonus = TRANSMISSION_POWER_BONUS_PER_UPGRADE
+    end
+    if perUpgradeBonus < 0.0 then
+        perUpgradeBonus = TRANSMISSION_POWER_BONUS_PER_UPGRADE
+    end
+
+    return getTransmissionUpgradeIndexForPack(packId) * perUpgradeBonus
+end
+
+local function getEngineUpgradeProgress(selectedPackId)
+    local packs = PerformanceTuning._internals.ENGINE_PACKS or {}
+    local selectedId = tostring(selectedPackId or '')
+    local totalUpgrades = 0
+    local selectedLevel = 0
+
+    for index, pack in ipairs(packs) do
+        local isEligible = type(pack) == 'table'
+            and pack.enabled ~= false
+            and not pack.swapModel
+        if isEligible then
+            if index > 1 then
+                totalUpgrades = totalUpgrades + 1
+                if pack.id == selectedId then
+                    selectedLevel = totalUpgrades
+                end
+            elseif pack.id == selectedId then
+                selectedLevel = 0
+            end
+        end
+    end
+
+    return selectedLevel, totalUpgrades
 end
 
 local function roundToThreeDecimals(value, fallback)
@@ -606,6 +719,7 @@ local function applyComposedDriveForce(vehicle, bucket, options)
     options = options or {}
     local internals = PerformanceTuning._internals
     local powerField = internals.POWER_FIELD
+    local topSpeedField = internals.TOP_SPEED_FIELD
     if not powerField or powerField == '' then
         return true
     end
@@ -615,8 +729,10 @@ local function applyComposedDriveForce(vehicle, bucket, options)
     local rememberOriginalValue = PerformanceTuning.HandlingManager.rememberOriginalValue
     local formatHandlingValue = PerformanceTuning.HandlingManager.formatHandlingValue
     local currentPower = tonumber(readHandlingValue(vehicle, 'float', powerField)) or 0.0
+    local currentTopSpeed = (topSpeedField and topSpeedField ~= '') and (tonumber(readHandlingValue(vehicle, 'float', topSpeedField)) or 0.0) or 0.0
     local existingOffsetsTotal = getTotalDriveForceOffsets(bucket)
     local baselinePower = tonumber(options.engineBaselinePower)
+    local baselineTopSpeed = tonumber(options.engineBaselineTopSpeed)
 
     if baselinePower == nil then
         baselinePower = currentPower - existingOffsetsTotal
@@ -624,10 +740,21 @@ local function applyComposedDriveForce(vehicle, bucket, options)
     if not internals.isFiniteNumber(baselinePower) then
         baselinePower = currentPower
     end
+    if baselineTopSpeed == nil then
+        if baselinePower > 0.0 and currentPower > 0.0 then
+            baselineTopSpeed = currentTopSpeed * (baselinePower / currentPower)
+        else
+            baselineTopSpeed = currentTopSpeed
+        end
+    end
+    if not internals.isFiniteNumber(baselineTopSpeed) then
+        baselineTopSpeed = currentTopSpeed
+    end
 
     setDriveForceOffset(bucket, 'transmission', getTransmissionPowerBonusForPack(bucket.transmissionPack or 'stock'))
     local offsetsTotal = getTotalDriveForceOffsets(bucket)
     local targetPower = baselinePower + offsetsTotal
+    local powerChanged = math.abs(targetPower - currentPower) > 0.000001
 
     rememberOriginalValue(vehicle, powerField, 'float')
     writeHandlingValue(vehicle, 'float', powerField, targetPower)
@@ -639,6 +766,36 @@ local function applyComposedDriveForce(vehicle, bucket, options)
             baselinePower,
             offsetsTotal
         ))
+    end
+
+    if topSpeedField and topSpeedField ~= '' then
+        local targetTopSpeed = baselineTopSpeed
+        if baselinePower > 0.0 and targetPower > 0.0 then
+            targetTopSpeed = baselineTopSpeed * (targetPower / baselinePower)
+        end
+        local topSpeedChanged = math.abs(targetTopSpeed - currentTopSpeed) > 0.000001
+        rememberOriginalValue(vehicle, topSpeedField, 'float')
+        writeHandlingValue(vehicle, 'float', topSpeedField, targetTopSpeed)
+        if not options.skipLog then
+            internals.logInfo(('Composed %s: %s -> %s (power ratio: %.4f)'):format(
+                topSpeedField,
+                formatHandlingValue(currentTopSpeed, 'float'),
+                formatHandlingValue(targetTopSpeed, 'float'),
+                (baselinePower > 0.0) and (targetPower / baselinePower) or 1.0
+            ))
+        end
+
+        if (powerChanged or topSpeedChanged) and type(internals.requestDragRebalance) == 'function' then
+            internals.requestDragRebalance(vehicle, 0, {
+                skipSync = true,
+                skipRefresh = true,
+            })
+        end
+    elseif powerChanged and type(internals.requestDragRebalance) == 'function' then
+        internals.requestDragRebalance(vehicle, 0, {
+            skipSync = true,
+            skipRefresh = true,
+        })
     end
 
     return true
@@ -1058,23 +1215,28 @@ end
 function TuningPackManager.applyEnginePack(vehicle, packId, options)
     options = options or {}
     local internals = PerformanceTuning._internals
-    local readHandlingValue = PerformanceTuning.HandlingManager.readHandlingValue
-    local writeHandlingValue = PerformanceTuning.HandlingManager.writeHandlingValue
-    local rememberOriginalValue = PerformanceTuning.HandlingManager.rememberOriginalValue
-    local formatHandlingValue = PerformanceTuning.HandlingManager.formatHandlingValue
     local refreshVehicleAfterHandlingChange = internals.refreshVehicleAfterHandlingChange
     local vehicleManager = PerformanceTuning.VehicleManager
     local bucket = vehicleManager.ensureTuningState(vehicle)
     local selectedPack
     local previousPackWasSwap = false
-    local appliedEngineBasePower = nil
+    local appliedEngineBasePower = tonumber(bucket.baseEngine[internals.POWER_FIELD]) or 0.0
+    local appliedEngineBaseTopSpeed = tonumber(bucket.baseEngine[internals.TOP_SPEED_FIELD]) or 0.0
     local normalizedPackId = TuningPackManager.normalizeEnginePackId(packId)
     local normalizedCurrentEnginePack = TuningPackManager.normalizeEnginePackId(bucket.enginePack)
     local engineCombinedPacks = getEngineCombinedPacks()
+    local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
+    local configuredBars = runtimeConfig.performanceBars or {}
+    local configuredPowerBar = configuredBars.power or {}
+    local performance = internals.Performance or {}
+    local configuredPowerTarget = tonumber(configuredPowerBar.target)
+        or tonumber((runtimeConfig.performanceBarFillTargets or {}).power)
+        or (((performance.barSegmentCount or 20) / math.max(0.0001, tonumber(performance.powerBarScaleFactor) or 1.0)))
+        or 0.60
 
     for _, pack in ipairs(engineCombinedPacks) do
         local resolvedSwapModel = tostring(pack.swapModel or pack.id or ''):upper()
-        local isSwapPack = resolvedSwapModel ~= '' and pack.id ~= 'stock' and pack.driveForceOffset == nil
+        local isSwapPack = resolvedSwapModel ~= '' and not isBaseEnginePackId(pack.id) and type(pack.swapModel) == 'string'
         if pack.id == normalizedPackId then
             selectedPack = pack
         end
@@ -1095,7 +1257,8 @@ function TuningPackManager.applyEnginePack(vehicle, packId, options)
     local swapValues = nil
     local targetAudioName = nil
     local selectedSwapModel = tostring(selectedPack.swapModel or selectedPack.id or ''):upper()
-    local selectedPackIsSwap = selectedSwapModel ~= '' and selectedPack.id ~= 'stock' and selectedPack.driveForceOffset == nil
+    local selectedPackIsBase = isBaseEnginePackId(selectedPack.id)
+    local selectedPackIsSwap = selectedSwapModel ~= '' and not selectedPackIsBase and type(selectedPack.swapModel) == 'string'
     if selectedPackIsSwap then
         local resolvedSwapValues, errorMessage = TuningPackManager.resolveEngineSwapValues(selectedSwapModel)
         if not resolvedSwapValues then
@@ -1107,60 +1270,36 @@ function TuningPackManager.applyEnginePack(vehicle, packId, options)
         targetAudioName = internals.getVehicleModelAudioName(vehicle)
     end
 
-    for _, fieldName in ipairs(internals.ENGINE_FIELDS) do
-        local currentValue = readHandlingValue(vehicle, 'float', fieldName)
-        local value = bucket.baseEngine[fieldName]
-
-        if selectedPack.id ~= 'stock' then
-            if swapValues and swapValues[fieldName] ~= nil then
-                value = swapValues[fieldName]
-            elseif fieldName == internals.POWER_FIELD then
-                local basePower = tonumber(bucket.baseEngine[internals.POWER_FIELD]) or 0.0
-                local baseTopSpeed = tonumber(bucket.baseEngine[internals.TOP_SPEED_FIELD]) or 0.0
-                local baseProgress = ((baseTopSpeed * internals.Performance.flatVelToMphFactor) * internals.Performance.topSpeedBarScaleFactor) / internals.Performance.barSegmentCount
-                local remainingProgress = math.max(0.0, 1.0 - baseProgress)
-                local upgradeIndex = 0
-                local upgradeCount = 0
-
-                for _, pack in ipairs(internals.ENGINE_PACKS) do
-                    if pack.id ~= 'stock' and not pack.swapModel and pack.enabled ~= false and pack.driveForceOffset ~= nil then
-                        upgradeCount = upgradeCount + 1
-                        if pack.id == selectedPack.id then
-                            upgradeIndex = upgradeCount
-                        end
-                    end
-                end
-
-                if upgradeIndex > 0 and upgradeCount > 0 and basePower > 0.0 and baseTopSpeed > 0.0 then
-                    local targetProgress = baseProgress + (remainingProgress * (upgradeIndex / upgradeCount))
-                    local targetTopSpeedMph = (targetProgress * internals.Performance.barSegmentCount) / internals.Performance.topSpeedBarScaleFactor
-                    local targetTopSpeed = targetTopSpeedMph / internals.Performance.flatVelToMphFactor
-                    value = basePower * (targetTopSpeed / baseTopSpeed)
-                else
-                    value = basePower + (selectedPack.driveForceOffset or 0.0)
-                end
-            elseif fieldName == internals.TOP_SPEED_FIELD then
-                local basePower = tonumber(bucket.baseEngine[internals.POWER_FIELD]) or 0.0
-                local baseTopSpeed = tonumber(bucket.baseEngine[internals.TOP_SPEED_FIELD]) or 0.0
-                local newPower = tonumber(value) or basePower
-                if not swapValues then
-                    newPower = readHandlingValue(vehicle, 'float', internals.POWER_FIELD) or newPower
-                end
-                if basePower > 0.0 then
-                    value = baseTopSpeed * (newPower / basePower)
-                else
-                    value = baseTopSpeed
-                end
+    local stockBasePower = tonumber(bucket.baseEngine[internals.POWER_FIELD]) or 0.0
+    local stockBaseTopSpeed = tonumber(bucket.baseEngine[internals.TOP_SPEED_FIELD]) or 0.0
+    if not selectedPackIsBase then
+        if swapValues then
+            appliedEngineBasePower = tonumber(swapValues[internals.POWER_FIELD]) or stockBasePower
+            local swapTopSpeed = tonumber(swapValues[internals.TOP_SPEED_FIELD])
+            if swapTopSpeed ~= nil and swapTopSpeed > 0.0 then
+                appliedEngineBaseTopSpeed = swapTopSpeed
+            elseif stockBasePower > 0.0 and appliedEngineBasePower > 0.0 then
+                appliedEngineBaseTopSpeed = stockBaseTopSpeed * (appliedEngineBasePower / stockBasePower)
+            else
+                appliedEngineBaseTopSpeed = stockBaseTopSpeed
             end
-        end
-
-        rememberOriginalValue(vehicle, fieldName, 'float')
-        writeHandlingValue(vehicle, 'float', fieldName, value)
-        if fieldName == internals.POWER_FIELD then
-            appliedEngineBasePower = tonumber(value) or appliedEngineBasePower
-        end
-        if not options.skipLog then
-            internals.logInfo(('Engine %s: %s -> %s (pack: %s)'):format(fieldName, formatHandlingValue(currentValue, 'float'), formatHandlingValue(value, 'float'), selectedPack.label))
+        else
+            local selectedLevel, maxLevel = getEngineUpgradeProgress(selectedPack.id)
+            local powerTarget = configuredPowerTarget
+            if powerTarget <= 0.0 then
+                powerTarget = 0.60
+            end
+            if selectedLevel > 0 and maxLevel > 0 and stockBasePower > 0.0 then
+                local progress = selectedLevel / maxLevel
+                appliedEngineBasePower = stockBasePower + (powerTarget * progress)
+            else
+                appliedEngineBasePower = stockBasePower
+            end
+            if stockBasePower > 0.0 and appliedEngineBasePower > 0.0 then
+                appliedEngineBaseTopSpeed = stockBaseTopSpeed * (appliedEngineBasePower / stockBasePower)
+            else
+                appliedEngineBaseTopSpeed = stockBaseTopSpeed
+            end
         end
     end
 
@@ -1168,10 +1307,19 @@ function TuningPackManager.applyEnginePack(vehicle, packId, options)
         TuningPackManager.applyEngineAudioProfile(vehicle, targetAudioName)
     end
 
+    if not options.skipLog then
+        internals.logInfo(('Engine baseline composed (pack: %s): power=%.4f, topSpeed=%.4f'):format(
+            selectedPack.label,
+            tonumber(appliedEngineBasePower) or 0.0,
+            tonumber(appliedEngineBaseTopSpeed) or 0.0
+        ))
+    end
+
     bucket.enginePack = TuningPackManager.normalizeEnginePackId(selectedPack.id)
     applyComposedDriveForce(vehicle, bucket, {
         skipLog = options.skipLog == true,
         engineBaselinePower = appliedEngineBasePower,
+        engineBaselineTopSpeed = appliedEngineBaseTopSpeed,
     })
     if not options.skipRefresh then
         refreshVehicleAfterHandlingChange(vehicle)
@@ -1227,13 +1375,12 @@ function TuningPackManager.applyTireCompoundPack(vehicle, packId, options)
     local effectiveCompoundLossMultiplier = tonumber(selectedPack.compoundLossMultiplier) or 1.0
     local targetGripValue = nil
 
-    if shouldApplyCompoundProfile and selectedPack.gripBarProgressRatio ~= nil then
-        local gripBarProgressRatio = math.max(0.0, math.min(1.0, tonumber(selectedPack.gripBarProgressRatio) or 0.0))
-        targetGripValue = (gripBarProgressRatio * internals.Performance.barSegmentCount) / internals.Performance.gripBarScaleFactor
-    end
-    if shouldApplyCompoundProfile and type(qualityProfile) == 'table' and qualityProfile.gripBarProgressRatio ~= nil then
-        local gripBarProgressRatio = math.max(0.0, math.min(1.0, tonumber(qualityProfile.gripBarProgressRatio) or 0.0))
-        targetGripValue = (gripBarProgressRatio * internals.Performance.barSegmentCount) / internals.Performance.gripBarScaleFactor
+    if shouldApplyCompoundProfile then
+        targetGripValue = getRelativeGripTargetValue(
+            bucket.baseTires[internals.TIRE_MAX_FIELD],
+            effectiveCategory,
+            effectiveQuality
+        )
     end
 
     for _, fieldName in ipairs(internals.TIRE_FIELDS) do
@@ -1304,7 +1451,12 @@ function TuningPackManager.applyTireCompoundCategory(vehicle, categoryId, option
         bucket.tireCompoundQuality = 'mid_end'
     end
 
-    local packId = TuningPackManager.resolveTireCompoundPackId(bucket.tireCompoundCategory, bucket.tireCompoundQuality)
+    local packId = 'stock'
+    if bucket.tireCompoundCategory ~= 'stock' then
+        packId = TuningPackManager.resolveTireCompoundPackId(bucket.tireCompoundCategory, bucket.tireCompoundQuality)
+    else
+        bucket.tireCompoundPack = 'stock'
+    end
     local ok, result = TuningPackManager.applyTireCompoundPack(vehicle, packId, options)
     if not ok then
         return false, result
@@ -1322,7 +1474,12 @@ function TuningPackManager.applyTireCompoundQuality(vehicle, qualityId, options)
         bucket.tireCompoundCategory = 'road'
     end
 
-    local packId = TuningPackManager.resolveTireCompoundPackId(bucket.tireCompoundCategory, bucket.tireCompoundQuality)
+    local packId = 'stock'
+    if bucket.tireCompoundCategory ~= 'stock' then
+        packId = TuningPackManager.resolveTireCompoundPackId(bucket.tireCompoundCategory, bucket.tireCompoundQuality)
+    else
+        bucket.tireCompoundPack = 'stock'
+    end
     local ok, result = TuningPackManager.applyTireCompoundPack(vehicle, packId, options)
     if not ok then
         return false, result
@@ -1342,6 +1499,10 @@ function TuningPackManager.applyBrakePack(vehicle, packId, options)
     local vehicleManager = PerformanceTuning.VehicleManager
     local bucket = vehicleManager.ensureTuningState(vehicle)
     local selectedPack
+    local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
+    local configuredBars = runtimeConfig.performanceBars or {}
+    local configuredBrakeBar = configuredBars.brake or {}
+    local configuredBrakeTarget = tonumber(configuredBrakeBar.target) or 0.60
 
     for _, pack in ipairs(internals.BRAKE_PACKS) do
         if pack.id == packId then
@@ -1360,28 +1521,16 @@ function TuningPackManager.applyBrakePack(vehicle, packId, options)
 
     local currentValue = readHandlingValue(vehicle, 'float', internals.BRAKE_FORCE_FIELD)
     local value = bucket.baseBrakes[internals.BRAKE_FORCE_FIELD]
+    local selectedPackIsBase = isBaseBrakePackId(selectedPack.id)
 
-    if selectedPack.id ~= 'stock' then
+    if not selectedPackIsBase then
         local baseBrakeForce = tonumber(bucket.baseBrakes[internals.BRAKE_FORCE_FIELD]) or 0.0
-        local baseProgress = internals.computeBrakeBarProgressForVehicle(vehicle, baseBrakeForce)
-        local remainingProgress = math.max(0.0, 1.0 - baseProgress)
-        local upgradeIndex = 0
-        local upgradeCount = 0
-
-        for _, pack in ipairs(internals.BRAKE_PACKS) do
-            if pack.id ~= 'stock' and pack.enabled ~= false then
-                upgradeCount = upgradeCount + 1
-                if pack.id == selectedPack.id then
-                    upgradeIndex = upgradeCount
-                end
-            end
-        end
+        local upgradeIndex, upgradeCount = getBrakeUpgradeProgress(selectedPack.id)
 
         if upgradeIndex > 0 and upgradeCount > 0 then
-            local targetProgress = baseProgress + (remainingProgress * (upgradeIndex / upgradeCount))
-            local wheelCount = math.max(1, GetVehicleNumberOfWheels(vehicle) or 1)
-            local targetComputedBrakeValue = targetProgress * internals.BRAKE_SCALING.barTopValueUnits
-            value = targetComputedBrakeValue / wheelCount
+            local progress = upgradeIndex / upgradeCount
+            local targetBrakeForce = baseBrakeForce + math.max(0.0, configuredBrakeTarget)
+            value = baseBrakeForce + ((targetBrakeForce - baseBrakeForce) * progress)
         end
     end
 
@@ -1461,7 +1610,7 @@ function TuningPackManager.applySynchronizedTuneState(vehicle, state, options)
     end
 
     local bucket = PerformanceTuning.VehicleManager.ensureTuningState(vehicle)
-    bucket.enginePack = TuningPackManager.normalizeEnginePackId(state.enginePack or 'stock')
+    bucket.enginePack = TuningPackManager.normalizeEnginePackId(state.enginePack or getBaseEnginePackId())
     bucket.transmissionPack = state.transmissionPack or 'stock'
     bucket.suspensionPack = internals.normalizeSuspensionPackId(state.suspensionPack)
     bucket.tireCompoundCategory = TuningPackManager.normalizeTireCompoundCategory(state.tireCompoundCategory)
@@ -1478,7 +1627,7 @@ function TuningPackManager.applySynchronizedTuneState(vehicle, state, options)
     else
         bucket.tireCompoundPack = TuningPackManager.resolveTireCompoundPackId(bucket.tireCompoundCategory, bucket.tireCompoundQuality)
     end
-    bucket.brakePack = state.brakePack or 'stock'
+    bucket.brakePack = state.brakePack or getBaseBrakePackId()
     bucket.nitrousLevel = state.nitrousLevel or 'stock'
     bucket.steeringLockMode = TuningPackManager.normalizeSteeringLockMode(state.steeringLockMode)
     bucket.revLimiterEnabled = state.revLimiterEnabled == true
@@ -1518,13 +1667,13 @@ function TuningPackManager.applySynchronizedTuneState(vehicle, state, options)
 end
 
 function TuningPackManager.applyTunePackForContext(vehicle, context, packId)
-    if context == 'engine' then return TuningPackManager.applyEnginePack(vehicle, packId or 'stock') end
+    if context == 'engine' then return TuningPackManager.applyEnginePack(vehicle, packId or getBaseEnginePackId()) end
     if context == 'transmission' then return TuningPackManager.applyTransmissionPack(vehicle, packId or 'stock') end
     if context == 'suspension' then return TuningPackManager.applySuspensionPack(vehicle, packId or 'stock') end
     if context == 'tires' then return TuningPackManager.applyTireCompoundPack(vehicle, packId or 'stock') end
     if context == 'tireCompoundCategory' then return TuningPackManager.applyTireCompoundCategory(vehicle, packId or 'stock') end
     if context == 'tireCompoundQuality' then return TuningPackManager.applyTireCompoundQuality(vehicle, packId or 'mid_end') end
-    if context == 'brakes' then return TuningPackManager.applyBrakePack(vehicle, packId or 'stock') end
+    if context == 'brakes' then return TuningPackManager.applyBrakePack(vehicle, packId or getBaseBrakePackId()) end
     if context == 'nitrous' or context == 'nitro' then return TuningPackManager.applyNitrousPack(vehicle, packId or 'stock') end
     return false, 'Unsupported tuning context.'
 end

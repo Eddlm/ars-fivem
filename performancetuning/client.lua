@@ -59,6 +59,28 @@ local function drawPerformanceIndexPanelInstance(vehicle, options)
     return PerformanceTuning.PerformancePanel.drawPanelInstance(vehicle, options)
 end
 
+local function setKeepPersonalPiPanelActive(source, active)
+    if PerformanceTuning.PerformancePanel and PerformanceTuning.PerformancePanel.setKeepPersonalPiPanelActive then
+        PerformanceTuning.PerformancePanel.setKeepPersonalPiPanelActive(source, active)
+        return true
+    end
+    return false
+end
+
+local function setPanelDrawRequest(source, requestKey, vehicle, options, settings)
+    if PerformanceTuning.PerformancePanel and PerformanceTuning.PerformancePanel.setPanelDrawRequest then
+        return PerformanceTuning.PerformancePanel.setPanelDrawRequest(source, requestKey, vehicle, options, settings)
+    end
+    return false
+end
+
+local function clearPanelDrawRequest(source, requestKey)
+    if PerformanceTuning.PerformancePanel and PerformanceTuning.PerformancePanel.clearPanelDrawRequest then
+        return PerformanceTuning.PerformancePanel.clearPanelDrawRequest(source, requestKey)
+    end
+    return false
+end
+
 local function notify(message)
     BeginTextCommandThefeedPost('STRING')
     AddTextComponentSubstringPlayerName(tostring(message))
@@ -114,11 +136,12 @@ local function notifyDragRebalanceFinished(dragCoeff)
     local _ = dragCoeff
 end
 
-local function requestDragRebalance(vehicle, durationMs)
+local function requestDragRebalance(vehicle, durationMs, options)
     if not PerformanceTuning.VehicleManager.isVehicleEntityValid(vehicle) then
         return false
     end
 
+    options = type(options) == 'table' and options or {}
     local dragField = HandlingFields.engine and HandlingFields.engine.drag or 'fInitialDragCoeff'
     local powerField = HandlingFields.engine and HandlingFields.engine.power or 'fInitialDriveForce'
     local topSpeedField = HandlingFields.engine and HandlingFields.engine.topSpeed or 'fInitialDriveMaxFlatVel'
@@ -136,8 +159,12 @@ local function requestDragRebalance(vehicle, durationMs)
 
     PerformanceTuning.HandlingManager.rememberOriginalValue(vehicle, dragField, 'float')
     writeHandlingValue(vehicle, 'float', dragField, targetDragCoeff)
-    syncVehicleHandlingState(vehicle)
-    refreshVehicleAfterHandlingChange(vehicle)
+    if options.skipSync ~= true then
+        syncVehicleHandlingState(vehicle)
+    end
+    if options.skipRefresh ~= true then
+        refreshVehicleAfterHandlingChange(vehicle)
+    end
     notifyDragRebalanceFinished(targetDragCoeff)
     return true
 end
@@ -513,6 +540,18 @@ exports('DrawPerformanceIndexPanelInstance', function(vehicle, options)
     PerformanceTuning.PerformancePanel.state = PerformanceTuning.PerformancePanel.state or {}
     PerformanceTuning.PerformancePanel.state.externalKeepAliveUntil = GetGameTimer() + 100
     return drawPerformanceIndexPanelInstance(vehicle, options)
+end)
+
+exports('SetKeepPersonalPiPanelActive', function(source, active)
+    return setKeepPersonalPiPanelActive(source, active)
+end)
+
+exports('SetPanelDrawRequest', function(source, requestKey, vehicle, options, settings)
+    return setPanelDrawRequest(source, requestKey, vehicle, options, settings)
+end)
+
+exports('ClearPanelDrawRequest', function(source, requestKey)
+    return clearPanelDrawRequest(source, requestKey)
 end)
 
 exports('OpenPerformanceTuningMenu', function()

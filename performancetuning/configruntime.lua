@@ -24,6 +24,36 @@ local INTERNAL_PI_DISTRIBUTION = {
     grip = 20.0,
     brake = 20.0,
 }
+local INTERNAL_PERFORMANCE_BARS = {
+    displayMode = 'absolute_benchmark',
+    power = {
+        target = INTERNAL_PERFORMANCE_BAR_FILL_TARGETS.power,
+        transmission = { powerBonusPerUpgrade = 0.01 },
+        nitrous = {
+            powerBarFillPerNitroLevel = 5.0,
+        },
+    },
+    topSpeed = {
+        target = 0.60,
+    },
+    grip = {
+        target = 0.0,
+        qualityLadder = {
+            low_end = 0.60,
+            mid_end = 0.7333333333,
+            high_end = 0.8666666667,
+            top_end = 1.0,
+        },
+        compoundRoadOffset = {
+            road = 0.0,
+            rally = -0.15,
+            offroad = -0.30,
+        },
+    },
+    brake = {
+        target = 0.60,
+    },
+}
 
 local function getConfiguredSliderRange(key)
     local configuredRanges = config.sliderRanges or {}
@@ -80,7 +110,7 @@ local function getConfiguredPerformanceBarFillTargets()
         topSpeedMph = tonumber(configuredTargets.topSpeedMph) or defaults.topSpeedMph,
         grip = tonumber(configuredTargets.grip) or defaults.grip,
         brake = tonumber(configuredTargets.brake) or defaults.brake,
-        barSegmentCount = math.floor(tonumber(configuredTargets.barSegmentCount) or defaults.barSegmentCount),
+        barSegmentCount = defaults.barSegmentCount,
     }
 
     if targets.power <= 0.0 then
@@ -95,11 +125,81 @@ local function getConfiguredPerformanceBarFillTargets()
     if targets.brake <= 0.0 then
         targets.brake = defaults.brake
     end
-    if targets.barSegmentCount < 1 then
-        targets.barSegmentCount = defaults.barSegmentCount
-    end
-
     return targets
+end
+
+local function getConfiguredPerformanceBars()
+    local configuredBars = config.performanceBars or {}
+    local configuredPower = configuredBars.power or {}
+    local configuredPowerTransmission = configuredPower.transmission or {}
+    local configuredPowerNitrous = configuredPower.nitrous or {}
+    local configuredTopSpeed = configuredBars.topSpeed or {}
+    local configuredGrip = configuredBars.grip or {}
+    local configuredGripQuality = configuredGrip.qualityLadder or {}
+    local configuredGripCompound = configuredGrip.compoundRoadOffset or {}
+    local configuredBrake = configuredBars.brake or {}
+
+    local bars = {
+        displayMode = tostring(configuredBars.displayMode or INTERNAL_PERFORMANCE_BARS.displayMode):lower(),
+        power = {
+            target = tonumber(configuredPower.target)
+                or tonumber((config.performanceBarFillTargets or {}).power)
+                or INTERNAL_PERFORMANCE_BARS.power.target,
+            transmission = {
+                powerBonusPerUpgrade = tonumber(configuredPowerTransmission.powerBonusPerUpgrade)
+                    or INTERNAL_PERFORMANCE_BARS.power.transmission.powerBonusPerUpgrade,
+            },
+            nitrous = {
+                powerBarFillPerNitroLevel = tonumber(configuredPowerNitrous.powerBarFillPerNitroLevel)
+                    or INTERNAL_PERFORMANCE_BARS.power.nitrous.powerBarFillPerNitroLevel,
+            },
+        },
+        topSpeed = {
+            target = tonumber(configuredTopSpeed.target)
+                or INTERNAL_PERFORMANCE_BARS.topSpeed.target,
+        },
+        grip = {
+            target = tonumber(configuredGrip.target) or INTERNAL_PERFORMANCE_BARS.grip.target,
+            qualityLadder = {
+                low_end = tonumber(configuredGripQuality.low_end) or INTERNAL_PERFORMANCE_BARS.grip.qualityLadder.low_end,
+                mid_end = tonumber(configuredGripQuality.mid_end) or INTERNAL_PERFORMANCE_BARS.grip.qualityLadder.mid_end,
+                high_end = tonumber(configuredGripQuality.high_end) or INTERNAL_PERFORMANCE_BARS.grip.qualityLadder.high_end,
+                top_end = tonumber(configuredGripQuality.top_end) or INTERNAL_PERFORMANCE_BARS.grip.qualityLadder.top_end,
+            },
+            compoundRoadOffset = {
+                road = tonumber(configuredGripCompound.road) or INTERNAL_PERFORMANCE_BARS.grip.compoundRoadOffset.road,
+                rally = tonumber(configuredGripCompound.rally) or INTERNAL_PERFORMANCE_BARS.grip.compoundRoadOffset.rally,
+                offroad = tonumber(configuredGripCompound.offroad) or INTERNAL_PERFORMANCE_BARS.grip.compoundRoadOffset.offroad,
+            },
+        },
+        brake = {
+            target = tonumber(configuredBrake.target)
+                or INTERNAL_PERFORMANCE_BARS.brake.target,
+        },
+    }
+
+    if bars.power.target <= 0.0 then
+        bars.power.target = INTERNAL_PERFORMANCE_BARS.power.target
+    end
+    if bars.displayMode ~= 'vehicle_relative' then
+        bars.displayMode = 'absolute_benchmark'
+    end
+    if bars.topSpeed.target < 0.0 then
+        bars.topSpeed.target = INTERNAL_PERFORMANCE_BARS.topSpeed.target
+    end
+    if bars.grip.target < 0.0 then
+        bars.grip.target = INTERNAL_PERFORMANCE_BARS.grip.target
+    end
+    if bars.brake.target < 0.0 then
+        bars.brake.target = INTERNAL_PERFORMANCE_BARS.brake.target
+    end
+    if bars.power.transmission.powerBonusPerUpgrade < 0.0 then
+        bars.power.transmission.powerBonusPerUpgrade = INTERNAL_PERFORMANCE_BARS.power.transmission.powerBonusPerUpgrade
+    end
+    if bars.power.nitrous.powerBarFillPerNitroLevel < 0.0 then
+        bars.power.nitrous.powerBarFillPerNitroLevel = INTERNAL_PERFORMANCE_BARS.power.nitrous.powerBarFillPerNitroLevel
+    end
+    return bars
 end
 
 local function getConfiguredPiDistribution()
@@ -123,23 +223,7 @@ local function getConfiguredPiDistribution()
         grip = (raw.grip and raw.grip > 0.0) and raw.grip or INTERNAL_PI_DISTRIBUTION.grip,
         brake = (raw.brake and raw.brake > 0.0) and raw.brake or INTERNAL_PI_DISTRIBUTION.brake,
     }
-    local sum = resolved.power + resolved.topSpeed + resolved.grip + resolved.brake
-    if sum <= 0.0 then
-        return {
-            power = INTERNAL_PI_DISTRIBUTION.power,
-            topSpeed = INTERNAL_PI_DISTRIBUTION.topSpeed,
-            grip = INTERNAL_PI_DISTRIBUTION.grip,
-            brake = INTERNAL_PI_DISTRIBUTION.brake,
-        }
-    end
-
-    local normalize = 100.0 / sum
-    return {
-        power = resolved.power * normalize,
-        topSpeed = resolved.topSpeed * normalize,
-        grip = resolved.grip * normalize,
-        brake = resolved.brake * normalize,
-    }
+    return resolved
 end
 
 runtimeConfig.sliderRanges.antirollBars = getConfiguredSliderRange('antirollBars')
@@ -153,6 +237,7 @@ runtimeConfig.nitrous.baseDurationMs = getConfiguredNitrousValue('baseDurationMs
 runtimeConfig.nitrous.nativePowerMultiplier = getConfiguredNitrousValue('nativePowerMultiplier')
 runtimeConfig.performancePiDistribution = getConfiguredPiDistribution()
 runtimeConfig.performancePiMultipliers = runtimeConfig.performancePiDistribution
+runtimeConfig.performanceBars = getConfiguredPerformanceBars()
 runtimeConfig.performanceBarFillTargets = getConfiguredPerformanceBarFillTargets()
 runtimeConfig.performanceNearbyPanels = config.performanceNearbyPanels or {}
 

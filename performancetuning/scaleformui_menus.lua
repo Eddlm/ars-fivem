@@ -20,6 +20,12 @@ local MENU_DESCRIPTIONS = {
     tweaks = 'Fine adjustments.',
 }
 local LIST_OPTION_DESCRIPTIONS = {
+    tireCompoundCategory = {
+        [1] = 'Factory. Quality has no effect.',
+        [2] = "Tarmac focused, don't go off the road.",
+        [3] = 'Compromise between tarmac grip and offroad grip loss.',
+        [4] = 'Least griploss offroad, not much grip on tarmac.',
+    },
     steeringLockMode = {
         [1] = 'Stock steering lock.',
         [2] = '2.0x lateral grip scaling.',
@@ -27,6 +33,14 @@ local LIST_OPTION_DESCRIPTIONS = {
         [4] = '3.0x lateral grip scaling.',
         [5] = '1.0x lateral grip scaling.',
         [6] = '1.5x lateral grip scaling.',
+    },
+}
+local LIST_OPTION_DESCRIPTIONS_BY_ID = {
+    tireCompoundCategory = {
+        stock = 'Factory. Quality has no effect.',
+        road = "Tarmac focused, don't go off the road.",
+        rally = 'Compromise between tarmac grip and offroad grip loss.',
+        offroad = 'Least griploss offroad, not much grip on tarmac.',
     },
 }
 
@@ -39,7 +53,7 @@ local function getScaleformUIState()
     scaleformUI.state.sliderValues = scaleformUI.state.sliderValues or {}
     scaleformUI.state.dynamicSliderProfiles = scaleformUI.state.dynamicSliderProfiles or {}
     scaleformUI.state.panels = scaleformUI.state.panels or {}
-    scaleformUI.state.piDisplayModeIndex = math.max(1, math.min(3, math.floor(tonumber(scaleformUI.state.piDisplayModeIndex) or 1)))
+    scaleformUI.state.piDisplayModeIndex = math.max(1, math.min(2, math.floor(tonumber(scaleformUI.state.piDisplayModeIndex) or 1)))
     scaleformUI.state.menuOpen = scaleformUI.state.menuOpen == true
     scaleformUI.state.menuInitialized = scaleformUI.state.menuInitialized == true
     scaleformUI.state.switchingToTweaks = scaleformUI.state.switchingToTweaks == true
@@ -67,10 +81,27 @@ end
 local function getListOptionDescription(listKey, option, currentValue)
     local label = type(option) == 'table' and option.label or nil
     local description = type(option) == 'table' and option.description or nil
+    local fallbackDescriptions = LIST_OPTION_DESCRIPTIONS[listKey]
+    local fallbackDescriptionsById = LIST_OPTION_DESCRIPTIONS_BY_ID[listKey]
     local unavailableSuffix = type(option) == 'table' and option.enabled == false and ' Unavailable on this vehicle.' or ''
 
     if type(label) ~= 'string' or label == '' then
         return tostring(currentValue or '')
+    end
+    if type(fallbackDescriptionsById) == 'table' then
+        local optionId = tostring(type(option) == 'table' and option.id or ''):lower()
+        local fallbackDescription = fallbackDescriptionsById[optionId]
+        if type(fallbackDescription) == 'string' and fallbackDescription ~= '' then
+            description = fallbackDescription
+        end
+    end
+
+    if type(fallbackDescriptions) == 'table' then
+        local optionIndex = type(option) == 'table' and tonumber(option.index) or nil
+        local fallbackDescription = optionIndex and fallbackDescriptions[optionIndex] or nil
+        if type(fallbackDescription) == 'string' and fallbackDescription ~= '' then
+            description = fallbackDescription
+        end
     end
     if type(description) ~= 'string' or description == '' then
         description = getMenuDescription(listKey)
@@ -117,6 +148,23 @@ local function setListItemOptions(listItem, options, currentStep)
     end
     listItem.Items = items
     listItem:Index(selectedIndex)
+end
+
+local function setTireCompoundQualityAvailability(bucket)
+    local state = getScaleformUIState()
+    local qualityItem = state.items.tireCompoundQuality
+    if qualityItem == nil then
+        return
+    end
+
+    local category = tostring(type(bucket) == 'table' and bucket.tireCompoundCategory or 'stock'):lower()
+    local qualityEnabled = category ~= 'stock'
+    if type(qualityItem.Enabled) == 'function' then
+        qualityItem:Enabled(qualityEnabled)
+    end
+    if not qualityEnabled and type(qualityItem.Description) == 'function' then
+        qualityItem:Description('Disabled while Compound is Stock.')
+    end
 end
 
 local function restoreMenuSelection(menu, getterIndex)
@@ -351,6 +399,27 @@ local function getSteeringLockModeIdFromIndex(index)
     return 'stock'
 end
 
+local function isAnyNativeMenuOpen()
+    local menuHandler = rawget(_G, 'MenuHandler')
+    if type(menuHandler) ~= 'table' then
+        return false
+    end
+
+    if type(menuHandler.IsAnyMenuOpen) == 'function' and menuHandler:IsAnyMenuOpen() == true then
+        return true
+    end
+
+    local currentMenu = menuHandler.CurrentMenu
+    if currentMenu ~= nil then
+        if type(currentMenu.Visible) == 'function' then
+            return currentMenu:Visible() == true
+        end
+        return true
+    end
+
+    return false
+end
+
 local function getSteeringLockModeIndex(modeId)
     local normalized = tostring(modeId or 'stock'):lower()
     if normalized == 'balanced' or normalized == 'balance' then return 2 end
@@ -410,6 +479,14 @@ local function handleMainMenuSelection(context, index)
     previewMainMenuSelection(context, index)
     PerformanceTuning.ScaleformUI.applyMenuSelection(context, index)
     updateMainMenuListContext(context)
+    if context == 'tireCompoundCategory' then
+        updateMainMenuListContext('tireCompoundQuality')
+        local scaleformUI = PerformanceTuning.ScaleformUI
+        local vehicle = scaleformUI.getCurrentVehicle()
+        if vehicle then
+            setTireCompoundQualityAvailability(scaleformUI.ensureTuningState(vehicle))
+        end
+    end
     updatePiStatisticsPanels(PerformanceTuning.ScaleformUI.getCurrentVehicle())
 end
 
@@ -479,12 +556,12 @@ end
 
 function PerformanceTuning.ScaleformUI.getPiDisplayModeIndex()
     local state = getScaleformUIState()
-    return math.max(1, math.min(3, math.floor(tonumber(state.piDisplayModeIndex) or 1)))
+    return math.max(1, math.min(2, math.floor(tonumber(state.piDisplayModeIndex) or 1)))
 end
 
 function PerformanceTuning.ScaleformUI.setPiDisplayModeIndex(index)
     local state = getScaleformUIState()
-    state.piDisplayModeIndex = math.max(1, math.min(3, math.floor(tonumber(index) or 1)))
+    state.piDisplayModeIndex = math.max(1, math.min(2, math.floor(tonumber(index) or 1)))
     if state.menuInitialized then
         PerformanceTuning.ScaleformUI.refreshMenu()
     end
@@ -605,6 +682,7 @@ function PerformanceTuning.ScaleformUI.refreshMenu()
     setListItemDescription(state.items.tireCompoundQuality, 'tireCompoundQuality', getIndexedListOption('tireCompoundQuality', state.items.tireCompoundQuality:Index()), tireCompoundQualityState.context.currentValue)
     setListItemDescription(state.items.brakes, 'brakes', getIndexedListOption('brakes', state.items.brakes:Index()), brakesState.context.currentValue)
     setListItemDescription(state.items.nitrous, 'nitrous', getIndexedListOption('nitrous', state.items.nitrous:Index()), nitrousState.context.currentValue)
+    setTireCompoundQualityAvailability(bucket)
 
     if state.items.steeringLockMode then
         local steeringModeIndex = getSteeringLockModeIndex(bucket.steeringLockMode)
@@ -655,7 +733,7 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     state.items.engine = UIMenuListItem.New('Engine', { 'Stock' }, 1)
     state.items.transmission = UIMenuListItem.New('Transmission', { 'Stock' }, 1)
     state.items.suspension = UIMenuListItem.New('Suspension', { 'Stock' }, 1)
-    state.items.tireCompoundCategory = UIMenuListItem.New('Compound', { 'Stock', 'Road', 'Rally', 'Offroad' }, 1)
+    state.items.tireCompoundCategory = UIMenuListItem.New('Compound', { 'Stock', 'Road', 'Mixed', 'Offroad' }, 1)
     state.items.tireCompoundQuality = UIMenuListItem.New('Quality', { 'Low-End', 'Mid-End', 'High-End', 'Top-End' }, 2)
     state.items.brakes = UIMenuListItem.New('Brakes', { 'Stock' }, 1)
     state.items.nitrous = UIMenuListItem.New('Nitrous', { 'Stock' }, 1)
@@ -787,26 +865,22 @@ function PerformanceTuning.ScaleformUI.processFrame()
     local state = getScaleformUIState()
     local mainVisible = state.menus.main and state.menus.main:Visible() or false
     local tweaksVisible = state.menus.tweaks and state.menus.tweaks:Visible() or false
-    state.menuOpen = mainVisible or tweaksVisible
+    local managerMenuOpen = mainVisible or tweaksVisible
+    local anyNativeMenuVisible = isAnyNativeMenuOpen()
+    state.managerMenuOpen = managerMenuOpen
+    state.menuOpen = managerMenuOpen or anyNativeMenuVisible
 
     if not state.menuOpen then
         return false
     end
 
     local ped = PlayerPedId()
-    local vehicle = GetVehiclePedIsIn(ped, false)
-    local hasValidVehicle = PerformanceTuning.VehicleManager.isPedDrivingVehicle(ped, vehicle)
-    if state.lastVehicleValidity ~= hasValidVehicle then
-        state.lastVehicleValidity = hasValidVehicle
+    local pedVehicle = GetVehiclePedIsIn(ped, false)
+    local hasValidDrivingVehicle = PerformanceTuning.VehicleManager.isPedDrivingVehicle(ped, pedVehicle)
+    if state.lastVehicleValidity ~= hasValidDrivingVehicle then
+        state.lastVehicleValidity = hasValidDrivingVehicle
         scaleformUI.refreshMenu()
     end
 
-    if hasValidVehicle then
-        -- Custom left PI panel disabled for now; keep draw code available for later iteration.
-        -- scaleformUI.drawPerformanceIndexPanel(vehicle)
-    else
-        -- Custom left PI panel disabled for now; keep draw code available for later iteration.
-        -- scaleformUI.drawPerformanceIndexPanel(nil, { drawNearbyOnly = true })
-    end
     return true
 end

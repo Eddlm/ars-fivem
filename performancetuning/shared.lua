@@ -15,24 +15,60 @@ Config.nitrous = {
 }
 
 Config.performancePiDistribution = {
-    power = 20,
-    topSpeed = 40,
-    grip = 20,
-    brake = 20,
+    power = 125, --1G = 125PI
+    topSpeed = 25, --100mph = 250PI
+    grip = 125, --1G = 125PI
+    brake = 100, --1G = 100PI
 }
 
 Config.performanceBarFillTargets = {
-    power = 0.60,
-    topSpeedMph = 220.0,
-    grip = 2.50,
-    brake = 2.50,
-    barSegmentCount = 20,
+    power = 1.0,
+    topSpeedMph = 250.0,
+    grip = 3.5,
+    brake = 3.5,
+}
+
+-- Unified PI bar tuning surface. Legacy keys are still supported as fallback.
+Config.performanceBars = {
+    -- absolute_benchmark: fixed global targets (legacy behavior)
+    -- vehicle_relative: shows how maxed-out this specific vehicle is
+    displayMode = 'vehicle_relative',
+    power = {
+        target = 0.1,
+        transmission = {
+            powerBonusPerUpgrade = 0.01,
+        },
+        nitrous = {
+            powerBarFillPerNitroLevel = 5,
+        },
+    },
+    topSpeed = {
+        target = 50,
+    },
+    grip = {
+        target = 0.5,
+        qualityLadder = {
+            low_end = 0.25,
+            mid_end = 0.5,
+            high_end = 0.75,
+            top_end = 1.0,
+        },
+        -- Literal fTractionCurveMax offsets from the Road-equivalent target.
+        compoundRoadOffset = {
+            road = 0.0,
+            rally = -0.15, -- Mixed
+            offroad = -0.30,
+        },
+    },
+    brake = {
+        target = 0.25,
+    },
 }
 
 Config.performanceNearbyPanels = {
     enabled = true,
     maxDistanceMeters = 30.0,
-    maxPanels = 12,
+    maxPanels = 6,
 }
 
 Config.packDefinitions = {
@@ -52,10 +88,10 @@ Config.packDefinitions = {
     },
     engine = {
         { id = 'stock', label = 'Stock', enabled = true, description = 'Keeps the original engine power and top speed balance.' },
-        { id = 'stage_1', label = 'Stage 1', enabled = true, description = 'Small power increase for a mild street upgrade.', driveForceOffset = 0.05 },
-        { id = 'stage_2', label = 'Stage 2', enabled = true, description = 'Moderate increase in acceleration and top-end potential.', driveForceOffset = 0.10 },
-        { id = 'stage_3', label = 'Stage 3', enabled = true, description = 'Strong engine tune with a clear step up in output.', driveForceOffset = 0.15 },
-        { id = 'hsw_special', label = 'HSW Special', enabled = true, description = 'Highest non-swap power step in the standard upgrade path.', driveForceOffset = 0.25 },
+        { id = 'stage_1', label = 'Stage 1', enabled = true, description = 'Small power increase for a mild street upgrade.' },
+        { id = 'stage_2', label = 'Stage 2', enabled = true, description = 'Moderate increase in acceleration and top-end potential.' },
+        { id = 'stage_3', label = 'Stage 3', enabled = true, description = 'Strong engine tune with a clear step up in output.' },
+        { id = 'hsw_special', label = 'HSW Special', enabled = true, description = 'Highest non-swap power step in the standard upgrade path.' },
     },
     tires = {
         { id = 'stock', label = 'Stock', enabled = true, description = 'Keeps the original compound and grip envelope.' },
@@ -66,11 +102,11 @@ Config.packDefinitions = {
         { id = 'race_soft', label = 'Race Soft', enabled = true, description = 'Maximum grip target in the tire set for the strongest road hold.', gripBarProgressRatio = 1.0, compoundLossMultiplier = 0.8, tractionLossMultiplier = 2.20 },
     },
     brakes = {
-        { id = 'stock', label = 'Stock', enabled = true, description = 'Keeps the original brake force.' },
-        { id = 'level_1', label = 'Level 1', enabled = true, description = 'Small increase in stopping power.' },
-        { id = 'level_2', label = 'Level 2', enabled = true, description = 'Moderate brake force upgrade for faster stops.' },
-        { id = 'level_3', label = 'Level 3', enabled = true, description = 'Strong braking upgrade for aggressive driving.' },
-        { id = 'level_4', label = 'Level 4', enabled = true, description = 'Highest brake force step in the standard set.' },
+        { id = 'stock', label = 'Stock', enabled = true, description = 'Keep this one close to Grip levels.' },
+        { id = 'level_1', label = 'Level 1', enabled = true, description = 'Keep this one close to Grip levels.' },
+        { id = 'level_2', label = 'Level 2', enabled = true, description = 'Keep this one close to Grip levels.' },
+        { id = 'level_3', label = 'Level 3', enabled = true, description = 'Keep this one close to Grip levels.' },
+        { id = 'level_4', label = 'Level 4', enabled = true, description = 'Keep this one close to Grip levels.' },
     },
     nitrous = {
         { id = 'stock', label = 'Stock', enabled = true, description = 'No nitrous boost is available.' },
