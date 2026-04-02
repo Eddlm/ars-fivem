@@ -2,31 +2,31 @@
 PerformanceTuning = PerformanceTuning or {}
 PerformanceTuning.ScaleformUI = PerformanceTuning.ScaleformUI or {}
 local MENU_DESCRIPTIONS = {
-    engine = 'Affects raw acceleration and top speed.',
-    transmission = 'Affects shift speed, gear spread, and power delivery between gears.',
-    suspension = 'Affects body control, weight transfer, and cornering stability.',
-    tires = 'Affects grip level and how traction falls away at the limit.',
-    tireCompoundCategory = 'Selects the tire compound family (Road, Rally, Offroad).',
-    tireCompoundQuality = 'Selects the tire quality tier (Low-End, Mid-End, High-End).',
-    brakes = 'Affects stopping force and braking confidence into corners.',
-    nitrous = 'Adds temporary power on demand for stronger acceleration.',
-    antirollBars = 'Adjusts roll stiffness to control body lean and responsiveness.',
-    nitrousShotStrength = 'Trades nitrous duration for a stronger burst of acceleration.',
-    brakeBiasFront = 'Moves braking balance toward the front or rear axle.',
-    gripBiasFront = 'Moves front-to-rear traction balance using the handling grip bias field.',
-    antirollBiasFront = 'Shifts roll stiffness balance toward the front or rear.',
-    suspensionRaise = 'Shows clearance as upper limit minus suspension raise.',
-    suspensionBiasFront = 'Moves suspension balance toward the front or rear of the car.',
-    steeringLockMode = 'Scales steering lock from traction lateral. Stock keeps original steering lock.',
+    engine = 'Engine power and top speed.',
+    transmission = 'Shift speed and gearing.',
+    suspension = 'Body control and weight transfer.',
+    tireCompoundCategory = 'Tire compound family.',
+    tireCompoundQuality = 'Tire quality tier.',
+    brakes = 'Stopping force.',
+    nitrous = 'On-demand power boost.',
+    antirollBars = 'Roll stiffness.',
+    nitrousShotStrength = 'Burst strength versus duration.',
+    brakeBiasFront = 'Front-to-rear brake balance.',
+    gripBiasFront = 'Front-to-rear grip balance.',
+    antirollBiasFront = 'Front-to-rear roll stiffness.',
+    suspensionRaise = 'Ride height gap.',
+    suspensionBiasFront = 'Front-to-rear suspension balance.',
+    steeringLockMode = 'Speed-based steering lock scaling.',
+    tweaks = 'Fine adjustments.',
 }
 local LIST_OPTION_DESCRIPTIONS = {
     steeringLockMode = {
-        [1] = 'Keeps stock steering lock behavior.',
-        [2] = 'Balanced steering lock scaling (2.0x traction lateral).',
-        [3] = 'Aggro steering lock scaling (2.5x traction lateral).',
-        [4] = 'Very aggro steering lock scaling (3.0x traction lateral).',
-        [5] = 'Very smooth steering lock scaling (1.0x traction lateral).',
-        [6] = 'Smooth steering lock scaling (1.5x traction lateral).',
+        [1] = 'Stock steering lock.',
+        [2] = '2.0x lateral grip scaling.',
+        [3] = '2.5x lateral grip scaling.',
+        [4] = '3.0x lateral grip scaling.',
+        [5] = '1.0x lateral grip scaling.',
+        [6] = '1.5x lateral grip scaling.',
     },
 }
 
@@ -516,6 +516,38 @@ function PerformanceTuning.ScaleformUI.setCurrentVehicleRevLimiterEnabled(enable
     return true
 end
 
+function PerformanceTuning.ScaleformUI.getCurrentVehicleSteeringLockMode()
+    local scaleformUI = PerformanceTuning.ScaleformUI
+    local vehicle = scaleformUI.getCurrentVehicle()
+    if not vehicle then
+        return nil
+    end
+
+    local bucket = scaleformUI.ensureTuningState(vehicle)
+    return tostring(bucket.steeringLockMode or 'stock')
+end
+
+function PerformanceTuning.ScaleformUI.setCurrentVehicleSteeringLockMode(mode)
+    local scaleformUI = PerformanceTuning.ScaleformUI
+    local vehicle = scaleformUI.getCurrentVehicle()
+    if not vehicle then
+        return false, nil
+    end
+
+    local selectedMode = tostring(mode or 'stock')
+    if scaleformUI.applySteeringLockModeTweak then
+        local ok, normalizedMode = scaleformUI.applySteeringLockModeTweak(vehicle, selectedMode)
+        scaleformUI.refreshMenu()
+        return ok == true, normalizedMode
+    end
+
+    local bucket = scaleformUI.ensureTuningState(vehicle)
+    bucket.steeringLockMode = selectedMode
+    scaleformUI.syncVehicleTuneState(vehicle)
+    scaleformUI.refreshMenu()
+    return true, selectedMode
+end
+
 function PerformanceTuning.ScaleformUI.refreshMenu()
     local scaleformUI = PerformanceTuning.ScaleformUI
     local state = getScaleformUIState()
@@ -616,9 +648,9 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     state.sliderValues.nitrousShotStrength = scaleformUI.buildNitroShotSliderValues()
 
     state.menus.main = UIMenu.New('Performance Tuning', '~b~CURRENT CAR', 20, 20, true)
-    state.menus.main:MenuAlignment(MenuAlignment.RIGHT)
-    state.menus.tweaks = UIMenu.New('Performance Tuning', 'TWEAKS', 20, 20, true)
-    state.menus.tweaks:MenuAlignment(MenuAlignment.RIGHT)
+    state.menus.main:MenuAlignment(MenuAlignment.LEFT)
+    state.menus.tweaks = UIMenu.New('Performance Tuning', 'Fine adjustments', 20, 20, true)
+    state.menus.tweaks:MenuAlignment(MenuAlignment.LEFT)
 
     state.items.engine = UIMenuListItem.New('Engine', { 'Stock' }, 1)
     state.items.transmission = UIMenuListItem.New('Transmission', { 'Stock' }, 1)
@@ -628,7 +660,7 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     state.items.brakes = UIMenuListItem.New('Brakes', { 'Stock' }, 1)
     state.items.nitrous = UIMenuListItem.New('Nitrous', { 'Stock' }, 1)
     state.items.antirollSlider = UIMenuSliderItem.New('Anti-Roll Bars', #state.sliderValues.antirollBars - 1, 1, scaleformUI.getAntirollSliderIndex(0.0) - 1, false)
-    state.items.openTweaks = UIMenuItem.New('Tweaks')
+    state.items.openTweaks = UIMenuItem.New('Tweaks', getMenuDescription('tweaks'))
 
     state.items.nitrousShotSlider = UIMenuSliderItem.New('Shot Strength', #state.sliderValues.nitrousShotStrength - 1, 1, scaleformUI.getNitroShotSliderIndex(1.0) - 1, false)
     state.items.steeringLockMode = UIMenuListItem.New('Steering Lock Mode', { 'Stock', 'Balanced', 'Aggro', 'Very Aggro', 'Very Smooth', 'Smooth' }, 1)

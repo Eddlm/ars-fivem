@@ -3,9 +3,25 @@ local MenuConfig = Config.menu or {}
 local AppearanceConfig = Config.appearance or {}
 local CategoryConfig = Config.categories or {}
 local TextConfig = {
-    helpLabel = "Help",
-    helpOptions = { "Fix Vehicle", "Teleport To Nearest Road" },
+    helpLabel = "Util",
+    helpOptions = { "Fix Vehicle", "Teleport To Nearest Road", "Delete Vehicle" },
     helpDescription = "Handy tools for getting your vehicle back in shape.",
+    customizeVehicleLabel = "Customize Vehicle",
+    customizeVehicleDescription = "Customization",
+    saveLoadLabel = "Save / Load",
+    saveLoadDescription = "These vehicles persist across sessions.",
+    deleteVehicleLabel = "Delete Vehicle",
+    deleteVehicleDescription = "~r~This action is permanent.",
+    performanceSettingsLabel = "Performance Settings",
+    performanceSettingsDescription = "Tune assist settings.",
+    statsLabel = "Stats",
+    statsDescription = "Performance upgrades.",
+    colorLabel = "Color",
+    colorDescription = "Paint and finish options.",
+    partsLabel = "Parts",
+    partsDescription = "Body and interior parts.",
+    wheelsMenuLabel = "Wheels",
+    wheelsMenuDescription = "Wheel style and setup.",
     saveVehicleLabel = "Save Vehicle",
     saveVehicleDescription = "Save your current vehicle and setup for later.",
     paintCategoryLabel = "Paint Category",
@@ -32,6 +48,12 @@ local TextConfig = {
     wheelColorDescription = "Change the wheel color.",
     customTyresLabel = "Custom Tyres",
     customTyresDescription = "Toggle custom tyres for this wheel setup.",
+    performancePiDisplayLabel = "PI Display",
+    performancePiDisplayDescription = "Choose which performance index values are shown in the tuning UI.",
+    performanceRevLimiterLabel = "Rev Limiter",
+    performanceRevLimiterDescription = "Turn the current vehicle's rev limiter behavior on or off.",
+    performanceSteeringLockModeLabel = "Steering Lock Mode",
+    performanceSteeringLockModeDescription = "Adjust how steering lock scales from tire lateral grip.",
     noVehicleLabel = "No vehicle",
     noVehicleDescription = "Get into a vehicle to see options here.",
     noLiveriesLabel = "No liveries available",
@@ -44,12 +66,13 @@ local TextConfig = {
 }
 local MENU_X_POSITION = 20
 local MENU_TITLE = "Vehicle Manager"
-local MENU_SUBTITLE = "~b~CURRENT VEHICLE"
+local MENU_SUBTITLE = "Fix, customize and save your vehicle"
 local MENU_KEYBIND_RELEASE_COMMAND = "-vehiclemanager_menu"
 local MENU_KEYBIND_DESCRIPTION = "Open the vehicle manager menu"
 local MENU_AVAILABILITY_REFRESH_MS = 200
-local PERFORMANCE_SETTINGS_PI_OPTIONS = { "mine", "nearby tuned", "nearby cars" }
+local PERFORMANCE_SETTINGS_PI_OPTIONS = { "None", "Nearby tuned", "Nearby all" }
 local PERFORMANCE_SETTINGS_REV_LIMITER_OPTIONS = { "Off", "On" }
+local PERFORMANCE_SETTINGS_STEERING_LOCK_MODE_OPTIONS = { "Stock", "Balanced", "Aggro", "Very Aggro", "Very Smooth", "Smooth" }
 
 local VMUI = {}
 
@@ -64,10 +87,15 @@ function VMUI.CreatePool()
     end
 
     function pool:AddSubMenu(parentMenu, title, description)
-        local item = VMUI.CreateItem(title, description)
+        local resolvedDescription = description
+        if resolvedDescription == nil then
+            resolvedDescription = ""
+        end
+
+        local item = VMUI.CreateItem(title, resolvedDescription)
         parentMenu:AddItem(item)
-        local submenu = VMUI.CreateMenu(title, description, MENU_X_POSITION, 0, nil, nil, nil, 255, 255, 255, 210)
-        submenu:MenuAlignment(MenuAlignment.RIGHT)
+        local submenu = VMUI.CreateMenu(title, resolvedDescription, MENU_X_POSITION, 0, nil, nil, nil, 255, 255, 255, 210)
+        submenu:MenuAlignment(MenuAlignment.LEFT)
         item.Activated = function(menu)
             menu:SwitchTo(submenu, 1, true)
         end
@@ -95,7 +123,7 @@ end
 
 function VMUI.CreateMenu(title, subtitle, x, y, _, _, _, _, _, _, _)
     local menu = UIMenu.New(title, subtitle, x or 0, y or 0, true)
-    menu:MenuAlignment(MenuAlignment.RIGHT)
+    menu:MenuAlignment(MenuAlignment.LEFT)
     return menu
 end
 
@@ -134,8 +162,8 @@ end
 local vehicleMenuPool = VMUI.CreatePool()
 local vehicleMainMenu = VMUI.CreateMenu(MENU_TITLE, MENU_SUBTITLE, MENU_X_POSITION, 0, nil, nil, nil, 255, 255, 255, 210)
 
-local helpListItem = VMUI.CreateListItem(TextConfig.helpLabel or "Help", TextConfig.helpOptions or { "Fix Vehicle", "Teleport To Nearest Road" }, 1, nil)
-local saveVehicleItem = VMUI.CreateItem(TextConfig.saveVehicleLabel or "Save Vehicle", nil)
+local helpListItem = VMUI.CreateListItem(TextConfig.helpLabel or "Util", TextConfig.helpOptions or { "Fix Vehicle", "Teleport To Nearest Road", "Delete Vehicle" }, 1, nil)
+local saveVehicleItem = VMUI.CreateItem(TextConfig.saveVehicleLabel or "Save Vehicle", "")
 local saveLoadSubMenu = nil
 local deleteVehiclesSubMenu = nil
 local customizeSubMenu = nil
@@ -150,21 +178,22 @@ local statsLocalMenu = nil
 local statsLocalSubMenu = nil
 local returnToCustomizeAfterPerformanceTuningClose = false
 local pendingVehicleMenuCloseSaveId = 0
-local paintCategoryListItem = VMUI.CreateListItem(TextConfig.paintCategoryLabel or "Paint Category", { "Classic" }, 1, nil)
-local primaryPaintColorListItem = VMUI.CreateListItem(TextConfig.primaryPaintLabel or "Primary", { "Black" }, 1, nil)
-local secondaryPaintColorListItem = VMUI.CreateListItem(TextConfig.secondaryPaintLabel or "Secondary", { "Black" }, 1, nil)
-local pearlescentColorListItem = VMUI.CreateListItem(TextConfig.pearlescentLabel or "Pearlescent", { "Black" }, 1, nil)
-local interiorColorListItem = VMUI.CreateListItem(TextConfig.interiorLabel or "Interior", { "Black" }, 1, nil)
-local dashboardColorListItem = VMUI.CreateListItem(TextConfig.dashboardLabel or "Dashboard", { "Black" }, 1, nil)
-local xenonColorListItem = VMUI.CreateListItem(TextConfig.xenonLabel or "Xenon", { "Default" }, 1, nil)
-local liveryListItem = VMUI.CreateListItem(TextConfig.liveryLabel or "Livery", { TextConfig.noLiveriesLabel or "No liveries available" }, 1, nil)
-local wheelCategoryListItem = VMUI.CreateListItem(TextConfig.wheelCategoryLabel or "Wheel Category", { "Sport" }, 1, nil)
+local paintCategoryListItem = VMUI.CreateListItem(TextConfig.paintCategoryLabel or "Paint Category", { "Classic" }, 1, TextConfig.paintCategoryDescription or "Choose the paint finish for your body colors.")
+local primaryPaintColorListItem = VMUI.CreateListItem(TextConfig.primaryPaintLabel or "Primary", { "Black" }, 1, TextConfig.primaryPaintDescription or "Set the main paint color.")
+local secondaryPaintColorListItem = VMUI.CreateListItem(TextConfig.secondaryPaintLabel or "Secondary", { "Black" }, 1, TextConfig.secondaryPaintDescription or "Set the secondary paint color.")
+local pearlescentColorListItem = VMUI.CreateListItem(TextConfig.pearlescentLabel or "Pearlescent", { "Black" }, 1, TextConfig.pearlescentDescription or "Add a pearl finish over the paint.")
+local interiorColorListItem = VMUI.CreateListItem(TextConfig.interiorLabel or "Interior", { "Black" }, 1, TextConfig.interiorDescription or "Change the interior color.")
+local dashboardColorListItem = VMUI.CreateListItem(TextConfig.dashboardLabel or "Dashboard", { "Black" }, 1, TextConfig.dashboardDescription or "Change the dashboard color.")
+local xenonColorListItem = VMUI.CreateListItem(TextConfig.xenonLabel or "Xenon", { "Default" }, 1, TextConfig.xenonDescription or "Set the xenon headlight color.")
+local liveryListItem = VMUI.CreateListItem(TextConfig.liveryLabel or "Livery", { TextConfig.noLiveriesLabel or "No liveries available" }, 1, TextConfig.liveryDescription or "Apply a livery if this vehicle supports one.")
+local wheelCategoryListItem = VMUI.CreateListItem(TextConfig.wheelCategoryLabel or "Wheel Category", { "Sport" }, 1, TextConfig.wheelCategoryDescription or "Choose a wheel family to browse.")
 local wheelListItem = VMUI.CreateListItem(TextConfig.wheelLabel or "Wheel", { TextConfig.stockLabel or "Stock" }, 1, TextConfig.wheelDescription or "Pick a wheel style from this category.")
-local wheelColorListItem = VMUI.CreateListItem(TextConfig.wheelColorLabel or "Wheel Color", { "Black" }, 1, nil)
+local wheelColorListItem = VMUI.CreateListItem(TextConfig.wheelColorLabel or "Wheel Color", { "Black" }, 1, TextConfig.wheelColorDescription or "Change the wheel color.")
 local customTyresItem = UIMenuCheckboxItem.New(TextConfig.customTyresLabel or "Custom Tyres", false, 1, TextConfig.customTyresDescription or "Toggle custom tyres for this wheel setup.")
 customTyresItem.Activated = customTyresItem.Activated or function() end
-local performancePiDisplayListItem = VMUI.CreateListItem("PI Display", PERFORMANCE_SETTINGS_PI_OPTIONS, 1, nil)
-local performanceRevLimiterListItem = VMUI.CreateListItem("Rev Limiter", PERFORMANCE_SETTINGS_REV_LIMITER_OPTIONS, 1, nil)
+local performancePiDisplayListItem = VMUI.CreateListItem(TextConfig.performancePiDisplayLabel or "PI Display", PERFORMANCE_SETTINGS_PI_OPTIONS, 1, TextConfig.performancePiDisplayDescription or "Choose which performance index values are shown in the tuning UI.")
+local performanceRevLimiterListItem = VMUI.CreateListItem(TextConfig.performanceRevLimiterLabel or "Rev Limiter", PERFORMANCE_SETTINGS_REV_LIMITER_OPTIONS, 1, TextConfig.performanceRevLimiterDescription or "Turn the current vehicle's rev limiter behavior on or off.")
+local performanceSteeringLockModeListItem = VMUI.CreateListItem(TextConfig.performanceSteeringLockModeLabel or "Steering Lock Mode", PERFORMANCE_SETTINGS_STEERING_LOCK_MODE_OPTIONS, 1, TextConfig.performanceSteeringLockModeDescription or "Adjust how steering lock scales from tire lateral grip.")
 
 local currentPrimaryColorOptions = {}
 local currentSecondaryColorOptions = {}
@@ -181,6 +210,7 @@ local deleteVehicleItems = {}
 local vehicleRequiredItems = {}
 local driverRequiredItems = {}
 local saveActionInFlight = false
+local pendingUtilityDeleteByVehicle = {}
 local availabilityState = {
     hasVehicle = nil,
     hasDriverVehicle = nil,
@@ -430,6 +460,15 @@ local function notify(message)
     EndTextCommandThefeedPostTicker(false, false)
 end
 
+local function buildModCategoryDescription(label, isStatsMenu)
+    local resolvedLabel = tostring(label or "option")
+    if isStatsMenu then
+        return ("Select the installed %s upgrade level."):format(resolvedLabel)
+    end
+
+    return ("Choose a %s option for this vehicle."):format(resolvedLabel)
+end
+
 local function notifyPersistentVehicleUpdated(vehicle)
     local vehicleName = "vehicle"
 
@@ -529,19 +568,85 @@ local function setPerformanceTuningRevLimiterEnabled(enabled)
     return ok and result == true
 end
 
+local function getPerformanceTuningSteeringLockModeIndex()
+    if not isPerformanceTuningStarted() then
+        return false, 1
+    end
+
+    local ok, mode = pcall(function()
+        return exports["performancetuning"]:GetCurrentVehicleSteeringLockMode()
+    end)
+
+    if not ok or type(mode) ~= "string" then
+        return false, 1
+    end
+
+    local normalized = string.lower(mode)
+    if normalized == "balanced" or normalized == "balance" then
+        return true, 2
+    end
+    if normalized == "aggro" or normalized == "aggressive" then
+        return true, 3
+    end
+    if normalized == "very_aggro" or normalized == "very_aggressive" or normalized == "extreme_aggressive" then
+        return true, 4
+    end
+    if normalized == "very_smooth" or normalized == "extreme_smooth" then
+        return true, 5
+    end
+    if normalized == "smooth" or normalized == "sooth" then
+        return true, 6
+    end
+
+    return true, 1
+end
+
+local function setPerformanceTuningSteeringLockModeIndex(index)
+    if not isPerformanceTuningStarted() then
+        return false
+    end
+
+    local modeByIndex = {
+        [1] = "stock",
+        [2] = "balanced",
+        [3] = "aggressive",
+        [4] = "very_aggressive",
+        [5] = "very_smooth",
+        [6] = "smooth",
+    }
+    local targetMode = modeByIndex[math.floor(tonumber(index) or 1)] or "stock"
+
+    local ok, result = pcall(function()
+        return exports["performancetuning"]:SetCurrentVehicleSteeringLockMode(targetMode)
+    end)
+
+    if not ok then
+        return false
+    end
+
+    if type(result) == "boolean" then
+        return result == true
+    end
+
+    return true
+end
+
 local function refreshPerformanceSettingsMenu()
     local hasVehicle = availabilityState.hasDriverVehicle == true
     local tuningAvailable = isPerformanceTuningStarted()
 
     performancePiDisplayListItem:Enabled(tuningAvailable and hasVehicle)
     performanceRevLimiterListItem:Enabled(tuningAvailable and hasVehicle)
+    performanceSteeringLockModeListItem:Enabled(tuningAvailable and hasVehicle)
 
     if not tuningAvailable then
         local description = "Start performancetuning to adjust these settings."
         performancePiDisplayListItem:Description(description)
         performanceRevLimiterListItem:Description(description)
+        performanceSteeringLockModeListItem:Description(description)
         performancePiDisplayListItem:Index(1)
         performanceRevLimiterListItem:Index(1)
+        performanceSteeringLockModeListItem:Index(1)
         return
     end
 
@@ -549,8 +654,10 @@ local function refreshPerformanceSettingsMenu()
         local description = TextConfig.noVehicleDescription or "Get into a vehicle to see options here."
         performancePiDisplayListItem:Description(description)
         performanceRevLimiterListItem:Description(description)
+        performanceSteeringLockModeListItem:Description(description)
         performancePiDisplayListItem:Index(1)
         performanceRevLimiterListItem:Index(1)
+        performanceSteeringLockModeListItem:Index(1)
         return
     end
 
@@ -564,6 +671,15 @@ local function refreshPerformanceSettingsMenu()
     else
         performanceRevLimiterListItem:Description(TextConfig.noVehicleDescription or "Get into a vehicle to see options here.")
         performanceRevLimiterListItem:Enabled(false)
+    end
+
+    local hasSteeringLockMode, steeringLockModeIndex = getPerformanceTuningSteeringLockModeIndex()
+    performanceSteeringLockModeListItem:Index(steeringLockModeIndex)
+    if hasSteeringLockMode then
+        clearItemDescription(performanceSteeringLockModeListItem)
+    else
+        performanceSteeringLockModeListItem:Description(TextConfig.noVehicleDescription or "Get into a vehicle to see options here.")
+        performanceSteeringLockModeListItem:Enabled(false)
     end
 end
 
@@ -645,7 +761,7 @@ local function rebuildLiveryList(vehicle)
     liveryListItem.Items[1] = TextConfig.noLiveriesLabel or "No liveries available"
 end
 
-local function rebuildModMenu(subMenu, categories, emptyTitle, emptyDescription)
+local function rebuildModMenu(subMenu, categories, emptyTitle, emptyDescription, isStatsMenu)
     local targetMenu = subMenu
     if type(subMenu) == "table" and subMenu.SubMenu then
         targetMenu = subMenu.SubMenu
@@ -695,7 +811,7 @@ local function rebuildModMenu(subMenu, categories, emptyTitle, emptyDescription)
                 end
             end
 
-            local item = VMUI.CreateListItem(category.label, optionLabels, currentIndex, nil)
+            local item = VMUI.CreateListItem(category.label, optionLabels, currentIndex, buildModCategoryDescription(category.label, isStatsMenu))
             targetMenu:AddItem(item)
             modItems[#modItems + 1] = item
             modEntries[#modEntries + 1] = {
@@ -721,7 +837,8 @@ local function rebuildPartsMenu()
         partsSubMenu,
         partsVehicleModCategories,
         TextConfig.partsEmptyTitle or "No parts available",
-        TextConfig.partsEmptyDescription or "This vehicle doesn't have any customizable parts here."
+        TextConfig.partsEmptyDescription or "This vehicle doesn't have any customizable parts here.",
+        false
     )
 end
 
@@ -730,7 +847,8 @@ local function rebuildStatsMenu()
         statsLocalMenu,
         statsVehicleModCategories,
         TextConfig.statsEmptyTitle or "No stats upgrades",
-        TextConfig.statsEmptyDescription or "This vehicle doesn't have any upgrade options here."
+        TextConfig.statsEmptyDescription or "This vehicle doesn't have any upgrade options here.",
+        true
     )
 end
 
@@ -1022,6 +1140,69 @@ local function teleportVehicleToNearestRoad()
     SetEntityCoords(vehicle, roadCoords.x, roadCoords.y, roadCoords.z + 1.0, false, false, false, false)
     SetEntityHeading(vehicle, roadHeading or GetEntityHeading(vehicle))
     SetVehicleOnGroundProperly(vehicle)
+end
+
+local function runUtilityDeleteVehicleSequence()
+    local ped = PlayerPedId()
+    local vehicle = getManagedVehicle(true)
+    if not vehicle or not DoesEntityExist(vehicle) or not DoesEntityExist(ped) then
+        return
+    end
+
+    local vehicleKey = tostring(NetworkGetNetworkIdFromEntity(vehicle) or vehicle)
+    if pendingUtilityDeleteByVehicle[vehicleKey] then
+        return
+    end
+    pendingUtilityDeleteByVehicle[vehicleKey] = true
+
+    local baseCoords = GetEntityCoords(vehicle)
+    local baseHeading = GetEntityHeading(vehicle)
+    local vehicleModel = GetEntityModel(vehicle)
+    local minBounds, maxBounds = GetModelDimensions(vehicleModel)
+    local vehicleLength = math.abs((maxBounds.y or 0.0) - (minBounds.y or 0.0))
+    local exitDistance = vehicleLength + 2.0
+    local exitCoords = GetOffsetFromEntityInWorldCoords(vehicle, 0.0, -exitDistance, 0.0)
+
+    TaskLeaveVehicle(ped, vehicle, 16)
+    ClearPedTasksImmediately(ped)
+    SetEntityCoordsNoOffset(ped, exitCoords.x, exitCoords.y, exitCoords.z, false, false, false)
+    SetEntityHeading(ped, baseHeading)
+
+    SetVehicleEngineOn(vehicle, false, true, false)
+    SetVehicleHandbrake(vehicle, true)
+    SetEntityVelocity(vehicle, 0.0, 0.0, 0.0)
+    SetEntityCollision(vehicle, false, false)
+    FreezeEntityPosition(vehicle, true)
+
+    CreateThread(function()
+        local startTime = GetGameTimer()
+        local durationMs = 5000
+        local initialLiftSpeed = 3.0
+        local liftAcceleration = 6.0
+
+        while DoesEntityExist(vehicle) do
+            local elapsed = GetGameTimer() - startTime
+            if elapsed >= durationMs then
+                break
+            end
+
+            local elapsedSeconds = elapsed / 1000.0
+            local verticalOffset = (initialLiftSpeed * elapsedSeconds) + (0.5 * liftAcceleration * elapsedSeconds * elapsedSeconds)
+            SetEntityCoordsNoOffset(vehicle, baseCoords.x, baseCoords.y, baseCoords.z + verticalOffset, false, false, false)
+            Wait(0)
+        end
+
+        if DoesEntityExist(vehicle) then
+            SetEntityAsMissionEntity(vehicle, true, true)
+            DeleteVehicle(vehicle)
+            if DoesEntityExist(vehicle) then
+                DeleteEntity(vehicle)
+            end
+        end
+
+        pendingUtilityDeleteByVehicle[vehicleKey] = nil
+        updateVehicleAvailabilityState(true)
+    end)
 end
 
 local function getVehicleDisplayName(model)
@@ -1651,7 +1832,7 @@ local function spawnSavedVehicle(savedData)
 
     local ped = PlayerPedId()
     local spawnCoords = GetOffsetFromEntityInWorldCoords(ped, 0.0, 5.0, 0.0)
-    local heading = GetEntityHeading(ped)
+    local heading = GetEntityHeading(ped) + 90.0
     local spawnedVehicle = CreateVehicle(model, spawnCoords.x, spawnCoords.y, spawnCoords.z, heading, true, false)
 
     if spawnedVehicle == 0 or not DoesEntityExist(spawnedVehicle) then
@@ -1659,6 +1840,8 @@ local function spawnSavedVehicle(savedData)
         return
     end
 
+    SetEntityVisible(spawnedVehicle, true, false)
+    SetEntityAlpha(spawnedVehicle, 0, false)
     SetVehicleOnGroundProperly(spawnedVehicle)
     SetVehicleModKit(spawnedVehicle, 0)
 
@@ -1736,6 +1919,32 @@ local function spawnSavedVehicle(savedData)
             Wait(250)
         end
     end)
+
+    CreateThread(function()
+        local fadeDurationMs = 500
+        local fadeStartTime = GetGameTimer()
+
+        while DoesEntityExist(spawnedVehicle) do
+            local elapsed = GetGameTimer() - fadeStartTime
+            if elapsed >= fadeDurationMs then
+                break
+            end
+
+            local progress = elapsed / fadeDurationMs
+            local alpha = math.floor(progress * 255.0 + 0.5)
+            SetEntityAlpha(spawnedVehicle, math.max(0, math.min(255, alpha)), false)
+            Wait(0)
+        end
+
+        if DoesEntityExist(spawnedVehicle) then
+            ResetEntityAlpha(spawnedVehicle)
+            SetVehicleDoorOpen(spawnedVehicle, 0, false, false)
+            Wait(1000)
+            if DoesEntityExist(spawnedVehicle) then
+                SetVehicleDoorOpen(spawnedVehicle, 0, true, false)
+            end
+        end
+    end)
     SetVehicleOnGroundProperly(spawnedVehicle)
     SetModelAsNoLongerNeeded(model)
 end
@@ -1758,7 +1967,7 @@ local function rebuildSavedVehicleMenu()
         saveLoadSubMenu.SubMenu:AddItem(deleteVehiclesSubMenu.Item)
         if deleteVehiclesSubMenu.SubMenu then
             deleteVehiclesSubMenu.SubMenu:Clear()
-            local emptyDeleteItem = VMUI.CreateItem("No Saved Vehicles", "You don't have any saved vehicles to delete.")
+            local emptyDeleteItem = VMUI.CreateItem("No Saved Vehicles", "")
             emptyDeleteItem:Enabled(false)
             deleteVehiclesSubMenu.SubMenu:AddItem(emptyDeleteItem)
         end
@@ -1768,7 +1977,7 @@ local function rebuildSavedVehicleMenu()
         if deleteVehiclesSubMenu and deleteVehiclesSubMenu.Item then
             deleteVehiclesSubMenu.Item:Enabled(false)
         end
-        local emptyItem = VMUI.CreateItem("No Saved Vehicles", "You don't have any saved vehicles yet.")
+        local emptyItem = VMUI.CreateItem("No Saved Vehicles", "")
         emptyItem:Enabled(false)
         saveLoadSubMenu.SubMenu:AddItem(emptyItem)
         vehicleMenuPool:RefreshIndex()
@@ -1777,7 +1986,7 @@ local function rebuildSavedVehicleMenu()
 
     for i = 1, #savedVehicleEntries do
         local entry = savedVehicleEntries[i]
-        local item = VMUI.CreateItem(buildSavedVehicleLabel(entry), nil)
+        local item = VMUI.CreateItem(buildSavedVehicleLabel(entry), "")
         item.Activated = function()
             TriggerServerEvent("vehiclemanager:requestSavedVehiclePayload", entry.file)
         end
@@ -1790,13 +1999,13 @@ local function rebuildSavedVehicleMenu()
         deleteVehiclesSubMenu.Item:Enabled(#deleteVehicleEntries > 0)
         deleteVehiclesSubMenu.SubMenu:Clear()
         if #deleteVehicleEntries <= 0 then
-            local emptyDeleteItem = VMUI.CreateItem("No Saved Vehicles", "You don't have any saved vehicles to delete.")
+            local emptyDeleteItem = VMUI.CreateItem("No Saved Vehicles", "")
             emptyDeleteItem:Enabled(false)
             deleteVehiclesSubMenu.SubMenu:AddItem(emptyDeleteItem)
         else
             for i = 1, #deleteVehicleEntries do
                 local entry = deleteVehicleEntries[i]
-                local deleteItem = VMUI.CreateColouredItem(buildSavedVehicleLabel(entry), nil)
+                local deleteItem = VMUI.CreateColouredItem(buildSavedVehicleLabel(entry), "")
                 deleteItem.Activated = function()
                     TriggerServerEvent("vehiclemanager:forgetSavedVehicle", entry.file)
                 end
@@ -2090,14 +2299,14 @@ local function applySelectedLivery(index)
 end
 
 vehicleMainMenu:AddItem(helpListItem)
-customizeSubMenu = vehicleMenuPool:AddSubMenu(vehicleMainMenu, "Customize Vehicle", nil, true, true)
-saveLoadSubMenu = vehicleMenuPool:AddSubMenu(vehicleMainMenu, "Save / Load", nil, true, true)
-deleteVehiclesSubMenu = vehicleMenuPool:AddSubMenu(saveLoadSubMenu.SubMenu, "Delete Vehicle", nil, true, true)
-performanceSettingsSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, "Performance Settings", nil, true, true)
-statsLocalSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, "Stats", nil, true, true)
-colorSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, "Color", nil, true, true)
-partsSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, "Parts", nil, true, true)
-wheelsSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, "Wheels", nil, true, true)
+customizeSubMenu = vehicleMenuPool:AddSubMenu(vehicleMainMenu, TextConfig.customizeVehicleLabel or "Customize Vehicle", TextConfig.customizeVehicleDescription or "Customization", true, true)
+saveLoadSubMenu = vehicleMenuPool:AddSubMenu(vehicleMainMenu, TextConfig.saveLoadLabel or "Save / Load", TextConfig.saveLoadDescription or "These vehicles persist across sessions.", true, true)
+deleteVehiclesSubMenu = vehicleMenuPool:AddSubMenu(saveLoadSubMenu.SubMenu, TextConfig.deleteVehicleLabel or "Delete Vehicle", TextConfig.deleteVehicleDescription or "~r~This action is permanent.", true, true)
+performanceSettingsSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, TextConfig.performanceSettingsLabel or "Performance Settings", TextConfig.performanceSettingsDescription or "Adjust PI display and rev limiter behavior for your current vehicle.", true, true)
+statsLocalSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, TextConfig.statsLabel or "Stats", TextConfig.statsDescription or "Open upgrade categories that affect vehicle performance stats.", true, true)
+colorSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, TextConfig.colorLabel or "Color", TextConfig.colorDescription or "Change paint, pearlescent, interior, xenon, and livery options.", true, true)
+partsSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, TextConfig.partsLabel or "Parts", TextConfig.partsDescription or "Browse available cosmetic body and interior part categories.", true, true)
+wheelsSubMenu = vehicleMenuPool:AddSubMenu(customizeSubMenu.SubMenu, TextConfig.wheelsMenuLabel or "Wheels", TextConfig.wheelsMenuDescription or "Change wheel category, style, color, and custom tyre settings.", true, true)
 performanceSettingsGatewayItem = performanceSettingsSubMenu.Item
 performanceSettingsMenu = performanceSettingsSubMenu.SubMenu
 statsGatewayItem = statsLocalSubMenu.Item
@@ -2119,6 +2328,7 @@ statsGatewayItem.Activated = function(menu)
 end
 performanceSettingsMenu:AddItem(performancePiDisplayListItem)
 performanceSettingsMenu:AddItem(performanceRevLimiterListItem)
+performanceSettingsMenu:AddItem(performanceSteeringLockModeListItem)
 saveLoadSubMenu.Item.Activated = function(menu)
     requestSavedVehicleIndex()
     menu:SwitchTo(saveLoadSubMenu.SubMenu, 1, true)
@@ -2146,6 +2356,7 @@ registerVehicleRequiredItem(statsGatewayItem)
 registerVehicleRequiredItem(wheelsSubMenu.Item)
 registerVehicleRequiredItem(performancePiDisplayListItem)
 registerVehicleRequiredItem(performanceRevLimiterListItem)
+registerVehicleRequiredItem(performanceSteeringLockModeListItem)
 registerVehicleRequiredItem(paintCategoryListItem)
 registerVehicleRequiredItem(primaryPaintColorListItem)
 registerVehicleRequiredItem(secondaryPaintColorListItem)
@@ -2184,6 +2395,8 @@ vehicleMainMenu.OnListSelect = function(_, item, index)
         fixCurrentVehicle()
     elseif index == 2 then
         teleportVehicleToNearestRoad()
+    elseif index == 3 then
+        runUtilityDeleteVehicleSequence()
     end
 end
 
@@ -2296,6 +2509,9 @@ performanceSettingsMenu.OnListChange = function(_, item, index)
     elseif item == performanceRevLimiterListItem then
         setPerformanceTuningRevLimiterEnabled(index == 2)
         refreshPerformanceSettingsMenu()
+    elseif item == performanceSteeringLockModeListItem then
+        setPerformanceTuningSteeringLockModeIndex(index)
+        refreshPerformanceSettingsMenu()
     end
 end
 
@@ -2305,6 +2521,9 @@ performanceSettingsMenu.OnListSelect = function(_, item, index)
         refreshPerformanceSettingsMenu()
     elseif item == performanceRevLimiterListItem then
         setPerformanceTuningRevLimiterEnabled(index == 2)
+        refreshPerformanceSettingsMenu()
+    elseif item == performanceSteeringLockModeListItem then
+        setPerformanceTuningSteeringLockModeIndex(index)
         refreshPerformanceSettingsMenu()
     end
 end

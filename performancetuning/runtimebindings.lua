@@ -14,16 +14,44 @@ local definitions = PerformanceTuning.Definitions or {}
 local menuSliders = PerformanceTuning.MenuSliders or {}
 local tuningPackManager = PerformanceTuning.TuningPackManager or {}
 local config = PerformanceTuning.Config or {}
-local INTERNAL_PERFORMANCE = {
-    barSegmentCount = 20,
-    powerBarScaleFactor = 33.3333333333,
-    topSpeedBarScaleFactor = 0.0909090909,
-    gripBarScaleFactor = 8.0,
+local INTERNAL_PERFORMANCE_CONSTANTS = {
     flatVelToMphFactor = 145.0 / 176.0,
 }
-local INTERNAL_BRAKE_SCALING = {
-    barTopValueUnits = 2.5,
+local INTERNAL_BAR_FILL_TARGETS = {
+    power = 0.60,
+    topSpeedMph = 220.0,
+    grip = 2.50,
+    brake = 2.50,
+    barSegmentCount = 20,
 }
+local INTERNAL_BRAKE_SCALING = { barTopValueUnits = INTERNAL_BAR_FILL_TARGETS.brake }
+
+local function resolvePerformanceFromRuntimeConfig()
+    local configured = runtimeConfig.performanceBarFillTargets or {}
+    local barSegmentCount = math.max(1, math.floor(tonumber(configured.barSegmentCount) or INTERNAL_BAR_FILL_TARGETS.barSegmentCount))
+    local powerTarget = tonumber(configured.power) or INTERNAL_BAR_FILL_TARGETS.power
+    local topSpeedTarget = tonumber(configured.topSpeedMph) or INTERNAL_BAR_FILL_TARGETS.topSpeedMph
+    local gripTarget = tonumber(configured.grip) or INTERNAL_BAR_FILL_TARGETS.grip
+    local brakeTarget = tonumber(configured.brake) or INTERNAL_BAR_FILL_TARGETS.brake
+
+    if powerTarget <= 0.0 then powerTarget = INTERNAL_BAR_FILL_TARGETS.power end
+    if topSpeedTarget <= 0.0 then topSpeedTarget = INTERNAL_BAR_FILL_TARGETS.topSpeedMph end
+    if gripTarget <= 0.0 then gripTarget = INTERNAL_BAR_FILL_TARGETS.grip end
+    if brakeTarget <= 0.0 then brakeTarget = INTERNAL_BAR_FILL_TARGETS.brake end
+
+    return {
+        performance = {
+            barSegmentCount = barSegmentCount,
+            powerBarScaleFactor = barSegmentCount / powerTarget,
+            topSpeedBarScaleFactor = barSegmentCount / topSpeedTarget,
+            gripBarScaleFactor = barSegmentCount / gripTarget,
+            flatVelToMphFactor = INTERNAL_PERFORMANCE_CONSTANTS.flatVelToMphFactor,
+        },
+        brakeScaling = {
+            barTopValueUnits = brakeTarget,
+        },
+    }
+end
 local handlingFields = definitions.handlingFields or {}
 local engineFields = definitions.engineFields or {}
 local transmissionFields = definitions.transmissionFields or {}
@@ -68,18 +96,20 @@ internals.ANTIROLL_FORCE_FIELD = handlingFields.antiroll and handlingFields.anti
 internals.ANTIROLL_BIAS_FRONT_FIELD = handlingFields.antiroll and handlingFields.antiroll.biasFront or nil
 internals.BRAKE_BIAS_FRONT_FIELD = handlingFields.brakes and handlingFields.brakes.biasFront or nil
 internals.ENGINE_SWAP_MODEL_NAME = definitions.engineSwapModelName
-internals.BRAKE_SCALING = INTERNAL_BRAKE_SCALING
+local resolvedPerformanceConfig = resolvePerformanceFromRuntimeConfig()
+internals.BRAKE_SCALING = resolvedPerformanceConfig.brakeScaling
 internals.FIELD_TYPE_ALIASES = fieldTypeAliases
 internals.KNOWN_FIELD_TYPES = knownFieldTypes
 internals.SUSPENSION_PACKS = packDefinitions.suspension
 internals.TRANSMISSION_PACKS = packDefinitions.transmission
 internals.ENGINE_PACKS = packDefinitions.engine
+internals.ENGINE_SWAPS = config.engineSwaps or {}
 internals.TIRE_COMPOUND_PACKS = packDefinitions.tires
 internals.BRAKE_PACKS = packDefinitions.brakes
 internals.NITROUS_PACKS = packDefinitions.nitrous
 internals.NITRO_PACKS = internals.NITROUS_PACKS
 internals.NitrousConfig = runtimeConfig.nitrous
-internals.Performance = INTERNAL_PERFORMANCE
+internals.Performance = resolvedPerformanceConfig.performance
 internals.trim = bindings.trim
 internals.startsWith = bindings.startsWith
 internals.isFiniteNumber = bindings.isFiniteNumber

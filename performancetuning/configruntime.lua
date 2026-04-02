@@ -11,6 +11,19 @@ local INTERNAL_SLIDER_RANGES = {
     antirollBiasFront = { min = 0.0, max = 1.0, step = 0.025 },
     suspensionBiasFront = { min = 0.3, max = 0.7, step = 0.01 },
 }
+local INTERNAL_PERFORMANCE_BAR_FILL_TARGETS = {
+    power = 0.60,
+    topSpeedMph = 220.0,
+    grip = 2.50,
+    brake = 2.50,
+    barSegmentCount = 20,
+}
+local INTERNAL_PI_DISTRIBUTION = {
+    power = 20.0,
+    topSpeed = 40.0,
+    grip = 20.0,
+    brake = 20.0,
+}
 
 local function getConfiguredSliderRange(key)
     local configuredRanges = config.sliderRanges or {}
@@ -59,6 +72,76 @@ local function getConfiguredNitrousValue(key)
     return configuredValue
 end
 
+local function getConfiguredPerformanceBarFillTargets()
+    local configuredTargets = config.performanceBarFillTargets or {}
+    local defaults = INTERNAL_PERFORMANCE_BAR_FILL_TARGETS
+    local targets = {
+        power = tonumber(configuredTargets.power) or defaults.power,
+        topSpeedMph = tonumber(configuredTargets.topSpeedMph) or defaults.topSpeedMph,
+        grip = tonumber(configuredTargets.grip) or defaults.grip,
+        brake = tonumber(configuredTargets.brake) or defaults.brake,
+        barSegmentCount = math.floor(tonumber(configuredTargets.barSegmentCount) or defaults.barSegmentCount),
+    }
+
+    if targets.power <= 0.0 then
+        targets.power = defaults.power
+    end
+    if targets.topSpeedMph <= 0.0 then
+        targets.topSpeedMph = defaults.topSpeedMph
+    end
+    if targets.grip <= 0.0 then
+        targets.grip = defaults.grip
+    end
+    if targets.brake <= 0.0 then
+        targets.brake = defaults.brake
+    end
+    if targets.barSegmentCount < 1 then
+        targets.barSegmentCount = defaults.barSegmentCount
+    end
+
+    return targets
+end
+
+local function getConfiguredPiDistribution()
+    local configuredDistribution = config.performancePiDistribution or {}
+    local legacyMultipliers = config.performancePiMultipliers or {}
+    local raw = {
+        power = tonumber(configuredDistribution.power),
+        topSpeed = tonumber(configuredDistribution.topSpeed),
+        grip = tonumber(configuredDistribution.grip),
+        brake = tonumber(configuredDistribution.brake),
+    }
+
+    if raw.power == nil then raw.power = tonumber(legacyMultipliers.power) end
+    if raw.topSpeed == nil then raw.topSpeed = tonumber(legacyMultipliers.topSpeed) end
+    if raw.grip == nil then raw.grip = tonumber(legacyMultipliers.grip) end
+    if raw.brake == nil then raw.brake = tonumber(legacyMultipliers.brake) end
+
+    local resolved = {
+        power = (raw.power and raw.power > 0.0) and raw.power or INTERNAL_PI_DISTRIBUTION.power,
+        topSpeed = (raw.topSpeed and raw.topSpeed > 0.0) and raw.topSpeed or INTERNAL_PI_DISTRIBUTION.topSpeed,
+        grip = (raw.grip and raw.grip > 0.0) and raw.grip or INTERNAL_PI_DISTRIBUTION.grip,
+        brake = (raw.brake and raw.brake > 0.0) and raw.brake or INTERNAL_PI_DISTRIBUTION.brake,
+    }
+    local sum = resolved.power + resolved.topSpeed + resolved.grip + resolved.brake
+    if sum <= 0.0 then
+        return {
+            power = INTERNAL_PI_DISTRIBUTION.power,
+            topSpeed = INTERNAL_PI_DISTRIBUTION.topSpeed,
+            grip = INTERNAL_PI_DISTRIBUTION.grip,
+            brake = INTERNAL_PI_DISTRIBUTION.brake,
+        }
+    end
+
+    local normalize = 100.0 / sum
+    return {
+        power = resolved.power * normalize,
+        topSpeed = resolved.topSpeed * normalize,
+        grip = resolved.grip * normalize,
+        brake = resolved.brake * normalize,
+    }
+end
+
 runtimeConfig.sliderRanges.antirollBars = getConfiguredSliderRange('antirollBars')
 runtimeConfig.sliderRanges.nitrousShotStrength = getConfiguredSliderRange('nitrousShotStrength')
 runtimeConfig.sliderRanges.brakeBiasFront = getConfiguredSliderRange('brakeBiasFront')
@@ -68,8 +151,9 @@ runtimeConfig.sliderRanges.suspensionRaise = getConfiguredSliderRange('suspensio
 runtimeConfig.sliderRanges.suspensionBiasFront = getConfiguredSliderRange('suspensionBiasFront')
 runtimeConfig.nitrous.baseDurationMs = getConfiguredNitrousValue('baseDurationMs')
 runtimeConfig.nitrous.nativePowerMultiplier = getConfiguredNitrousValue('nativePowerMultiplier')
-runtimeConfig.performancePiMultipliers = config.performancePiMultipliers or {}
+runtimeConfig.performancePiDistribution = getConfiguredPiDistribution()
+runtimeConfig.performancePiMultipliers = runtimeConfig.performancePiDistribution
+runtimeConfig.performanceBarFillTargets = getConfiguredPerformanceBarFillTargets()
 runtimeConfig.performanceNearbyPanels = config.performanceNearbyPanels or {}
-runtimeConfig.nitrousRefill = config.nitrousRefill or {}
 
 PerformanceTuning.RuntimeConfig = runtimeConfig

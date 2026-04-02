@@ -3,13 +3,6 @@ local Definitions = PerformanceTuning.Definitions or {}
 local StateBagKeys = Definitions.stateBagKeys
 local HandlingFields = Definitions.handlingFields
 local RuntimeConfig = PerformanceTuning.RuntimeConfig or Definitions.runtimeConfig
-local Performance = {
-    barSegmentCount = 20,
-    powerBarScaleFactor = 33.3333333333,
-    topSpeedBarScaleFactor = 0.0909090909,
-    gripBarScaleFactor = 8.0,
-    flatVelToMphFactor = 145.0 / 176.0,
-}
 local TIRE_COMPOUND_PACKS = (((PerformanceTuning.Config or {}).packDefinitions) or {}).tires
 
 local RuntimeState = {
@@ -179,12 +172,26 @@ CreateThread(function()
     local tractionLateralField = (HandlingFields.tires or {}).lateral or 'fTractionCurveLateral'
     local appliedOverrides = RuntimeState.steeringLockOverrideAppliedByVehicleKey or {}
     RuntimeState.steeringLockOverrideAppliedByVehicleKey = appliedOverrides
+    local minRefreshSpeedMph = 1.0
+    local maxRefreshSpeedMph = 30.0
+    local minRefreshIntervalMs = 200
+    local maxRefreshIntervalMs = 600
 
     while true do
-        Wait(500)
-
         local ped = PlayerPedId()
         local vehicle = GetVehiclePedIsIn(ped, false)
+        local speedMph = (tonumber(GetEntitySpeed(vehicle)) or 0.0) * 2.2369362920544
+        local waitMs = maxRefreshIntervalMs
+        if speedMph <= minRefreshSpeedMph then
+            waitMs = maxRefreshIntervalMs
+        elseif speedMph >= maxRefreshSpeedMph then
+            waitMs = minRefreshIntervalMs
+        else
+            local progress = (speedMph - minRefreshSpeedMph) / (maxRefreshSpeedMph - minRefreshSpeedMph)
+            waitMs = math.floor(maxRefreshIntervalMs + ((minRefreshIntervalMs - maxRefreshIntervalMs) * progress) + 0.5)
+        end
+        Wait(waitMs)
+
         if not PerformanceTuning.VehicleManager.isPedDrivingVehicle(ped, vehicle) then
             goto continue
         end
@@ -218,11 +225,10 @@ CreateThread(function()
             end
 
             if isFiniteNumber(baseSteeringLock) then
-                local speedMph = (tonumber(GetEntitySpeed(vehicle)) or 0.0) * 2.2369362920544
                 if speedMph <= 5.0 then
                     targetSteeringLock = baseSteeringLock
-                elseif speedMph < 10.0 then
-                    local blend = (speedMph - 5.0) / 5.0
+                elseif speedMph < 30.0 then
+                    local blend = (speedMph - 5.0) / 25.0
                     targetSteeringLock = baseSteeringLock + ((targetSteeringLock - baseSteeringLock) * blend)
                 end
             end
@@ -317,6 +323,14 @@ local function buildNativeListState(context)
 
     local bucket = ensureTuningState(vehicle)
     local function isUnavailableTirePack(pack, baseTireMax)
+        local barFillTargets = (PerformanceTuning.RuntimeConfig or {}).performanceBarFillTargets or {}
+        local performance = ((PerformanceTuning or {})._internals or {}).Performance or {}
+        local barSegmentCount = math.max(1, math.floor(tonumber(performance.barSegmentCount) or tonumber(barFillTargets.barSegmentCount) or 20))
+        local gripTarget = tonumber(barFillTargets.grip) or 2.5
+        if gripTarget <= 0.0 then
+            gripTarget = 2.5
+        end
+        local gripBarScaleFactor = tonumber(performance.gripBarScaleFactor) or (barSegmentCount / gripTarget)
         if type(pack) ~= 'table' or pack.enabled == false then
             return true
         end
@@ -325,7 +339,7 @@ local function buildNativeListState(context)
             return false
         end
 
-        local targetGripValue = (math.max(0.0, math.min(1.0, tonumber(pack.gripBarProgressRatio) or 0.0)) * Performance.barSegmentCount) / Performance.gripBarScaleFactor
+        local targetGripValue = (math.max(0.0, math.min(1.0, tonumber(pack.gripBarProgressRatio) or 0.0)) * barSegmentCount) / gripBarScaleFactor
         return targetGripValue < baseTireMax
     end
 
@@ -539,6 +553,22 @@ exports('SetCurrentVehicleRevLimiterEnabled', function(enabled)
     end
 
     return false
+end)
+
+exports('GetCurrentVehicleSteeringLockMode', function()
+    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.getCurrentVehicleSteeringLockMode then
+        return PerformanceTuning.ScaleformUI.getCurrentVehicleSteeringLockMode()
+    end
+
+    return nil
+end)
+
+exports('SetCurrentVehicleSteeringLockMode', function(mode)
+    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.setCurrentVehicleSteeringLockMode then
+        return PerformanceTuning.ScaleformUI.setCurrentVehicleSteeringLockMode(mode)
+    end
+
+    return false, nil
 end)
 
 RegisterCommand('ptune', function()

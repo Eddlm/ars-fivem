@@ -85,7 +85,6 @@ function VehicleManager.getTuningBucket(vehicle, createIfMissing)
             nitrousAvailableCharge = 1.0,
             nitrousActiveUntil = 0,
             nitrousDurationMs = nitrousConfig.baseDurationMs,
-            nitrousLastRefillAt = 0,
             nitrousShotStrength = 1.0,
             nitrousAvailableNotified = true,
             revLimiterEnabled = false,
@@ -251,7 +250,7 @@ function VehicleManager.piStatesEqual(a, b)
         return false
     end
 
-    local keys = { 'total', 'power', 'topSpeed', 'grip', 'brake', 'class' }
+    local keys = { 'total', 'power', 'speed', 'topSpeed', 'grip', 'brake', 'class' }
     for _, key in ipairs(keys) do
         if a[key] ~= b[key] then
             return false
@@ -276,6 +275,7 @@ function VehicleManager.buildPiState(vehicle)
     return {
         total = math.floor(tonumber(metrics.total) or 0),
         power = math.floor(tonumber(values[1]) or 0),
+        speed = math.floor(tonumber(values[2]) or 0),
         topSpeed = math.floor(tonumber(values[2]) or 0),
         grip = math.floor(tonumber(values[3]) or 0),
         brake = math.floor(tonumber(values[4]) or 0),

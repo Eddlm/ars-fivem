@@ -14,23 +14,25 @@ Config.nitrous = {
     nativePowerMultiplier = 0.5,
 }
 
-Config.performancePiMultipliers = {
+Config.performancePiDistribution = {
     power = 20,
     topSpeed = 40,
     grip = 20,
     brake = 20,
 }
 
+Config.performanceBarFillTargets = {
+    power = 0.60,
+    topSpeedMph = 220.0,
+    grip = 2.50,
+    brake = 2.50,
+    barSegmentCount = 20,
+}
+
 Config.performanceNearbyPanels = {
     enabled = true,
     maxDistanceMeters = 30.0,
     maxPanels = 12,
-}
-
-Config.nitrousRefill = {
-    refillIntervalMs = 500,
-    refillMaxSpeedMetersPerSecond = 0.5,
-    refillDurationSeconds = 2.0,
 }
 
 Config.packDefinitions = {
@@ -54,9 +56,6 @@ Config.packDefinitions = {
         { id = 'stage_2', label = 'Stage 2', enabled = true, description = 'Moderate increase in acceleration and top-end potential.', driveForceOffset = 0.10 },
         { id = 'stage_3', label = 'Stage 3', enabled = true, description = 'Strong engine tune with a clear step up in output.', driveForceOffset = 0.15 },
         { id = 'hsw_special', label = 'HSW Special', enabled = true, description = 'Highest non-swap power step in the standard upgrade path.', driveForceOffset = 0.25 },
-        { id = 'kanjosj_swap', label = 'Kanjo SJ Swap', enabled = true, description = 'Uses Kanjo SJ engine values and audio for a full swap.', swapModel = 'KANJOSJ' },
-        { id = 'tyrus_swap', label = 'Tyrus Swap', enabled = true, description = 'Uses Tyrus engine values and audio for a full swap.', swapModel = 'TYRUS' },
-        { id = 'taipan_swap', label = 'Taipan Swap', enabled = true, description = 'Uses Taipan engine values and audio for a full swap.', swapModel = 'TAIPAN' },
     },
     tires = {
         { id = 'stock', label = 'Stock', enabled = true, description = 'Keeps the original compound and grip envelope.' },
@@ -80,4 +79,10 @@ Config.packDefinitions = {
         { id = 'level_3', label = 'Level 3', enabled = true, description = 'High-output nitrous shot with a clear increase in shove.', powerMultiplier = 1.5 },
         { id = 'level_4', label = 'Level 4', enabled = true, description = 'Maximum nitrous strength in the current pack lineup.', powerMultiplier = 2.0 },
     },
+}
+
+Config.engineSwaps = {
+    { id = 'KANJOSJ', label = 'Kanjo SJ Swap', enabled = true, description = 'Uses Kanjo SJ engine values and audio for a full swap.', swapModel = 'KANJOSJ' },
+    { id = 'TYRUS', label = 'Tyrus Swap', enabled = true, description = 'Uses Tyrus engine values and audio for a full swap.', swapModel = 'TYRUS' },
+    { id = 'TAIPAN', label = 'Taipan Swap', enabled = true, description = 'Uses Taipan engine values and audio for a full swap.', swapModel = 'TAIPAN' },
 }

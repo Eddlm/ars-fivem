@@ -62,6 +62,7 @@ Internal
 - Move pack metadata (`id`, `label`, `description`, `enabled`) out of shared config if the pack lineup is not meant to be server-edited.
 - Decide whether `performancetuning` pack metadata should stay configurable or move into internal code/data.
 - Move nearby PI panel range/count to internal defaults unless there is a strong admin use case for tuning HUD behavior.
+- Consider separating engine swap choice from engine upgrade level so players can swap first, then still progress through upgrade stages on top of the swapped engine baseline.
 - Keep UI copy, panel math constants, brake-scaling constants, normalization defaults, and menu helper text hardcoded.
 
 # For `racingsystem`

@@ -69,13 +69,12 @@ end
 
 function Nitrous.refillAvailability(vehicle, now)
     local bindings = PerformanceTuning.ClientBindings or {}
-    local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    local nitrousRefillConfig = runtimeConfig.nitrousRefill or {}
     if not PerformanceTuning.VehicleManager.isVehicleEntityValid(vehicle) then
         return
     end
 
-    if GetEntitySpeed(vehicle) > (tonumber(nitrousRefillConfig.refillMaxSpeedMetersPerSecond) or 0.5) then
+    -- Stationary refill model: nitrous becomes fully available only when essentially stopped.
+    if GetEntitySpeed(vehicle) > 0.5 then
         return
     end
 
@@ -88,23 +87,14 @@ function Nitrous.refillAvailability(vehicle, now)
         return
     end
 
-    local refillIntervalMs = tonumber(nitrousRefillConfig.refillIntervalMs) or 500
-    if (now - (nitrousState.nitrousLastRefillAt or 0)) < refillIntervalMs then
-        return
-    end
+    local hadFullCharge = (tonumber(nitrousState.nitrousAvailableCharge) or 0.0) >= 1.0
+    nitrousState.nitrousAvailableCharge = 1.0
 
-    local refillAmount = refillIntervalMs / ((tonumber(nitrousRefillConfig.refillDurationSeconds) or 2.0) * 1000.0)
-    local previousAvailableCharge = tonumber(nitrousState.nitrousAvailableCharge) or 0.0
-    nitrousState.nitrousAvailableCharge = math.min(1.0, previousAvailableCharge + refillAmount)
-    nitrousState.nitrousLastRefillAt = now
-
-    if nitrousState.nitrousAvailableCharge >= 1.0 and not nitrousState.nitrousAvailableNotified then
+    if not hadFullCharge and not nitrousState.nitrousAvailableNotified then
         nitrousState.nitrousAvailableNotified = true
         if bindings.notify then
             bindings.notify('Nitrous is available.')
         end
-    elseif nitrousState.nitrousAvailableCharge < 1.0 then
-        nitrousState.nitrousAvailableNotified = false
     end
 end
 

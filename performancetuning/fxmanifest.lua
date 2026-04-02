@@ -45,5 +45,11 @@ exports {
     'GetPerformancePanelMetrics',
     'DrawPerformanceIndexPanel',
     'DrawPerformanceIndexPanelInstance',
-    'OpenPerformanceTuningMenu'
+    'OpenPerformanceTuningMenu',
+    'GetPiDisplayModeIndex',
+    'SetPiDisplayModeIndex',
+    'GetCurrentVehicleRevLimiterEnabled',
+    'SetCurrentVehicleRevLimiterEnabled',
+    'GetCurrentVehicleSteeringLockMode',
+    'SetCurrentVehicleSteeringLockMode'
 }

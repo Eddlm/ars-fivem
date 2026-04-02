@@ -91,9 +91,10 @@ PerformanceTuning.Definitions.runtimeConfig = {
     },
     sliderRanges = {},
     nitrous = {},
+    performancePiDistribution = {},
     performancePiMultipliers = {},
+    performanceBarFillTargets = {},
     performanceNearbyPanels = {},
-    nitrousRefill = {},
 }
 
 PerformanceTuning.Definitions.fieldTypeAliases = {
