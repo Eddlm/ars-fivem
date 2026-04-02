@@ -15,10 +15,10 @@ Config.nitrous = {
 }
 
 Config.performancePiDistribution = {
-    power = 125, --1G = 125PI
-    topSpeed = 25, --100mph = 250PI
-    grip = 125, --1G = 125PI
-    brake = 100, --1G = 100PI
+    power = 3000, --1G = 125PI
+    topSpeed = 20, --100mph = 250PI
+    grip = 1, --1G = 125PI
+    brake = 1, --1G = 100PI
 }
 
 Config.performanceBarFillTargets = {
