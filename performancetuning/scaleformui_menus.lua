@@ -2,6 +2,10 @@
 PerformanceTuning = PerformanceTuning or {}
 PerformanceTuning.ScaleformUI = PerformanceTuning.ScaleformUI or {}
 local MENU_DESCRIPTIONS = {
+    power = 'Power & Nitro upgrades.',
+    grip = 'Grip & Brakes tuning.',
+    suspensionGroup = 'Suspension & Steering tuning.',
+    bias = 'All front-to-rear bias adjustments.',
     engine = 'Engine power and top speed.',
     transmission = 'Shift speed and gearing.',
     suspension = 'Body control and weight transfer.',
@@ -56,6 +60,10 @@ local function getScaleformUIState()
     scaleformUI.state.piDisplayModeIndex = math.max(1, math.min(2, math.floor(tonumber(scaleformUI.state.piDisplayModeIndex) or 1)))
     scaleformUI.state.menuOpen = scaleformUI.state.menuOpen == true
     scaleformUI.state.menuInitialized = scaleformUI.state.menuInitialized == true
+    scaleformUI.state.switchingToPower = scaleformUI.state.switchingToPower == true
+    scaleformUI.state.switchingToGrip = scaleformUI.state.switchingToGrip == true
+    scaleformUI.state.switchingToSuspension = scaleformUI.state.switchingToSuspension == true
+    scaleformUI.state.switchingToBias = scaleformUI.state.switchingToBias == true
     scaleformUI.state.switchingToTweaks = scaleformUI.state.switchingToTweaks == true
     return scaleformUI.state
 end
@@ -184,8 +192,8 @@ local function setMenuItemsEnabled(enabled, disabledDescription)
     local resolvedEnabled = enabled == true
     local disabledText = tostring(disabledDescription or 'Enter the driver seat to enable tuning controls.')
     local itemOrder = {
-        'engine', 'transmission', 'suspension', 'tireCompoundCategory', 'tireCompoundQuality',
-        'brakes', 'antirollSlider', 'nitrous', 'openTweaks',
+        'openPower', 'openGrip', 'openSuspension', 'openBias', 'engine', 'transmission', 'suspension', 'tireCompoundCategory', 'tireCompoundQuality',
+        'brakes', 'antirollSlider', 'nitrous',
         'nitrousShotSlider', 'steeringLockMode', 'brakeBiasSlider',
         'gripBiasSlider', 'antirollBiasSlider', 'suspensionRaiseSlider', 'suspensionBiasSlider',
     }
@@ -227,7 +235,7 @@ end
 
 local function refreshVisibleMenuPanels()
     local state = getScaleformUIState()
-    local menus = { state.menus.main, state.menus.tweaks }
+    local menus = { state.menus.main, state.menus.power, state.menus.grip, state.menus.suspension, state.menus.bias }
 
     for index = 1, #menus do
         local menu = menus[index]
@@ -546,6 +554,18 @@ function PerformanceTuning.ScaleformUI.closeMenu()
     state.menuOpen = false
     state.lastVehicleValidity = nil
     scaleformUI.resetPerformanceIndexDisplayState()
+    if state.menus.power then
+        state.menus.power:Visible(false)
+    end
+    if state.menus.grip then
+        state.menus.grip:Visible(false)
+    end
+    if state.menus.suspension then
+        state.menus.suspension:Visible(false)
+    end
+    if state.menus.bias then
+        state.menus.bias:Visible(false)
+    end
     if state.menus.tweaks then
         state.menus.tweaks:Visible(false)
     end
@@ -667,6 +687,18 @@ function PerformanceTuning.ScaleformUI.refreshMenu()
     state.options.brakes = brakesState.context.options or {}
     state.options.nitrous = nitrousState.context.options or {}
     state.menus.main:Subtitle(engineState.displayName)
+    if state.menus.power then
+        state.menus.power:Subtitle(engineState.displayName)
+    end
+    if state.menus.grip then
+        state.menus.grip:Subtitle(engineState.displayName)
+    end
+    if state.menus.suspension then
+        state.menus.suspension:Subtitle(engineState.displayName)
+    end
+    if state.menus.bias then
+        state.menus.bias:Subtitle(engineState.displayName)
+    end
 
     setListItemOptions(state.items.engine, state.options.engine, engineState.context.currentStep)
     setListItemOptions(state.items.transmission, state.options.transmission, transmissionState.context.currentStep)
@@ -727,9 +759,18 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
 
     state.menus.main = UIMenu.New('Performance Tuning', '~b~CURRENT CAR', 20, 20, true)
     state.menus.main:MenuAlignment(MenuAlignment.LEFT)
-    state.menus.tweaks = UIMenu.New('Performance Tuning', 'Fine adjustments', 20, 20, true)
-    state.menus.tweaks:MenuAlignment(MenuAlignment.LEFT)
-
+    state.menus.power = UIMenu.New('Performance Tuning', 'Power & Nitro', 20, 20, true)
+    state.menus.power:MenuAlignment(MenuAlignment.LEFT)
+    state.menus.grip = UIMenu.New('Performance Tuning', 'Grip & Brakes', 20, 20, true)
+    state.menus.grip:MenuAlignment(MenuAlignment.LEFT)
+    state.menus.suspension = UIMenu.New('Performance Tuning', 'Suspension & Steering', 20, 20, true)
+    state.menus.suspension:MenuAlignment(MenuAlignment.LEFT)
+    state.menus.bias = UIMenu.New('Performance Tuning', 'Bias', 20, 20, true)
+    state.menus.bias:MenuAlignment(MenuAlignment.LEFT)
+    state.items.openPower = UIMenuItem.New('Power & Nitro', getMenuDescription('power'))
+    state.items.openGrip = UIMenuItem.New('Grip & Brakes', getMenuDescription('grip'))
+    state.items.openSuspension = UIMenuItem.New('Suspension & Steering', getMenuDescription('suspensionGroup'))
+    state.items.openBias = UIMenuItem.New('Bias', getMenuDescription('bias'))
     state.items.engine = UIMenuListItem.New('Engine', { 'Stock' }, 1)
     state.items.transmission = UIMenuListItem.New('Transmission', { 'Stock' }, 1)
     state.items.suspension = UIMenuListItem.New('Suspension', { 'Stock' }, 1)
@@ -738,8 +779,6 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     state.items.brakes = UIMenuListItem.New('Brakes', { 'Stock' }, 1)
     state.items.nitrous = UIMenuListItem.New('Nitrous', { 'Stock' }, 1)
     state.items.antirollSlider = UIMenuSliderItem.New('Anti-Roll Bars', #state.sliderValues.antirollBars - 1, 1, scaleformUI.getAntirollSliderIndex(0.0) - 1, false)
-    state.items.openTweaks = UIMenuItem.New('Tweaks', getMenuDescription('tweaks'))
-
     state.items.nitrousShotSlider = UIMenuSliderItem.New('Shot Strength', #state.sliderValues.nitrousShotStrength - 1, 1, scaleformUI.getNitroShotSliderIndex(1.0) - 1, false)
     state.items.steeringLockMode = UIMenuListItem.New('Steering Lock Mode', { 'Stock', 'Balanced', 'Aggro', 'Very Aggro', 'Very Smooth', 'Smooth' }, 1)
     state.items.brakeBiasSlider = UIMenuSliderItem.New('Brake Bias Front', #state.sliderValues.brakeBiasFront - 1, 1, scaleformUI.getBrakeBiasSliderIndex(0.5) - 1, false)
@@ -748,24 +787,34 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     state.items.suspensionRaiseSlider = UIMenuSliderItem.New('Clearance', 8, 1, 4, false)
     state.items.suspensionBiasSlider = UIMenuSliderItem.New('Suspension Bias Front', #state.sliderValues.suspensionBiasFront - 1, 1, scaleformUI.getSuspensionBiasSliderIndex(0.5) - 1, false)
 
-    state.menus.main:AddItem(state.items.engine)
-    state.menus.main:AddItem(state.items.transmission)
-    state.menus.main:AddItem(state.items.suspension)
-    state.menus.main:AddItem(state.items.tireCompoundCategory)
-    state.menus.main:AddItem(state.items.tireCompoundQuality)
-    state.menus.main:AddItem(state.items.brakes)
-    state.menus.main:AddItem(state.items.antirollSlider)
-    state.menus.main:AddItem(state.items.nitrous)
-    state.menus.main:AddItem(state.items.openTweaks)
+    state.menus.main:AddItem(state.items.openPower)
+    state.menus.main:AddItem(state.items.openGrip)
+    state.menus.main:AddItem(state.items.openSuspension)
+    state.menus.main:AddItem(state.items.openBias)
 
-    state.menus.tweaks:AddItem(state.items.nitrousShotSlider)
-    state.menus.tweaks:AddItem(state.items.steeringLockMode)
-    state.menus.tweaks:AddItem(state.items.brakeBiasSlider)
-    state.menus.tweaks:AddItem(state.items.gripBiasSlider)
-    state.menus.tweaks:AddItem(state.items.antirollBiasSlider)
-    state.menus.tweaks:AddItem(state.items.suspensionRaiseSlider)
-    state.menus.tweaks:AddItem(state.items.suspensionBiasSlider)
+    state.menus.power:AddItem(state.items.engine)
+    state.menus.power:AddItem(state.items.transmission)
+    state.menus.power:AddItem(state.items.nitrous)
+    state.menus.power:AddItem(state.items.nitrousShotSlider)
 
+    state.menus.grip:AddItem(state.items.tireCompoundCategory)
+    state.menus.grip:AddItem(state.items.tireCompoundQuality)
+    state.menus.grip:AddItem(state.items.brakes)
+
+    state.menus.suspension:AddItem(state.items.suspension)
+    state.menus.suspension:AddItem(state.items.suspensionRaiseSlider)
+    state.menus.suspension:AddItem(state.items.antirollSlider)
+    state.menus.suspension:AddItem(state.items.steeringLockMode)
+
+    state.menus.bias:AddItem(state.items.brakeBiasSlider)
+    state.menus.bias:AddItem(state.items.gripBiasSlider)
+    state.menus.bias:AddItem(state.items.antirollBiasSlider)
+    state.menus.bias:AddItem(state.items.suspensionBiasSlider)
+
+    attachPiStatisticsPanel(state.items.openPower)
+    attachPiStatisticsPanel(state.items.openGrip)
+    attachPiStatisticsPanel(state.items.openSuspension)
+    attachPiStatisticsPanel(state.items.openBias)
     attachPiStatisticsPanel(state.items.engine)
     attachPiStatisticsPanel(state.items.transmission)
     attachPiStatisticsPanel(state.items.suspension)
@@ -774,7 +823,6 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     attachPiStatisticsPanel(state.items.brakes)
     attachPiStatisticsPanel(state.items.antirollSlider)
     attachPiStatisticsPanel(state.items.nitrous)
-    attachPiStatisticsPanel(state.items.openTweaks)
     attachPiStatisticsPanel(state.items.nitrousShotSlider)
     attachPiStatisticsPanel(state.items.steeringLockMode)
     attachPiStatisticsPanel(state.items.brakeBiasSlider)
@@ -783,14 +831,38 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     attachPiStatisticsPanel(state.items.suspensionRaiseSlider)
     attachPiStatisticsPanel(state.items.suspensionBiasSlider)
 
-    state.items.openTweaks.Activated = function(menu)
-        state.switchingToTweaks = true
-        menu:SwitchTo(state.menus.tweaks, 1, true)
+    state.items.openPower.Activated = function(menu)
+        state.switchingToPower = true
+        menu:SwitchTo(state.menus.power, 1, true)
+    end
+    state.items.openGrip.Activated = function(menu)
+        state.switchingToGrip = true
+        menu:SwitchTo(state.menus.grip, 1, true)
+    end
+    state.items.openSuspension.Activated = function(menu)
+        state.switchingToSuspension = true
+        menu:SwitchTo(state.menus.suspension, 1, true)
+    end
+    state.items.openBias.Activated = function(menu)
+        state.switchingToBias = true
+        menu:SwitchTo(state.menus.bias, 1, true)
     end
 
     state.menus.main.OnMenuClose = function()
-        if state.switchingToTweaks then
-            state.switchingToTweaks = false
+        if state.switchingToPower then
+            state.switchingToPower = false
+            return
+        end
+        if state.switchingToGrip then
+            state.switchingToGrip = false
+            return
+        end
+        if state.switchingToSuspension then
+            state.switchingToSuspension = false
+            return
+        end
+        if state.switchingToBias then
+            state.switchingToBias = false
             return
         end
 
@@ -805,13 +877,13 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     end
 
     state.menus.main.OnListChange = function(_, item, index)
+        -- Main menu now contains only submenu launchers/items without list selections.
+    end
+
+    state.menus.power.OnListChange = function(_, item, index)
         local contexts = {
             [state.items.engine] = 'engine',
             [state.items.transmission] = 'transmission',
-            [state.items.suspension] = 'suspension',
-            [state.items.tireCompoundCategory] = 'tireCompoundCategory',
-            [state.items.tireCompoundQuality] = 'tireCompoundQuality',
-            [state.items.brakes] = 'brakes',
             [state.items.nitrous] = 'nitrous',
         }
         local context = contexts[item]
@@ -820,20 +892,56 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
         end
     end
 
-    state.menus.main.OnSliderChange = function(_, item, index)
-        if item == state.items.antirollSlider then
-            handleMainSliderChange(index)
+    state.menus.grip.OnListChange = function(_, item, index)
+        local contexts = {
+            [state.items.tireCompoundCategory] = 'tireCompoundCategory',
+            [state.items.tireCompoundQuality] = 'tireCompoundQuality',
+            [state.items.brakes] = 'brakes',
+        }
+        local context = contexts[item]
+        if context then
+            handleMainMenuSelection(context, index)
         end
     end
 
-    state.menus.tweaks.OnListChange = function(_, item, index)
+    state.menus.suspension.OnListChange = function(_, item, index)
+        local contexts = {
+            [state.items.suspension] = 'suspension',
+        }
+        local context = contexts[item]
+        if context then
+            handleMainMenuSelection(context, index)
+            return
+        end
         if item == state.items.steeringLockMode then
             handleSteeringLockModeSelection(index)
         end
     end
 
-    state.menus.tweaks.OnSliderChange = function(_, item, index)
-        handleTweakSliderChange(item, index)
+    state.menus.suspension.OnSliderChange = function(_, item, index)
+        if item == state.items.antirollSlider then
+            handleMainSliderChange(index)
+        elseif item == state.items.suspensionRaiseSlider then
+            handleTweakSliderChange(item, index)
+        end
+    end
+
+    state.menus.power.OnSliderChange = function(_, item, index)
+        if item == state.items.nitrousShotSlider then
+            handleTweakSliderChange(item, index)
+        end
+    end
+
+    state.menus.grip.OnSliderChange = function(_, item, index)
+        if item == state.items.brakeBiasSlider or item == state.items.gripBiasSlider then
+            handleTweakSliderChange(item, index)
+        end
+    end
+
+    state.menus.bias.OnSliderChange = function(_, item, index)
+        if item == state.items.brakeBiasSlider or item == state.items.gripBiasSlider or item == state.items.antirollBiasSlider or item == state.items.suspensionBiasSlider then
+            handleTweakSliderChange(item, index)
+        end
     end
 
     state.menuInitialized = true
@@ -864,8 +972,11 @@ function PerformanceTuning.ScaleformUI.processFrame()
     local scaleformUI = PerformanceTuning.ScaleformUI
     local state = getScaleformUIState()
     local mainVisible = state.menus.main and state.menus.main:Visible() or false
-    local tweaksVisible = state.menus.tweaks and state.menus.tweaks:Visible() or false
-    local managerMenuOpen = mainVisible or tweaksVisible
+    local powerVisible = state.menus.power and state.menus.power:Visible() or false
+    local gripVisible = state.menus.grip and state.menus.grip:Visible() or false
+    local suspensionVisible = state.menus.suspension and state.menus.suspension:Visible() or false
+    local biasVisible = state.menus.bias and state.menus.bias:Visible() or false
+    local managerMenuOpen = mainVisible or powerVisible or gripVisible or suspensionVisible or biasVisible
     local anyNativeMenuVisible = isAnyNativeMenuOpen()
     state.managerMenuOpen = managerMenuOpen
     state.menuOpen = managerMenuOpen or anyNativeMenuVisible

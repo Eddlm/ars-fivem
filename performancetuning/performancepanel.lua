@@ -27,6 +27,7 @@ local DEFAULT_MENU_LEFT_PX = 20.0
 local DEFAULT_MENU_WIDTH_PX = 431.0
 local PANEL_DRAW_REQUEST_STALE_MS = 1000
 local MAIN_PANEL_Y_OFFSET = -0.01
+local METRIC_DISPLAY_SWAP_INTERVAL_MS = 1500
 local getPrimaryPanelPlacement
 
 local function getNitrousUpgradeLevel(bucket)
@@ -1012,12 +1013,21 @@ local function drawPanelInstanceInternal(vehicle, displayState, stateKey, option
     local orderedLabels = { 'Speed', 'Power', 'Grip', 'Brake' }
     local metricValues = type(panelMetrics.metricValues) == 'table' and panelMetrics.metricValues or {}
     local piValues = type(panelMetrics.values) == 'table' and panelMetrics.values or {}
-    local orderedLeftMarkers = {
+    local orderedPiMarkers = {
         ('%d PI'):format(math.max(0, math.floor((tonumber(piValues[2]) or 0) + 0.5))),
         ('%d PI'):format(math.max(0, math.floor((tonumber(piValues[1]) or 0) + 0.5))),
         ('%d PI'):format(math.max(0, math.floor((tonumber(piValues[3]) or 0) + 0.5))),
         ('%d PI'):format(math.max(0, math.floor((tonumber(piValues[4]) or 0) + 0.5))),
     }
+    local orderedMetricMarkers = {
+        ('%d mph'):format(math.max(0, math.floor((tonumber(metricValues.speed) or 0.0) + 0.5))),
+        ('%.2f G'):format(math.max(0.0, tonumber(metricValues.power) or 0.0)),
+        ('%.2f G'):format(math.max(0.0, tonumber(metricValues.grip) or 0.0)),
+        ('%.2f G'):format(math.max(0.0, tonumber(metricValues.brake) or 0.0)),
+    }
+    local metricToggleWindow = math.floor((GetGameTimer() or 0) / METRIC_DISPLAY_SWAP_INTERVAL_MS)
+    local showingRawMetrics = (metricToggleWindow % 2) == 1
+    local orderedLeftMarkers = showingRawMetrics and orderedMetricMarkers or orderedPiMarkers
     local orderedFills = {
         animationState.fills[2] or 0.0,
         animationState.fills[1] or 0.0,
