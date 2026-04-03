@@ -578,6 +578,22 @@ exports('SetPiDisplayModeIndex', function(index)
     return 1
 end)
 
+exports('GetPerformanceBarsDisplayMode', function()
+    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.getPerformanceBarsDisplayMode then
+        return PerformanceTuning.ScaleformUI.getPerformanceBarsDisplayMode()
+    end
+
+    return 'absolute_benchmark'
+end)
+
+exports('SetPerformanceBarsDisplayMode', function(mode)
+    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.setPerformanceBarsDisplayMode then
+        return PerformanceTuning.ScaleformUI.setPerformanceBarsDisplayMode(mode)
+    end
+
+    return 'absolute_benchmark'
+end)
+
 exports('GetCurrentVehicleRevLimiterEnabled', function()
     if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.getCurrentVehicleRevLimiterEnabled then
         return PerformanceTuning.ScaleformUI.getCurrentVehicleRevLimiterEnabled()
@@ -616,6 +632,25 @@ RegisterCommand('ptune', function()
     else
         notify('ScaleformUI tuning menu is not available.')
     end
+end, false)
+
+RegisterCommand('ptbarsmode', function(_, args)
+    local requested = tostring((args or {})[1] or ''):lower()
+    local scaleformUI = PerformanceTuning.ScaleformUI
+    if not scaleformUI or type(scaleformUI.setPerformanceBarsDisplayMode) ~= 'function' or type(scaleformUI.getPerformanceBarsDisplayMode) ~= 'function' then
+        notify('Bars mode controls are not available.')
+        return
+    end
+
+    local targetMode = requested
+    if targetMode == '' or targetMode == 'toggle' then
+        local current = tostring(scaleformUI.getPerformanceBarsDisplayMode() or 'absolute_benchmark')
+        targetMode = (current == 'vehicle_relative') and 'absolute' or 'relative'
+    end
+
+    local applied = scaleformUI.setPerformanceBarsDisplayMode(targetMode)
+    local label = applied == 'vehicle_relative' and 'Relative' or 'Absolute'
+    notify(('PI bars mode: %s'):format(label))
 end, false)
 
 PerformanceTuning.RuntimeState = RuntimeState

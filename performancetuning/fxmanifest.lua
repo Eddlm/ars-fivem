@@ -48,6 +48,8 @@ exports {
     'OpenPerformanceTuningMenu',
     'GetPiDisplayModeIndex',
     'SetPiDisplayModeIndex',
+    'GetPerformanceBarsDisplayMode',
+    'SetPerformanceBarsDisplayMode',
     'GetCurrentVehicleRevLimiterEnabled',
     'SetCurrentVehicleRevLimiterEnabled',
     'GetCurrentVehicleSteeringLockMode',

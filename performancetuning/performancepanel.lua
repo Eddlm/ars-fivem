@@ -27,7 +27,6 @@ local DEFAULT_MENU_LEFT_PX = 20.0
 local DEFAULT_MENU_WIDTH_PX = 431.0
 local PANEL_DRAW_REQUEST_STALE_MS = 1000
 local MAIN_PANEL_Y_OFFSET = -0.01
-local METRIC_DISPLAY_SWAP_INTERVAL_MS = 1500
 local getPrimaryPanelPlacement
 
 local function getNitrousUpgradeLevel(bucket)
@@ -50,7 +49,8 @@ local function getNitrousUpgradeLevel(bucket)
 end
 
 local function getNitrousPowerBonusValue(bucket, runtimeConfig, performance)
-    local nitrousConfig = ((((runtimeConfig or {}).performanceBars or {}).power or {}).nitrous or {})
+    local performanceModel = (runtimeConfig or {}).performanceModel or (runtimeConfig or {}).performanceBars or {}
+    local nitrousConfig = ((performanceModel.power or {}).nitrous or {})
     local powerBarScaleFactor = tonumber((performance or {}).powerBarScaleFactor) or 0.0
     local barSegmentCount = math.max(1, math.floor(tonumber((performance or {}).barSegmentCount) or INTERNAL_PERFORMANCE_DEFAULTS.barSegmentCount))
     if powerBarScaleFactor <= 0.0 then
@@ -497,7 +497,14 @@ local function getPerformanceBarsDisplayMode(runtimeConfig, requestedMode)
         return overrideMode
     end
 
-    local configuredMode = normalizePerformanceBarsDisplayMode((((runtimeConfig or {}).performanceBars or {}).displayMode))
+    local stateMode = normalizePerformanceBarsDisplayMode(((((PerformanceTuning or {}).ScaleformUI or {}).state or {}).performanceBarsDisplayMode)
+    )
+    if stateMode ~= nil then
+        return stateMode
+    end
+
+    local configuredModel = (runtimeConfig or {}).performanceModel or (runtimeConfig or {}).performanceBars or {}
+    local configuredMode = normalizePerformanceBarsDisplayMode((configuredModel or {}).displayMode)
     if configuredMode ~= nil then
         return configuredMode
     end
@@ -524,7 +531,7 @@ local function getVehicleRelativePerformanceTargets(vehicle, bucket, runtimeConf
     local baseEngine = type(b.baseEngine) == 'table' and b.baseEngine or {}
     local baseTires = type(b.baseTires) == 'table' and b.baseTires or {}
     local baseBrakes = type(b.baseBrakes) == 'table' and b.baseBrakes or {}
-    local bars = (runtimeConfig or {}).performanceBars or {}
+    local bars = (runtimeConfig or {}).performanceModel or (runtimeConfig or {}).performanceBars or {}
     local powerCfg = bars.power or {}
     local topSpeedCfg = bars.topSpeed or {}
     local gripCfg = bars.grip or {}
@@ -581,6 +588,12 @@ end
 local function getPiDisplayModeIndex()
     local scaleformUIState = (((PerformanceTuning or {}).ScaleformUI or {}).state or {})
     local index = math.floor(tonumber(scaleformUIState.piDisplayModeIndex) or 1)
+    return math.max(1, math.min(2, index))
+end
+
+local function getPiPanelDisplayModeIndex()
+    local scaleformUIState = (((PerformanceTuning or {}).ScaleformUI or {}).state or {})
+    local index = math.floor(tonumber(scaleformUIState.piPanelDisplayModeIndex) or 1)
     return math.max(1, math.min(2, index))
 end
 
@@ -1021,12 +1034,11 @@ local function drawPanelInstanceInternal(vehicle, displayState, stateKey, option
     }
     local orderedMetricMarkers = {
         ('%d mph'):format(math.max(0, math.floor((tonumber(metricValues.speed) or 0.0) + 0.5))),
-        ('%.2f G'):format(math.max(0.0, tonumber(metricValues.power) or 0.0)),
-        ('%.2f G'):format(math.max(0.0, tonumber(metricValues.grip) or 0.0)),
-        ('%.2f G'):format(math.max(0.0, tonumber(metricValues.brake) or 0.0)),
+        ('%.3f G'):format(math.max(0.0, tonumber(metricValues.power) or 0.0)),
+        ('%.3f G'):format(math.max(0.0, tonumber(metricValues.grip) or 0.0)),
+        ('%.3f G'):format(math.max(0.0, tonumber(metricValues.brake) or 0.0)),
     }
-    local metricToggleWindow = math.floor((GetGameTimer() or 0) / METRIC_DISPLAY_SWAP_INTERVAL_MS)
-    local showingRawMetrics = (metricToggleWindow % 2) == 1
+    local showingRawMetrics = getPiPanelDisplayModeIndex() == 2
     local orderedLeftMarkers = showingRawMetrics and orderedMetricMarkers or orderedPiMarkers
     local orderedFills = {
         animationState.fills[2] or 0.0,

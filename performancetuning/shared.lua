@@ -1,7 +1,5 @@
--- Declares the full user-facing shared configuration surface for performancetuning.
 PerformanceTuning = PerformanceTuning or {}
 PerformanceTuning.Config = PerformanceTuning.Config or {}
-
 local Config = PerformanceTuning.Config
 
 Config.sliderRanges = {
@@ -14,49 +12,50 @@ Config.nitrous = {
     nativePowerMultiplier = 0.5,
 }
 
+-- This piece of madness is used to scale raw stats like 
+-- grip or speed into reasonable PI numbers for each of the PI categories.
 Config.performancePiDistribution = {
-    power = 6000,
-    topSpeed = 25, 
-    grip = 1200, 
-    brake = 800, 
+    power = 3000, -- 0.3G * 3000 = 900 PI
+    topSpeed = 12.5, -- 100mph * 12.5 = 1250 PI
+    grip = 600, -- 2G * 600 = 1200 PI
+    brake = 400, -- 0.5G * 400 = 200 PI
 }
 
+-- Bars consider these stats as the maximum and they are filled at these points.
+-- Adjust for your overall car stats on your server, so they make sense.
 Config.performanceBarFillTargets = {
-    power = 1.0,
-    topSpeedMph = 250.0,
-    grip = 3.5,
-    brake = 3.5,
+    power = 1.0, --Gs
+    topSpeedMph = 250.0, --MPH
+    grip = 3.5, --Gs
+    brake = 3.5, --Gs
 }
 
--- Unified PI bar tuning surface. Legacy keys are still supported as fallback.
-Config.performanceBars = {
-    -- absolute_benchmark: fixed global targets (legacy behavior)
-    -- vehicle_relative: shows how maxed-out this specific vehicle is
-    displayMode = 'vehicle_relative',
+-- Models how the upgrades work and apply.
+-- Target means offset above baseline for the stat. Power can be upgraded up to 0.1G above stock, for example.
+Config.performanceModel = {
     power = {
         target = 0.1,
         transmission = {
             powerBonusPerUpgrade = 0.01,
         },
         nitrous = {
-            powerBarFillPerNitroLevel = 5,
+            powerBarFillPerNitroLevel = 2,
         },
     },
     topSpeed = {
-        target = 50,
+        target = 50, --Soon to be deprecated. TopSpeed now adjusts to accomodate the upgraded power.
     },
     grip = {
-        target = 0.5,
+        target = 0.5, -- Upgrades target this, multiplier by the quality. Then the offset below applies.
         qualityLadder = {
             low_end = 0.25,
             mid_end = 0.5,
             high_end = 0.75,
-            top_end = 1.0,
+            top_end = 1.0, 
         },
-        -- Literal fTractionCurveMax offsets from the Road-equivalent target.
         compoundRoadOffset = {
             road = 0.0,
-            rally = -0.15, -- Mixed
+            rally = -0.15, -- Non road tires intend to have less base grip but retain more grip off the road.
             offroad = -0.30,
         },
     },
@@ -71,6 +70,8 @@ Config.performanceNearbyPanels = {
     maxPanels = 6,
 }
 
+
+-- These are flavor. Last upgrade is always the target mentioned above, but you can have more granular steps by adding more upgrades here
 Config.packDefinitions = {
     suspension = {
         { id = 'stock', label = 'Stock', enabled = true, description = 'Keeps the vehicle on its original suspension setup.' },
@@ -81,9 +82,9 @@ Config.packDefinitions = {
     transmission = {
         { id = 'stock', label = 'Stock', enabled = true, description = 'Keeps the original gearing and shift behavior.' },
         { id = 'tuned', label = 'Fluid change', enabled = true, description = 'Slightly improves shift speed without changing gearing.', gearCountOffset = 0, clutchRateOffset = 2.0 },
-        { id = 'street', label = 'clutch disc swap', enabled = true, description = 'Noticeably sharpens shifts for street driving.', gearCountOffset = 0, clutchRateOffset = 4.0 },
-        { id = 'pro', label = 'pressure plate swap', enabled = true, description = 'Further increases clutch response and shift speed.', gearCountOffset = 0, clutchRateOffset = 6.0 },
-        { id = 'race', label = 'gearbox swap', enabled = true, description = 'Adds a gear and delivers aggressive shift response.', gearCountOffset = 1, clutchRateOffset = 8.0 },
+        { id = 'street', label = 'Clutch disc swap', enabled = true, description = 'Noticeably sharpens shifts for street driving.', gearCountOffset = 0, clutchRateOffset = 4.0 },
+        { id = 'pro', label = 'Pressure plate swap', enabled = true, description = 'Further increases clutch response and shift speed.', gearCountOffset = 0, clutchRateOffset = 6.0 },
+        { id = 'race', label = 'Gearbox swap', enabled = true, description = 'Adds a gear and delivers aggressive shift response.', gearCountOffset = 1, clutchRateOffset = 8.0 },
         { id = 'race_gearbox', label = 'Race gearbox', enabled = true, description = 'Maximum gearing and the quickest shift response in this set.', gearCountOffset = 2, clutchRateOffset = 10.0 },
     },
     engine = {
@@ -117,6 +118,7 @@ Config.packDefinitions = {
     },
 }
 
+-- Swaps the entire engine handling fields for those of this, a true swap. Funny, or a big shortcut.
 Config.engineSwaps = {
     { id = 'KANJOSJ', label = 'Kanjo SJ Swap', enabled = true, description = 'Uses Kanjo SJ engine values and audio for a full swap.', swapModel = 'KANJOSJ' },
     { id = 'TYRUS', label = 'Tyrus Swap', enabled = true, description = 'Uses Tyrus engine values and audio for a full swap.', swapModel = 'TYRUS' },

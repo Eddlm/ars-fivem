@@ -129,7 +129,7 @@ local function getConfiguredPerformanceBarFillTargets()
 end
 
 local function getConfiguredPerformanceBars()
-    local configuredBars = config.performanceBars or {}
+    local configuredBars = config.performanceModel or config.performanceBars or {}
     local configuredPower = configuredBars.power or {}
     local configuredPowerTransmission = configuredPower.transmission or {}
     local configuredPowerNitrous = configuredPower.nitrous or {}
@@ -237,7 +237,8 @@ runtimeConfig.nitrous.baseDurationMs = getConfiguredNitrousValue('baseDurationMs
 runtimeConfig.nitrous.nativePowerMultiplier = getConfiguredNitrousValue('nativePowerMultiplier')
 runtimeConfig.performancePiDistribution = getConfiguredPiDistribution()
 runtimeConfig.performancePiMultipliers = runtimeConfig.performancePiDistribution
-runtimeConfig.performanceBars = getConfiguredPerformanceBars()
+runtimeConfig.performanceModel = getConfiguredPerformanceBars()
+runtimeConfig.performanceBars = runtimeConfig.performanceModel
 runtimeConfig.performanceBarFillTargets = getConfiguredPerformanceBarFillTargets()
 runtimeConfig.performanceNearbyPanels = config.performanceNearbyPanels or {}
 

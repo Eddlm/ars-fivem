@@ -48,26 +48,6 @@ local LIST_OPTION_DESCRIPTIONS_BY_ID = {
     },
 }
 
-local function getScaleformUIState()
-    local scaleformUI = PerformanceTuning.ScaleformUI
-    scaleformUI.state = scaleformUI.state or {}
-    scaleformUI.state.menus = scaleformUI.state.menus or {}
-    scaleformUI.state.items = scaleformUI.state.items or {}
-    scaleformUI.state.options = scaleformUI.state.options or {}
-    scaleformUI.state.sliderValues = scaleformUI.state.sliderValues or {}
-    scaleformUI.state.dynamicSliderProfiles = scaleformUI.state.dynamicSliderProfiles or {}
-    scaleformUI.state.panels = scaleformUI.state.panels or {}
-    scaleformUI.state.piDisplayModeIndex = math.max(1, math.min(2, math.floor(tonumber(scaleformUI.state.piDisplayModeIndex) or 1)))
-    scaleformUI.state.menuOpen = scaleformUI.state.menuOpen == true
-    scaleformUI.state.menuInitialized = scaleformUI.state.menuInitialized == true
-    scaleformUI.state.switchingToPower = scaleformUI.state.switchingToPower == true
-    scaleformUI.state.switchingToGrip = scaleformUI.state.switchingToGrip == true
-    scaleformUI.state.switchingToSuspension = scaleformUI.state.switchingToSuspension == true
-    scaleformUI.state.switchingToBias = scaleformUI.state.switchingToBias == true
-    scaleformUI.state.switchingToTweaks = scaleformUI.state.switchingToTweaks == true
-    return scaleformUI.state
-end
-
 local function getNearestSuspensionProfileIndex(profile, value)
     local resolvedValue = tonumber(value) or 0.0
     local nearestIndex = 1
@@ -84,6 +64,45 @@ end
 
 local function getMenuDescription(key)
     return MENU_DESCRIPTIONS[key] or ''
+end
+
+local function normalizePerformanceBarsDisplayMode(mode)
+    local normalized = tostring(mode or ''):lower()
+    if normalized == 'vehicle_relative' or normalized == 'relative' then
+        return 'vehicle_relative'
+    end
+    if normalized == 'absolute_benchmark' or normalized == 'absolute' then
+        return 'absolute_benchmark'
+    end
+    return nil
+end
+
+local function getScaleformUIState()
+    local scaleformUI = PerformanceTuning.ScaleformUI
+    scaleformUI.state = scaleformUI.state or {}
+    scaleformUI.state.menus = scaleformUI.state.menus or {}
+    scaleformUI.state.items = scaleformUI.state.items or {}
+    scaleformUI.state.options = scaleformUI.state.options or {}
+    scaleformUI.state.sliderValues = scaleformUI.state.sliderValues or {}
+    scaleformUI.state.dynamicSliderProfiles = scaleformUI.state.dynamicSliderProfiles or {}
+    scaleformUI.state.panels = scaleformUI.state.panels or {}
+    scaleformUI.state.piDisplayModeIndex = math.max(1, math.min(2, math.floor(tonumber(scaleformUI.state.piDisplayModeIndex) or 2)))
+    scaleformUI.state.piPanelDisplayModeIndex = math.max(1, math.min(2, math.floor(tonumber(scaleformUI.state.piPanelDisplayModeIndex) or 1)))
+    if scaleformUI.state.performanceBarsDisplayMode == nil then
+        local runtimeModel = (((PerformanceTuning or {}).RuntimeConfig or {}).performanceModel or ((PerformanceTuning or {}).RuntimeConfig or {}).performanceBars or {})
+        local runtimeMode = normalizePerformanceBarsDisplayMode((runtimeModel or {}).displayMode)
+        scaleformUI.state.performanceBarsDisplayMode = runtimeMode or 'absolute_benchmark'
+    else
+        scaleformUI.state.performanceBarsDisplayMode = normalizePerformanceBarsDisplayMode(scaleformUI.state.performanceBarsDisplayMode) or 'absolute_benchmark'
+    end
+    scaleformUI.state.menuOpen = scaleformUI.state.menuOpen == true
+    scaleformUI.state.menuInitialized = scaleformUI.state.menuInitialized == true
+    scaleformUI.state.switchingToPower = scaleformUI.state.switchingToPower == true
+    scaleformUI.state.switchingToGrip = scaleformUI.state.switchingToGrip == true
+    scaleformUI.state.switchingToSuspension = scaleformUI.state.switchingToSuspension == true
+    scaleformUI.state.switchingToBias = scaleformUI.state.switchingToBias == true
+    scaleformUI.state.switchingToTweaks = scaleformUI.state.switchingToTweaks == true
+    return scaleformUI.state
 end
 
 local function getListOptionDescription(listKey, option, currentValue)
@@ -192,7 +211,7 @@ local function setMenuItemsEnabled(enabled, disabledDescription)
     local resolvedEnabled = enabled == true
     local disabledText = tostring(disabledDescription or 'Enter the driver seat to enable tuning controls.')
     local itemOrder = {
-        'openPower', 'openGrip', 'openSuspension', 'openBias', 'engine', 'transmission', 'suspension', 'tireCompoundCategory', 'tireCompoundQuality',
+        'openPower', 'openGrip', 'openSuspension', 'openBias', 'piPanelDisplayMode', 'engine', 'transmission', 'suspension', 'tireCompoundCategory', 'tireCompoundQuality',
         'brakes', 'antirollSlider', 'nitrous',
         'nitrousShotSlider', 'steeringLockMode', 'brakeBiasSlider',
         'gripBiasSlider', 'antirollBiasSlider', 'suspensionRaiseSlider', 'suspensionBiasSlider',
@@ -582,10 +601,37 @@ end
 function PerformanceTuning.ScaleformUI.setPiDisplayModeIndex(index)
     local state = getScaleformUIState()
     state.piDisplayModeIndex = math.max(1, math.min(2, math.floor(tonumber(index) or 1)))
+    -- Keep bar scaling mode in sync with "Compare with Nearby" mode.
+    -- 1 = personal view (relative bars), 2 = compare with nearby (absolute bars).
+    if state.piDisplayModeIndex == 2 then
+        state.performanceBarsDisplayMode = 'absolute_benchmark'
+    else
+        state.performanceBarsDisplayMode = 'vehicle_relative'
+    end
     if state.menuInitialized then
         PerformanceTuning.ScaleformUI.refreshMenu()
     end
     return state.piDisplayModeIndex
+end
+
+function PerformanceTuning.ScaleformUI.getPerformanceBarsDisplayMode()
+    local state = getScaleformUIState()
+    if math.floor(tonumber(state.piDisplayModeIndex) or 1) == 2 then
+        return 'absolute_benchmark'
+    end
+    return 'vehicle_relative'
+end
+
+function PerformanceTuning.ScaleformUI.setPerformanceBarsDisplayMode(mode)
+    local state = getScaleformUIState()
+    local normalizedMode = normalizePerformanceBarsDisplayMode(mode) or 'absolute_benchmark'
+    -- Bars mode is derived from Compare-with-Nearby mode.
+    state.piDisplayModeIndex = (normalizedMode == 'absolute_benchmark') and 2 or 1
+    state.performanceBarsDisplayMode = normalizedMode
+    if state.menuInitialized then
+        PerformanceTuning.ScaleformUI.refreshMenu()
+    end
+    return state.performanceBarsDisplayMode
 end
 
 function PerformanceTuning.ScaleformUI.getCurrentVehicleRevLimiterEnabled()
@@ -771,6 +817,7 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     state.items.openGrip = UIMenuItem.New('Grip & Brakes', getMenuDescription('grip'))
     state.items.openSuspension = UIMenuItem.New('Suspension & Steering', getMenuDescription('suspensionGroup'))
     state.items.openBias = UIMenuItem.New('Bias', getMenuDescription('bias'))
+    state.items.piPanelDisplayMode = UIMenuListItem.New('PI panel displays:', { 'PI', 'Raw numbers' }, state.piPanelDisplayModeIndex)
     state.items.engine = UIMenuListItem.New('Engine', { 'Stock' }, 1)
     state.items.transmission = UIMenuListItem.New('Transmission', { 'Stock' }, 1)
     state.items.suspension = UIMenuListItem.New('Suspension', { 'Stock' }, 1)
@@ -791,6 +838,7 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     state.menus.main:AddItem(state.items.openGrip)
     state.menus.main:AddItem(state.items.openSuspension)
     state.menus.main:AddItem(state.items.openBias)
+    state.menus.main:AddItem(state.items.piPanelDisplayMode)
 
     state.menus.power:AddItem(state.items.engine)
     state.menus.power:AddItem(state.items.transmission)
@@ -815,6 +863,7 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     attachPiStatisticsPanel(state.items.openGrip)
     attachPiStatisticsPanel(state.items.openSuspension)
     attachPiStatisticsPanel(state.items.openBias)
+    attachPiStatisticsPanel(state.items.piPanelDisplayMode)
     attachPiStatisticsPanel(state.items.engine)
     attachPiStatisticsPanel(state.items.transmission)
     attachPiStatisticsPanel(state.items.suspension)
@@ -877,7 +926,11 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     end
 
     state.menus.main.OnListChange = function(_, item, index)
-        -- Main menu now contains only submenu launchers/items without list selections.
+        if item == state.items.piPanelDisplayMode then
+            state.piPanelDisplayModeIndex = math.max(1, math.min(2, math.floor(tonumber(index) or 1)))
+            state.items.piPanelDisplayMode:Index(state.piPanelDisplayModeIndex)
+            updatePiStatisticsPanels(PerformanceTuning.ScaleformUI.getCurrentVehicle())
+        end
     end
 
     state.menus.power.OnListChange = function(_, item, index)

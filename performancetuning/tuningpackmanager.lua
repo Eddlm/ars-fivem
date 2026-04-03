@@ -392,8 +392,8 @@ end
 
 local function getRelativeGripTargetValue(baseGrip, categoryId, qualityId)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    local performanceBars = runtimeConfig.performanceBars or {}
-    local gripConfig = performanceBars.grip or {}
+    local performanceModel = runtimeConfig.performanceModel or runtimeConfig.performanceBars or {}
+    local gripConfig = performanceModel.grip or {}
     local qualityLadder = gripConfig.qualityLadder or {}
     local compoundRoadOffset = gripConfig.compoundRoadOffset or {}
 
@@ -665,7 +665,7 @@ end
 
 local function getTransmissionPowerBonusForPack(packId)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    local configuredBonus = tonumber(((((runtimeConfig.performanceBars or {}).power or {}).transmission or {}).powerBonusPerUpgrade))
+    local configuredBonus = tonumber((((((runtimeConfig.performanceModel or runtimeConfig.performanceBars or {}).power or {}).transmission or {}).powerBonusPerUpgrade)))
     local perUpgradeBonus = configuredBonus
     if perUpgradeBonus == nil then
         perUpgradeBonus = TRANSMISSION_POWER_BONUS_PER_UPGRADE
@@ -1226,7 +1226,7 @@ function TuningPackManager.applyEnginePack(vehicle, packId, options)
     local normalizedCurrentEnginePack = TuningPackManager.normalizeEnginePackId(bucket.enginePack)
     local engineCombinedPacks = getEngineCombinedPacks()
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    local configuredBars = runtimeConfig.performanceBars or {}
+    local configuredBars = runtimeConfig.performanceModel or runtimeConfig.performanceBars or {}
     local configuredPowerBar = configuredBars.power or {}
     local performance = internals.Performance or {}
     local configuredPowerTarget = tonumber(configuredPowerBar.target)
@@ -1500,7 +1500,7 @@ function TuningPackManager.applyBrakePack(vehicle, packId, options)
     local bucket = vehicleManager.ensureTuningState(vehicle)
     local selectedPack
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    local configuredBars = runtimeConfig.performanceBars or {}
+    local configuredBars = runtimeConfig.performanceModel or runtimeConfig.performanceBars or {}
     local configuredBrakeBar = configuredBars.brake or {}
     local configuredBrakeTarget = tonumber(configuredBrakeBar.target) or 0.60
 
