@@ -3,22 +3,68 @@ local raceInstanceIdsByName = {}
 local nextRaceInstanceId = 1
 local getSavedRaceCounts
 local buildSavedRaceDefinitions
+local buildCheckpointsFromMissionRace
 local knownRaceDefinitionsByName = {}
 local RACE_INDEX_FILE = 'race_index.json'
 local RESOURCE_NAME = 'racingsystem'
 local CUSTOM_RACE_FOLDER = 'CustomRaces'
 local ONLINE_RACE_FOLDER = 'OnlineRaces'
+local checkpointAnomalyLogByKey = {}
 
-local function log(message)
-    return
+local function getExtraPrintLevel()
+    local rawLevel = 0
+    if type(GetConvarInt) == 'function' then
+        rawLevel = math.floor(tonumber(GetConvarInt('rSystemExtraPrints', 0)) or 0)
+    else
+        local raw = type(GetConvar) == 'function' and GetConvar('rSystemExtraPrints', '0') or '0'
+        rawLevel = math.floor(tonumber(raw) or 0)
+    end
+
+    if rawLevel == 1 then
+        return 1
+    end
+    if rawLevel == 2 then
+        return 2
+    end
+    return 0
 end
 
-local function shouldEmitExtraPrints()
-    if type(GetConvarInt) == 'function' then
-        return (tonumber(GetConvarInt('rSystemExtraPrints', 0)) or 0) > 0
+local function logError(message)
+    print(tostring(message or 'Unknown server error.'))
+end
+
+local function logLevelOne(message)
+    if getExtraPrintLevel() == 1 then
+        print(tostring(message or ''))
     end
-    local raw = type(GetConvar) == 'function' and GetConvar('rSystemExtraPrints', '0') or '0'
-    return (tonumber(raw) or 0) > 0
+end
+
+local function logVerbose(message)
+    if getExtraPrintLevel() == 2 then
+        print(tostring(message or ''))
+    end
+end
+
+local function log(message)
+    logVerbose(message)
+end
+
+local function shouldLogCheckpointAnomaly(source, instanceId)
+    local key = ('%s:%s'):format(tonumber(source) or 0, tonumber(instanceId) or -1)
+    local now = GetGameTimer()
+    local lastLoggedAt = tonumber(checkpointAnomalyLogByKey[key]) or -100000
+    if now - lastLoggedAt < 2000 then
+        return false
+    end
+
+    checkpointAnomalyLogByKey[key] = now
+    return true
+end
+
+local function resolvePlayerLogLabel(sourceId)
+    local numericSource = tonumber(sourceId) or 0
+    local playerName = (numericSource == 0 and 'console') or (GetPlayerName(numericSource) or ('player:%s'):format(tostring(numericSource)))
+    return ('%s (%s)'):format(playerName, tostring(numericSource))
 end
 
 local function resolveReadablePlayerName(playerSource, entrant)
@@ -40,7 +86,8 @@ local function resolveReadablePlayerName(playerSource, entrant)
 end
 
 local function logCheckpointPassContext(instance, entrant, reportedCheckpoint, totalCheckpoints, lapNumber, totalLaps, passContext)
-    if not shouldEmitExtraPrints() then
+    local printLevel = getExtraPrintLevel()
+    if printLevel == 0 then
         return
     end
 
@@ -55,20 +102,53 @@ local function logCheckpointPassContext(instance, entrant, reportedCheckpoint, t
     local powerPenaltyMs = math.max(0, math.floor(tonumber(context.powerPenaltyMs) or 0))
     local assumedCrashPenaltyVoided = context.assumedCrashPenaltyVoided == true and 'yes' or 'no'
 
-    print(("[racingsystem][pass] race=%s player=%s(%s) checkpoint=%d/%d lap=%d/%d context=%s penalty=%s outside=%.2fm throttleMs=%d powerMs=%d crashVoided=%s"):format(
-        raceName,
+    local checkpointNumber = math.max(0, math.floor(tonumber(reportedCheckpoint) or 0))
+    local checkpointTotal = math.max(0, math.floor(tonumber(totalCheckpoints) or 0))
+    local currentLap = math.max(1, math.floor(tonumber(lapNumber) or 1))
+    local lapTotal = math.max(1, math.floor(tonumber(totalLaps) or 1))
+
+    local hasPenalty = (
+        penalty ~= 'none'
+        or throttlePenaltyMs > 0
+        or powerPenaltyMs > 0
+        or outsideOffset > 0.01
+        or contextKind ~= 'clean_pass'
+        or assumedCrashPenaltyVoided == 'yes'
+    )
+    if printLevel == 1 and not hasPenalty then
+        return
+    end
+
+    local details = {}
+    if contextKind ~= 'clean_pass' then
+        table.insert(details, ('context: %s'):format(contextKind:gsub('_', ' ')))
+    end
+    if penalty ~= 'none' then
+        table.insert(details, ('penalty: %s'):format(penalty:gsub('_', ' ')))
+    end
+    if outsideOffset > 0.01 then
+        table.insert(details, ('outside by %.2fm'):format(outsideOffset))
+    end
+    if throttlePenaltyMs > 0 then
+        table.insert(details, ('throttle penalty: %dms'):format(throttlePenaltyMs))
+    end
+    if powerPenaltyMs > 0 then
+        table.insert(details, ('power penalty: %dms'):format(powerPenaltyMs))
+    end
+    if assumedCrashPenaltyVoided == 'yes' then
+        table.insert(details, 'crash penalty voided')
+    end
+
+    local detailText = #details > 0 and (' Details: %s.'):format(table.concat(details, ', ')) or ''
+    print(("%s (%s) passed checkpoint %d/%d in race '%s' (lap %d/%d).%s"):format(
         playerName,
         tostring(playerSource),
-        math.max(0, math.floor(tonumber(reportedCheckpoint) or 0)),
-        math.max(0, math.floor(tonumber(totalCheckpoints) or 0)),
-        math.max(1, math.floor(tonumber(lapNumber) or 1)),
-        math.max(1, math.floor(tonumber(totalLaps) or 1)),
-        contextKind,
-        penalty,
-        outsideOffset,
-        throttlePenaltyMs,
-        powerPenaltyMs,
-        assumedCrashPenaltyVoided
+        checkpointNumber,
+        checkpointTotal,
+        raceName,
+        currentLap,
+        lapTotal,
+        detailText
     ))
 end
 
@@ -81,13 +161,12 @@ local function hasAdminAccess(sourceId)
 end
 
 local function auditLog(action, sourceId, details)
-    local playerName = sourceId == 0 and "console" or (GetPlayerName(sourceId) or ("player:%s"):format(tostring(sourceId)))
-    log(("audit action=%s by=%s(%s) details=%s"):format(
-        tostring(action),
-        tostring(playerName),
-        tostring(sourceId),
-        tostring(details or "")
-    ))
+    local actor = resolvePlayerLogLabel(sourceId)
+    local detailText = tostring(details or '')
+    if detailText == '' then
+        detailText = tostring(action or 'Performed a race action')
+    end
+    logLevelOne(("%s %s."):format(tostring(actor), detailText))
 end
 
 -- Mirrors server-side messages to the target player when possible.
@@ -168,10 +247,14 @@ local function saveRaceIndex()
     local encoded = json.encode({
         definitions = definitions,
     })
+    if type(encoded) ~= 'string' or encoded == '' then
+        logError(("The server could not encode '%s'."):format(RACE_INDEX_FILE))
+        return false
+    end
 
     local saveOk = SaveResourceFile(RESOURCE_NAME, RACE_INDEX_FILE, encoded, -1)
     if not saveOk then
-        log(('Failed to save %s'):format(RACE_INDEX_FILE))
+        logError(("The server could not save '%s'."):format(RACE_INDEX_FILE))
         return false
     end
 
@@ -191,7 +274,7 @@ local function loadRaceIndex()
     local decoded = json.decode(rawIndex)
     local definitions = type(decoded) == 'table' and decoded.definitions or nil
     if type(definitions) ~= 'table' then
-        log(('%s could not be parsed as a race definition list.'):format(RACE_INDEX_FILE))
+        logError(("The server could not read '%s' as a race definition list."):format(RACE_INDEX_FILE))
         return
     end
 
@@ -476,7 +559,7 @@ local function buildRaceInstanceSnapshot(instance)
     }
 end
 
-local function buildFullSnapshot()
+local function buildFullSnapshot(viewerSource)
     local instances = {}
 
     for _, instance in pairs(raceInstancesById) do
@@ -501,6 +584,10 @@ local function buildFullSnapshot()
 
     local definitionCount = #definitions
 
+    local numericViewerSource = tonumber(viewerSource) or -1
+    local viewerIsAdmin = numericViewerSource > 0 and hasAdminAccess(numericViewerSource) or false
+    local ownerKillEnabled = true
+
     return {
         races = {},
         definitions = definitions,
@@ -510,11 +597,17 @@ local function buildFullSnapshot()
         customRaceCount = customRaceCount,
         onlineRaceCount = onlineRaceCount,
         instanceCount = #instances,
+        viewer = {
+            source = numericViewerSource,
+            isAdmin = viewerIsAdmin,
+            canDeleteRaceDefinitions = viewerIsAdmin,
+            canKillOwnedInstances = ownerKillEnabled,
+        },
     }
 end
 
 local function sendSnapshot(target)
-    local snapshot = buildFullSnapshot()
+    local snapshot = buildFullSnapshot(target)
     log(('Sending snapshot to %s | definitions=%s instances=%s'):format(
         tostring(target),
         #(type(snapshot.definitions) == 'table' and snapshot.definitions or {}),
@@ -524,7 +617,13 @@ local function sendSnapshot(target)
 end
 
 local function broadcastSnapshot()
-    sendSnapshot(-1)
+    local players = type(GetPlayers) == 'function' and GetPlayers() or {}
+    for _, playerId in ipairs(type(players) == 'table' and players or {}) do
+        local numericPlayerId = tonumber(playerId)
+        if numericPlayerId and numericPlayerId > 0 then
+            sendSnapshot(numericPlayerId)
+        end
+    end
 end
 
 local function buildInstanceAssetPayload(instance)
@@ -1052,6 +1151,7 @@ local function saveBundledUGCById(ugcId)
     local filePath = buildOnlineRaceFilePath(normalizedUGCId)
     local saveOk = SaveResourceFile(RESOURCE_NAME, filePath, rawMissionJson, -1)
     if not saveOk then
+        logError(("The server could not save imported UGC '%s' to '%s'."):format(tostring(normalizedUGCId), filePath))
         return nil, ('Could not save %s.'):format(filePath)
     end
 
@@ -1062,6 +1162,34 @@ local function saveBundledUGCById(ugcId)
         propCount = #props,
         modelHideCount = #modelHides,
     }
+end
+
+local function validateBundledUGCById(ugcId)
+    local normalizedUGCId = sanitizeUGCId(ugcId)
+    if not normalizedUGCId then
+        return nil, 'A valid UGC id is required.'
+    end
+
+    local rawMissionJson, fetchError = fetchUGCJsonContent(buildUGCJsonUrl(normalizedUGCId))
+    if not rawMissionJson then
+        return nil, fetchError or 'Could not download the UGC JSON.'
+    end
+
+    local decodedMissionJson = json.decode(rawMissionJson)
+    local mission = type(decodedMissionJson) == 'table' and decodedMissionJson.mission or nil
+    if type(mission) ~= 'table' then
+        return nil, 'The downloaded UGC JSON could not be decoded back into a mission table.'
+    end
+
+    local checkpoints = buildCheckpointsFromMissionRace(mission.race)
+    if #checkpoints == 0 then
+        return nil, 'The downloaded UGC did not produce any usable checkpoints.'
+    end
+
+    return {
+        ugcId = normalizedUGCId,
+        checkpointCount = #checkpoints,
+    }, nil
 end
 
 local function buildOnlineRacePropsFromMission(objectData)
@@ -1132,7 +1260,7 @@ local function buildOnlineRaceModelHidesFromMission(hideObjectData)
     return modelHides
 end
 
-local function buildCheckpointsFromMissionRace(raceData)
+buildCheckpointsFromMissionRace = function(raceData)
     local checkpoints = {}
     if type(raceData) ~= 'table' then
         return checkpoints
@@ -1262,6 +1390,7 @@ local function deleteRaceDefinition(raceName)
 
     local removeOk, removeError = os.remove(absolutePath)
     if not removeOk then
+        logError(("The server could not delete '%s'. Reason: %s."):format(relativePath, tostring(removeError or 'unknown error')))
         return nil, ('Could not delete %s (%s)'):format(relativePath, tostring(removeError or 'unknown error'))
     end
 
@@ -1299,6 +1428,7 @@ local function saveRaceDefinition(ownerSource, raceName, checkpoints)
     local missionJson = buildMissionJsonFromCheckpoints(sanitizedCheckpoints, existingMissionJson)
     local saveOk = SaveResourceFile(RESOURCE_NAME, filePath, missionJson, -1)
     if not saveOk then
+        logError(("The server could not save '%s'."):format(filePath))
         return nil, ('Could not save %s.'):format(filePath)
     end
 
@@ -1402,6 +1532,11 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         modelHides = modelHides,
         entrants = {},
     }
+
+    local numericOwnerSource = tonumber(ownerSource) or 0
+    if numericOwnerSource > 0 then
+        instance.entrants = { buildEntrant(numericOwnerSource, instance) }
+    end
 
     raceInstancesById[id] = instance
     indexRaceInstanceName(instance)
@@ -1547,6 +1682,10 @@ end
 local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTimingPayload, passContext)
     local instance = raceInstancesById[tonumber(instanceId) or -1]
     if not instance then
+        logLevelOne(("%s sent a checkpoint update for missing instance %s."):format(
+            resolvePlayerLogLabel(source),
+            tostring(instanceId)
+        ))
         return nil, 'That race instance no longer exists.'
     end
 
@@ -1566,11 +1705,24 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
     local expectedCheckpoint = tonumber(entrant.currentCheckpoint) or 1
     local reportedCheckpoint = tonumber(checkpointIndex) or 0
     if reportedCheckpoint ~= expectedCheckpoint then
+        if shouldLogCheckpointAnomaly(source, instance.id) then
+            logLevelOne(("%s sent checkpoint %s out of order in race '%s' (instance %s). Expected checkpoint %s."):format(
+                resolvePlayerLogLabel(source),
+                tostring(reportedCheckpoint),
+                tostring(instance.name or 'unknown'),
+                tostring(instance.id),
+                tostring(expectedCheckpoint)
+            ))
+        end
         return nil, 'Ignored out-of-order checkpoint pass.'
     end
 
     local totalCheckpoints = #(instance.checkpoints or {})
     if totalCheckpoints == 0 then
+        logError(("Race '%s' (instance %s) has no checkpoints while processing a checkpoint pass."):format(
+            tostring(instance.name or 'unknown'),
+            tostring(instance.id)
+        ))
         return nil, 'That race instance has no checkpoints.'
     end
 
@@ -1623,6 +1775,17 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
                 tonumber(instance.bestLapTimeMs) or currentLapTimeMs,
                 bestLapDeltaMs
             )
+            logVerbose(("%s finished lap %d/%d in race '%s' (instance %s): lap=%dms, total=%s, best=%s, delta=%s."):format(
+                resolveReadablePlayerName(source, entrant),
+                currentLap,
+                totalLaps,
+                tostring(instance.name or 'unknown'),
+                tostring(instance.id),
+                currentLapTimeMs,
+                tostring(currentTotalTimeMs or 0),
+                tostring(tonumber(instance.bestLapTimeMs) or currentLapTimeMs),
+                tostring(bestLapDeltaMs)
+            ))
             emitStableLapTimeIfReady(instance, entrant, currentLap, currentLapTimeMs)
         end
     else
@@ -1689,6 +1852,10 @@ RegisterNetEvent('racingsystem:saveEditorRace', function(payload)
     )
 
     if not definition then
+        logLevelOne(("%s could not save the editor race. Reason: %s."):format(
+            resolvePlayerLogLabel(src),
+            tostring(saveError or 'unknown error')
+        ))
         TriggerClientEvent('racingsystem:editorRaceSaved', src, {
             ok = false,
             error = saveError or 'Could not save race.',
@@ -1696,7 +1863,10 @@ RegisterNetEvent('racingsystem:saveEditorRace', function(payload)
         return
     end
 
-    auditLog("saveEditorRace", src, tostring(definition.name or ""))
+    auditLog("saveEditorRace", src, ("saved race '%s' with %s checkpoints"):format(
+        tostring(definition.name or ""),
+        tostring(#(definition.checkpoints or {}))
+    ))
     broadcastSnapshot()
     TriggerClientEvent('racingsystem:editorRaceSaved', src, {
         ok = true,
@@ -1709,6 +1879,11 @@ RegisterNetEvent('racingsystem:registerRaceDefinition', function(raceName)
     local definition, registerError = registerRaceDefinitionIfValid(raceName)
 
     if not definition then
+        logLevelOne(("%s could not register race definition '%s'. Reason: %s."):format(
+            resolvePlayerLogLabel(src),
+            tostring(raceName),
+            tostring(registerError or 'unknown error')
+        ))
         TriggerClientEvent('racingsystem:raceDefinitionRegistered', src, {
             ok = false,
             error = registerError or 'Could not register race definition.',
@@ -1716,6 +1891,10 @@ RegisterNetEvent('racingsystem:registerRaceDefinition', function(raceName)
         return
     end
 
+    auditLog("registerRaceDefinition", src, ("registered race definition '%s' (%s source)"):format(
+        tostring(definition.name or raceName),
+        tostring(definition.sourceType or 'unknown')
+    ))
     broadcastSnapshot()
     TriggerClientEvent('racingsystem:raceDefinitionRegistered', src, {
         ok = true,
@@ -1723,15 +1902,44 @@ RegisterNetEvent('racingsystem:registerRaceDefinition', function(raceName)
     })
 end)
 
+RegisterNetEvent('racingsystem:validateGTAORaceUGCId', function(ugcId)
+    local src = source
+    local validation, validationError = validateBundledUGCById(ugcId)
+
+    if not validation then
+        TriggerClientEvent('racingsystem:gtAoRaceValidationResult', src, {
+            ok = false,
+            ugcId = tostring(ugcId or ''),
+            error = validationError or 'Could not validate GTAO race URL.',
+        })
+        return
+    end
+
+    TriggerClientEvent('racingsystem:gtAoRaceValidationResult', src, {
+        ok = true,
+        ugcId = tostring(validation.ugcId or ''),
+        checkpointCount = tonumber(validation.checkpointCount) or 0,
+    })
+end)
+
 RegisterNetEvent('racingsystem:deleteRaceDefinition', function(raceName)
     local src = source
     if not hasAdminAccess(src) then
+        logLevelOne(("%s tried to delete race definition '%s' without permission."):format(
+            resolvePlayerLogLabel(src),
+            tostring(raceName)
+        ))
         notifyPlayer(src, "You do not have permission to delete races.", true)
         return
     end
     local deletedDefinition, deleteError = deleteRaceDefinition(raceName)
 
     if not deletedDefinition then
+        logLevelOne(("%s could not delete race definition '%s'. Reason: %s."):format(
+            resolvePlayerLogLabel(src),
+            tostring(raceName),
+            tostring(deleteError or 'unknown error')
+        ))
         TriggerClientEvent('racingsystem:raceDefinitionDeleted', src, {
             ok = false,
             error = deleteError or 'Could not delete race definition.',
@@ -1739,7 +1947,7 @@ RegisterNetEvent('racingsystem:deleteRaceDefinition', function(raceName)
         return
     end
 
-    auditLog("deleteRaceDefinition", src, tostring((deletedDefinition or {}).name or raceName))
+    auditLog("deleteRaceDefinition", src, ("deleted race definition '%s'"):format(tostring((deletedDefinition or {}).name or raceName)))
     broadcastSnapshot()
     TriggerClientEvent('racingsystem:raceDefinitionDeleted', src, {
         ok = true,
@@ -1752,12 +1960,24 @@ RegisterNetEvent('racingsystem:invokeRace', function(raceName, lapCount)
     local instance, invokeError = invokeRaceInstance(src, raceName, lapCount)
 
     if not instance then
+        logLevelOne(("%s could not invoke race '%s'. Reason: %s."):format(
+            resolvePlayerLogLabel(src),
+            tostring(raceName),
+            tostring(invokeError or 'unknown error')
+        ))
         notifyPlayer(src, invokeError or 'Could not invoke race.', true)
         return
     end
 
-    auditLog("invokeRace", src, ("%s laps=%s"):format(tostring(raceName), tostring(lapCount)))
+    auditLog("invokeRace", src, ("invoked race '%s' (instance %s, %s lap(s), %s source)"):format(
+        tostring(instance.name or raceName),
+        tostring(instance.id),
+        tostring(instance.laps),
+        tostring(instance.sourceType or 'unknown')
+    ))
     broadcastSnapshot()
+    sendInstanceAssets(src, instance)
+    sendTeleportToLastCheckpoint(src, instance)
 end)
 
 RegisterNetEvent('racingsystem:joinRace', function(raceName)
@@ -1765,10 +1985,20 @@ RegisterNetEvent('racingsystem:joinRace', function(raceName)
     local instance, joinError = joinRaceInstanceByName(src, raceName)
 
     if not instance then
+        logLevelOne(("%s could not join race '%s'. Reason: %s."):format(
+            resolvePlayerLogLabel(src),
+            tostring(raceName),
+            tostring(joinError or 'unknown error')
+        ))
         notifyPlayer(src, joinError or 'Could not join race.', true)
         return
     end
 
+    auditLog("joinRace", src, ("joined race '%s' (instance %s). Entrants now: %s"):format(
+        tostring(instance.name or raceName),
+        tostring(instance.id),
+        tostring(#(instance.entrants or {}))
+    ))
     broadcastSnapshot()
     sendInstanceAssets(src, instance)
     sendTeleportToLastCheckpoint(src, instance)
@@ -1779,10 +2009,20 @@ RegisterNetEvent('racingsystem:startRace', function()
     local instance, startError = startRaceInstanceForSource(src)
 
     if not instance then
+        logLevelOne(("%s could not start the race. Reason: %s."):format(
+            resolvePlayerLogLabel(src),
+            tostring(startError or 'unknown error')
+        ))
         notifyPlayer(src, startError or 'Could not start race.', true)
         return
     end
 
+    auditLog("startRace", src, ("started race '%s' (instance %s) with %s entrants. Countdown: %sms"):format(
+        tostring(instance.name or 'unknown'),
+        tostring(instance.id),
+        tostring(#(instance.entrants or {})),
+        tostring(tonumber((RacingSystem.Config or {}).countdownMs) or 5000)
+    ))
     broadcastSnapshot()
 end)
 
@@ -1804,27 +2044,34 @@ RegisterNetEvent('racingsystem:finishRace', function()
     local src = source
     local instance, finishError = finishRaceInstanceForSource(src)
     if not instance then
+        logLevelOne(("%s could not finish the race. Reason: %s."):format(
+            resolvePlayerLogLabel(src),
+            tostring(finishError or 'unknown error')
+        ))
         notifyPlayer(src, finishError)
         return
     end
 
-    auditLog("finishRace", src, tostring((instance or {}).name or "unknown"))
+    auditLog("finishRace", src, ("finished race '%s' (instance %s)"):format(
+        tostring((instance or {}).name or "unknown"),
+        tostring((instance or {}).id or "unknown")
+    ))
     broadcastSnapshot()
 end)
 
 RegisterNetEvent('racingsystem:countdownReachedZero', function(instanceId, clientGameTimerAtZero)
     local src = source
     local instance = raceInstancesById[tonumber(instanceId) or -1]
-    local playerName = GetPlayerName(src) or ('player:%s'):format(src)
+    local playerLabel = resolvePlayerLogLabel(src)
 
     if not instance then
-        log(('countdown zero <- %s (%s) for missing instance %s'):format(playerName, src, tostring(instanceId)))
+        logLevelOne(("%s reached countdown zero for missing instance %s."):format(playerLabel, tostring(instanceId)))
         return
     end
 
-    log(('countdown zero <- %s (%s) instance=%s state=%s clientTimer=%s serverTimer=%s'):format(
-        playerName,
-        src,
+    logVerbose(("%s reached countdown zero in race '%s' (instance %s, state=%s). clientTimer=%s, serverTimer=%s."):format(
+        playerLabel,
+        tostring(instance.name or 'unknown'),
         tostring(instance.id),
         tostring(instance.state),
         tostring(clientGameTimerAtZero),
@@ -1837,35 +2084,57 @@ RegisterNetEvent('racingsystem:leaveRace', function()
     local instance, leaveError = leaveCurrentRaceInstance(src)
 
     if not instance then
+        logLevelOne(("%s could not leave the race. Reason: %s."):format(
+            resolvePlayerLogLabel(src),
+            tostring(leaveError or 'unknown error')
+        ))
         notifyPlayer(src, leaveError or 'Could not leave race.', true)
         return
     end
 
+    auditLog("leaveRace", src, ("left race '%s' (instance %s). Entrants now: %s"):format(
+        tostring(instance.name or 'unknown'),
+        tostring(instance.id),
+        tostring(#(instance.entrants or {}))
+    ))
     broadcastSnapshot()
 end)
 
 RegisterNetEvent('racingsystem:killRace', function(raceName)
     local src = source
     local instance = findRaceInstanceByName(raceName)
-    local ownerKillEnabled = ((RacingSystem.Config or {}).raceOwnerCanKillOwnedRace) == true
+    local ownerKillEnabled = true
     local ownsRace = instance and tonumber(instance.owner) == tonumber(src)
     if not hasAdminAccess(src) and not (ownerKillEnabled and ownsRace) then
+        logLevelOne(("%s tried to kill race '%s' without permission."):format(
+            resolvePlayerLogLabel(src),
+            tostring(raceName)
+        ))
         notifyPlayer(src, "You do not have permission to kill race instances.", true)
         return
     end
     local killedInstance, killError = killRaceInstanceByName(raceName)
 
     if not killedInstance then
+        logLevelOne(("%s could not kill race '%s'. Reason: %s."):format(
+            resolvePlayerLogLabel(src),
+            tostring(raceName),
+            tostring(killError or 'unknown error')
+        ))
         notifyPlayer(src, killError or 'Could not kill race instance.', true)
         return
     end
 
-    auditLog("killRace", src, tostring(raceName))
+    auditLog("killRace", src, ("killed race '%s' (instance %s)"):format(
+        tostring(raceName),
+        tostring(killedInstance.id or 'unknown')
+    ))
     broadcastSnapshot()
 end)
 
 AddEventHandler('playerDropped', function()
     if removeEntrantFromAllRaceInstances(source) then
+        auditLog("playerDroppedRaceCleanup", source, "disconnected and was removed from one or more active race instances")
         broadcastSnapshot()
     end
 end)
@@ -1890,6 +2159,11 @@ CreateThread(function()
                 for _, entrant in ipairs(instance.entrants or {}) do
                     entrant.lapStartedAt = now
                 end
+                logVerbose(("Race '%s' (instance %s) moved from staging to running with %s entrants."):format(
+                    tostring(instance.name or 'unknown'),
+                    tostring(instance.id),
+                    tostring(#(instance.entrants or {}))
+                ))
                 changedAnyState = true
             end
         end
@@ -1906,7 +2180,7 @@ loadRaceIndex()
 syncKnownRaceDefinitionsFromFiles()
 runIntegrityScript()
 
-local startupSnapshot = buildFullSnapshot()
+local startupSnapshot = buildFullSnapshot(0)
 log(
     ('Server system loaded with %s saved races (%s custom, %s online) and %s active instances.'):format(
         startupSnapshot.definitionCount,

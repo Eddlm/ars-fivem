@@ -18,10 +18,15 @@ shared_scripts {
     'shared.lua'
 }
 
+ui_page 'ui/gtao_race_prompt.html'
+
 files {
     'race_index.json',
     'CustomRaces/*.json',
-    'OnlineRaces/*.json'
+    'OnlineRaces/*.json',
+    'ui/gtao_race_prompt.html',
+    'ui/gtao_race_prompt.css',
+    'ui/gtao_race_prompt.js'
 }
 
 client_scripts {

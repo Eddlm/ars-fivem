@@ -1,6 +1,11 @@
 local latestSnapshot = {
     races = {},
     count = 0,
+    viewer = {
+        isAdmin = false,
+        canDeleteRaceDefinitions = false,
+        canKillOwnedInstances = false,
+    },
 }
 
 local editorState = {
@@ -48,15 +53,22 @@ local EDITOR_PITCH_DOWN_CONTROL_ID = 112
 local raceMenuInitialized = false
 local raceMenuOpen = false
 local raceMainMenu
-local raceInvokeMenu
+local raceMyRaceMenu
+local raceHostRaceMenu
 local raceJoinMenu
+local raceManageMenu
 local raceKillMenu
 local raceEditorMenu
+local raceMyRaceMenuItem
+local raceBrowseMenuItem
+local raceManageMenuItem
 local raceKillMenuItem
 local raceEditorMenuItem
 local raceRefreshItem
-local raceJoinedStatusItem
-local raceOwnedStatusItem
+local raceImportGTAOItem
+local raceMyRaceStatusItem
+local raceBrowseStatusItem
+local raceHostRaceMenuItem
 local raceQuickStartItem
 local raceQuickLeaveItem
 local raceQuickFinishItem
@@ -89,6 +101,8 @@ local clearPredictedRaceProgress
 local raceMenuPendingEditorName = nil
 local raceMenuDeleteConfirmName = nil
 local raceMenuKillItems = {}
+local raceMenuKillItemActions = {}
+local gtaoRaceUrlPromptOpen = false
 
 local function rebuildRaceMenuLapOptions()
     raceMenuLapOptions = {}
@@ -118,6 +132,7 @@ local CHECKPOINT_RECOVERY_FORWARD_VELOCITY_RATIO_MAX = 0.66
 local METERS_PER_SECOND_TO_MILES_PER_HOUR = 2.236936
 local MILES_PER_HOUR_TO_METERS_PER_SECOND = 0.44704
 local CHECKPOINT_SOFT_POWER_PENALTY_MULTIPLIER = 0.05
+local joinTeleportInProgress = false
 
 local function clearPowerPenaltyVehicleOverride()
     local penaltyVehicle = raceRuntimeState.powerPenaltyVehicle
@@ -1062,6 +1077,52 @@ local function isSameRaceInstance(left, right)
     return tostring(left.name or '') == tostring(right.name or '')
 end
 
+local function getViewerPermissions()
+    local viewer = type(latestSnapshot.viewer) == 'table' and latestSnapshot.viewer or {}
+    return {
+        isAdmin = viewer.isAdmin == true,
+        canDeleteRaceDefinitions = viewer.canDeleteRaceDefinitions == true,
+        canKillOwnedInstances = viewer.canKillOwnedInstances == true,
+    }
+end
+
+local function getLocalServerId()
+    local playerId = PlayerId()
+    if not playerId or playerId == -1 then
+        return nil
+    end
+
+    local serverId = GetPlayerServerId(playerId)
+    if not serverId or serverId <= 0 then
+        return nil
+    end
+
+    return serverId
+end
+
+local function canViewerKillInstance(instance)
+    if type(instance) ~= 'table' then
+        return false, 'No race instance is selected.'
+    end
+
+    local viewer = getViewerPermissions()
+    if viewer.isAdmin then
+        return true, nil
+    end
+
+    local localServerId = getLocalServerId()
+    local ownerSource = tonumber(instance.owner)
+    if viewer.canKillOwnedInstances and localServerId and ownerSource and localServerId == ownerSource then
+        return true, nil
+    end
+
+    if viewer.canKillOwnedInstances then
+        return false, 'Only the race owner or an admin can kill this instance.'
+    end
+
+    return false, 'Admin permission is required to kill race instances.'
+end
+
 local function getSelectedInvokeDefinition()
     local selectedIndex = raceInvokeDefinitionItem and raceInvokeDefinitionItem:Index() or 1
     return raceMenuDefinitionOptions[selectedIndex]
@@ -1073,30 +1134,42 @@ local function getSelectedInvokeLapCount()
     return math.max(1, lapValue)
 end
 
-local function rebuildRaceMainMenu(joinedInstance, ownedInstance)
+local function getRaceMenuMode(joinedInstance)
+    if editorState.active then
+        return 'editing'
+    end
+
+    if joinedInstance then
+        return 'in_race'
+    end
+
+    return 'neutral'
+end
+
+local function rebuildRaceMainMenu(menuMode)
     if not raceMainMenu then
         return
     end
 
-    local hasActiveInstances = #raceMenuEndOptions > 0
-
     raceMainMenu:Clear()
-    raceMainMenu:AddItem(raceJoinedStatusItem)
-    raceMainMenu:AddItem(raceOwnedStatusItem)
 
-    if joinedInstance then
-        raceMainMenu:AddItem(raceQuickStartItem)
-        raceMainMenu:AddItem(raceQuickLeaveItem)
-        raceMainMenu:AddItem(raceQuickFinishItem)
-    end
-
-    if hasActiveInstances then
-        raceMainMenu:AddItem(raceKillMenuItem)
-    end
-
-    if not joinedInstance then
+    if menuMode == 'editing' then
+        raceMainMenu:AddItem(raceEditorMenuItem)
+        raceMainMenu:AddItem(raceMyRaceMenuItem)
+        raceMainMenu:AddItem(raceBrowseMenuItem)
+        raceMainMenu:AddItem(raceManageMenuItem)
+    elseif menuMode == 'in_race' then
+        raceMainMenu:AddItem(raceMyRaceMenuItem)
+        raceMainMenu:AddItem(raceBrowseMenuItem)
+        raceMainMenu:AddItem(raceManageMenuItem)
+    else
+        raceMainMenu:AddItem(raceMyRaceMenuItem)
+        raceMainMenu:AddItem(raceBrowseMenuItem)
+        raceMainMenu:AddItem(raceManageMenuItem)
         raceMainMenu:AddItem(raceEditorMenuItem)
     end
+
+    raceMainMenu:AddItem(raceImportGTAOItem)
     raceMainMenu:AddItem(raceRefreshItem)
 end
 
@@ -1113,6 +1186,50 @@ local function promptRaceNameInput(title, defaultText, maxLength)
     end
 
     return nil
+end
+
+local function extractGTAOUGCIdFromInput(value)
+    local raw = RacingSystem.Trim(value)
+    if raw == '' then
+        return nil
+    end
+
+    local cleaned = raw:gsub('%?.*$', '')
+    cleaned = cleaned:gsub('#.*$', '')
+    cleaned = cleaned:gsub('/+$', '')
+
+    local tail = cleaned:match('([^/]+)$') or cleaned
+    if tail:match('^[%w_-]+$') then
+        return tail
+    end
+
+    return nil
+end
+
+local function closeGTAORaceUrlPrompt(forceReset)
+    if not forceReset and not gtaoRaceUrlPromptOpen then
+        return
+    end
+
+    gtaoRaceUrlPromptOpen = false
+    SetNuiFocus(false, false)
+    SendNUIMessage({
+        action = 'racingsystem:toggleGTAORacePrompt',
+        open = false,
+    })
+end
+
+local function openGTAORaceUrlPrompt()
+    if gtaoRaceUrlPromptOpen then
+        return
+    end
+
+    gtaoRaceUrlPromptOpen = true
+    SetNuiFocus(true, true)
+    SendNUIMessage({
+        action = 'racingsystem:toggleGTAORacePrompt',
+        open = true,
+    })
 end
 
 local function getCheckpointWidthIndex(radius)
@@ -1152,8 +1269,10 @@ end
 local function isRaceMenuVisible()
     local menus = {
         raceMainMenu,
-        raceInvokeMenu,
+        raceMyRaceMenu,
+        raceHostRaceMenu,
         raceJoinMenu,
+        raceManageMenu,
         raceKillMenu,
         raceEditorMenu,
     }
@@ -1182,19 +1301,33 @@ local function rebuildRaceKillMenu(instances)
     raceKillMenu:Clear()
     raceMenuEndOptions = {}
     raceMenuKillItems = {}
+    raceMenuKillItemActions = {}
 
     for _, instance in ipairs(instances) do
         raceMenuEndOptions[#raceMenuEndOptions + 1] = instance
+        local canKill, denyReason = canViewerKillInstance(instance)
         local killItem = UIMenuItem.New(
             getInstanceDisplayName(instance),
-            ('Kill this instance for everyone. State: %s | Entrants: %s'):format(
+            ('State: %s | Entrants: %s'):format(
                 getInstanceStateLabel(instance),
                 getInstanceEntrantCount(instance)
             )
         )
-        killItem:RightLabel('Kill')
+        if canKill then
+            killItem:Description(('Kill this race instance for everyone. State: %s | Entrants: %s'):format(
+                getInstanceStateLabel(instance),
+                getInstanceEntrantCount(instance)
+            ))
+            killItem:RightLabel('Kill')
+            killItem:Enabled(true)
+        else
+            killItem:Description(tostring(denyReason or 'You cannot kill this race instance.'))
+            killItem:RightLabel('Locked')
+            killItem:Enabled(false)
+        end
         raceKillMenu:AddItem(killItem)
         raceMenuKillItems[#raceMenuKillItems + 1] = killItem
+        raceMenuKillItemActions[#raceMenuKillItemActions + 1] = canKill
     end
 
     if #raceMenuEndOptions == 0 then
@@ -1213,6 +1346,7 @@ local function refreshRaceMenu()
     local instances = type(latestSnapshot.instances) == 'table' and latestSnapshot.instances or {}
     local joinedInstance = getJoinedRaceInstance()
     local ownedInstance = getOwnedRaceInstance()
+    local menuMode = getRaceMenuMode(joinedInstance)
     local selectedDefinitionIndex = raceInvokeDefinitionItem and raceInvokeDefinitionItem:Index() or 1
 
     raceMenuDefinitionOptions = {}
@@ -1230,11 +1364,19 @@ local function refreshRaceMenu()
     raceInvokeDefinitionItem:Index(math.min(selectedDefinitionIndex, #definitionLabels))
     raceInvokeDefinitionItem:Enabled(true)
     local canInvokeMoreRaces = RacingSystem.Config.playerCanInvokeMultipleRaces or ownedInstance == nil
-    raceInvokeActionItem:Enabled(#raceMenuDefinitionOptions > 0 and canInvokeMoreRaces)
-    if canInvokeMoreRaces then
-        raceInvokeActionItem:Description("")
+    local canHostInCurrentMode = menuMode == 'neutral'
+    local canHostRace = #raceMenuDefinitionOptions > 0 and canInvokeMoreRaces and canHostInCurrentMode
+    raceInvokeActionItem:Enabled(canHostRace)
+    if not canHostInCurrentMode then
+        if menuMode == 'in_race' then
+            raceInvokeActionItem:Description('Leave your current race before hosting another one.')
+        else
+            raceInvokeActionItem:Description('Exit the race editor before hosting a race.')
+        end
+    elseif canInvokeMoreRaces then
+        raceInvokeActionItem:Description('Host the selected race and auto-join it.')
     else
-        raceInvokeActionItem:Description('You already own an active race instance. Kill it first or enable playerCanInvokeMultipleRaces.')
+        raceInvokeActionItem:Description('You already host an active race. Kill it first or enable playerCanInvokeMultipleRaces.')
     end
 
     if raceMenuPendingSelectName then
@@ -1283,6 +1425,7 @@ local function refreshRaceMenu()
         end
     end
 
+    local viewerPermissions = getViewerPermissions()
     local selectedEditorDefinition = raceMenuEditorOptions[raceEditorSelectedItem:Index()]
     local selectedEditorName = editorState.selectedName ~= '' and editorState.selectedName
         or (selectedEditorDefinition and selectedEditorDefinition.name)
@@ -1300,35 +1443,49 @@ local function refreshRaceMenu()
         raceEditorDeleteItem:Label('Delete Selected Race')
         raceEditorDeleteItem:Description(('Delete "%s" from disk and remove it from the race index.'):format(selectedEditorName))
     end
-    raceEditorDeleteItem:Enabled(selectedEditorDefinition ~= nil)
+    local canDeleteDefinition = viewerPermissions.canDeleteRaceDefinitions == true
+    if not canDeleteDefinition then
+        raceEditorDeleteItem:Label('Delete Selected Race')
+        raceEditorDeleteItem:Description('Admin permission is required to delete race definitions.')
+    end
+    raceEditorDeleteItem:Enabled(selectedEditorDefinition ~= nil and canDeleteDefinition)
 
     local widthIndex = getCheckpointWidthIndex(editorState.defaultCheckpointRadius)
     raceEditorWidthItem:Index(widthIndex - 1)
     raceEditorWidthItem:Description(('Set width for new or grabbed checkpoints. Current: %.1f'):format(tonumber(editorState.defaultCheckpointRadius) or 8.0))
     raceEditorGrabCheckboxItem:Checked(editorState.grabbedCheckpointIndex ~= nil)
 
-    raceJoinedStatusItem:Description("")
-
-    local ownedLabel = 'None'
-    local ownedDescription = 'Host a new race instance from a saved race definition.'
-    raceOwnedStatusItem:Label('Host Race')
-    if ownedInstance then
-        raceOwnedStatusItem:Label('Edit Race')
-        ownedLabel = getInstanceStateLabel(ownedInstance)
-        ownedDescription = ('Edit your hosted race: %s | State: %s | Entrants: %s'):format(
-            tostring(ownedInstance.name or 'Unnamed'),
-            getInstanceStateLabel(ownedInstance),
-            getInstanceEntrantCount(ownedInstance)
-        )
-        raceQuickFinishItem:Description(('Finish your active race "%s" for everyone.'):format(tostring(ownedInstance.name or 'Unnamed')))
+    local joinedLabel = joinedInstance and getInstanceDisplayName(joinedInstance) or 'None'
+    raceMyRaceStatusItem:RightLabel(joinedLabel)
+    if joinedInstance then
+        raceMyRaceStatusItem:Description(('You are joined to %s (%s).'):format(
+            getInstanceDisplayName(joinedInstance),
+            getInstanceStateLabel(joinedInstance)
+        ))
     else
-        raceQuickFinishItem:Description('Finish the race instance you are currently running.')
+        raceMyRaceStatusItem:Description('You are not currently joined to a race.')
     end
-    raceOwnedStatusItem:RightLabel(ownedLabel)
-    raceOwnedStatusItem:Description(ownedDescription)
+
+    raceHostRaceMenuItem:Enabled(menuMode == 'neutral')
+    if menuMode == 'in_race' then
+        raceHostRaceMenuItem:Description('You are in a race. Leave it before hosting another race.')
+    elseif menuMode == 'editing' then
+        raceHostRaceMenuItem:Description('You are editing a race. Exit editor mode before hosting.')
+    elseif ownedInstance then
+        raceHostRaceMenuItem:Description(('Configure and host a new race. Current hosted race: %s (%s).'):format(
+            tostring(ownedInstance.name or 'Unnamed'),
+            getInstanceStateLabel(ownedInstance)
+        ))
+    else
+        raceHostRaceMenuItem:Description('Open host setup and create a race from a saved definition.')
+    end
+
     raceQuickStartItem:Enabled(joinedInstance ~= nil)
+    raceQuickStartItem:Description(joinedInstance and 'Start countdown for the race you are currently joined to.' or 'Join a race first.')
     raceQuickLeaveItem:Enabled(joinedInstance ~= nil)
+    raceQuickLeaveItem:Description(joinedInstance and 'Leave your current race instance.' or 'Join a race first.')
     raceQuickFinishItem:Enabled(joinedInstance ~= nil)
+    raceQuickFinishItem:Description(joinedInstance and 'Finish your current race instance.' or 'Join a race first.')
 
     raceMenuJoinOptions = {}
     local joinLabels = {}
@@ -1368,11 +1525,49 @@ local function refreshRaceMenu()
         raceJoinDetailItemTwo:RightLabel('--')
         raceJoinDetailItemThree:RightLabel('--')
     end
-    raceJoinedStatusItem:RightLabel(tostring(#raceMenuJoinOptions))
+    raceBrowseStatusItem:RightLabel(tostring(#raceMenuJoinOptions))
+    raceBrowseStatusItem:Description('Browse active races and join one.')
+    raceBrowseMenuItem:RightLabel(tostring(#raceMenuJoinOptions))
+    raceBrowseMenuItem:Description('Open active race instances.')
+
+    local localServerId = getLocalServerId()
+    local manageableCount = 0
+    for _, instance in ipairs(instances) do
+        local canKill = canViewerKillInstance(instance)
+        if canKill then
+            manageableCount = manageableCount + 1
+        end
+    end
+    raceKillMenuItem:RightLabel(("%s/%s"):format(tostring(manageableCount), tostring(#instances)))
+    raceKillMenuItem:Description('Open active instances. You can only kill races you own (or any race if admin).')
+    raceManageMenuItem:RightLabel(tostring(#instances))
+    if viewerPermissions.isAdmin then
+        raceManageMenuItem:Description('Admin access: manage active race instances.')
+    else
+        raceManageMenuItem:Description('Manage menu shows what you can or cannot kill.')
+    end
+
+    raceMyRaceMenuItem:RightLabel(joinedInstance and getInstanceStateLabel(joinedInstance) or '--')
+    raceMyRaceMenuItem:Description('Host a race and control your current race actions.')
+    raceMyRaceMenuItem:Enabled(true)
+
+    raceImportGTAOItem:Enabled(true)
+    raceImportGTAOItem:RightLabel('URL')
+    raceImportGTAOItem:Description('Paste a GTAO race URL and validate the race ID/JSON without saving yet.')
+
+    local editorAllowed = menuMode ~= 'in_race'
+    raceEditorMenuItem:Enabled(editorAllowed)
+    if menuMode == 'in_race' then
+        raceEditorMenuItem:Description('Leave your current race to use the race editor.')
+    elseif menuMode == 'editing' then
+        raceEditorMenuItem:Description('Continue editing checkpoints and race layout.')
+    else
+        raceEditorMenuItem:Description('Create and edit race checkpoint layouts.')
+    end
 
     rebuildRaceKillMenu(instances)
 
-    rebuildRaceMainMenu(joinedInstance, ownedInstance)
+    rebuildRaceMainMenu(menuMode)
     return true
 end
 
@@ -1386,23 +1581,30 @@ local function initializeRaceMenu()
     end
 
     raceMainMenu = createRaceMenu('Race Control', '~b~RACINGSYSTEM')
-    raceInvokeMenu = createRaceMenu('Create Race', 'Choose a saved race and create a live instance.')
-    raceJoinMenu = createRaceMenu('Available Races', 'Browse currently active race instances.')
+    raceMyRaceMenu = createRaceMenu('My Race', 'Host a race and control your current race actions.')
+    raceHostRaceMenu = createRaceMenu('Host Race', 'Choose a saved race and host it.')
+    raceJoinMenu = createRaceMenu('Browse Races', 'Browse currently active race instances.')
+    raceManageMenu = createRaceMenu('Manage', 'Instance management and moderation actions.')
     raceKillMenu = createRaceMenu('Kill Instance', 'Kill one of the currently active race instances.')
     raceEditorMenu = createRaceMenu('Race Editor', 'Create and edit race checkpoint layouts.')
 
     raceRefreshItem = UIMenuItem.New('Refresh')
-    raceJoinedStatusItem = UIMenuItem.New('Available Races')
-    raceOwnedStatusItem = UIMenuItem.New('Host Race')
+    raceMyRaceMenuItem = UIMenuItem.New('My Race')
+    raceBrowseMenuItem = UIMenuItem.New('Browse Races')
+    raceManageMenuItem = UIMenuItem.New('Manage')
     raceKillMenuItem = UIMenuItem.New('Kill Instance')
     raceEditorMenuItem = UIMenuItem.New('Race Editor')
+    raceImportGTAOItem = UIMenuItem.New('Check GTAO Race URL')
+    raceMyRaceStatusItem = UIMenuItem.New('Current Race')
+    raceBrowseStatusItem = UIMenuItem.New('Active Races')
+    raceHostRaceMenuItem = UIMenuItem.New('Host Race')
     raceQuickStartItem = UIMenuItem.New('Start Countdown')
     raceQuickLeaveItem = UIMenuItem.New('Leave Race')
     raceQuickFinishItem = UIMenuItem.New('Finish Race')
     raceInvokeDefinitionItem = UIMenuListItem.New('Race', { 'Loading...' }, 1)
     raceInvokeLapItem = UIMenuListItem.New('Laps', raceMenuLapOptions, 1)
-    raceInvokeActionItem = UIMenuItem.New('Create Selected Race')
-    raceJoinAvailableListItem = UIMenuListItem.New('Available Races', { 'Loading...' }, 1)
+    raceInvokeActionItem = UIMenuItem.New('Host Selected Race')
+    raceJoinAvailableListItem = UIMenuListItem.New('Races', { 'Loading...' }, 1)
     raceJoinActionItem = UIMenuItem.New('Join Selected Race')
     raceJoinDetailItemOne = UIMenuItem.New('Laps')
     raceJoinDetailItemTwo = UIMenuItem.New('Entrants')
@@ -1415,14 +1617,25 @@ local function initializeRaceMenu()
     raceEditorSaveItem = UIMenuItem.New('Save Selected Race')
     raceEditorDeleteItem = UIMenuItem.New('Delete Selected Race')
 
-    raceInvokeMenu:AddItem(raceInvokeDefinitionItem)
-    raceInvokeMenu:AddItem(raceInvokeLapItem)
-    raceInvokeMenu:AddItem(raceInvokeActionItem)
+    raceMyRaceMenu:AddItem(raceMyRaceStatusItem)
+    raceMyRaceMenu:AddItem(raceHostRaceMenuItem)
+    raceMyRaceMenu:AddItem(raceQuickStartItem)
+    raceMyRaceMenu:AddItem(raceQuickLeaveItem)
+    raceMyRaceMenu:AddItem(raceQuickFinishItem)
+
+    raceHostRaceMenu:AddItem(raceInvokeDefinitionItem)
+    raceHostRaceMenu:AddItem(raceInvokeLapItem)
+    raceHostRaceMenu:AddItem(raceInvokeActionItem)
+
+    raceJoinMenu:AddItem(raceBrowseStatusItem)
     raceJoinMenu:AddItem(raceJoinAvailableListItem)
     raceJoinMenu:AddItem(raceJoinActionItem)
     raceJoinMenu:AddItem(raceJoinDetailItemOne)
     raceJoinMenu:AddItem(raceJoinDetailItemTwo)
     raceJoinMenu:AddItem(raceJoinDetailItemThree)
+
+    raceManageMenu:AddItem(raceKillMenuItem)
+
     raceEditorMenu:AddItem(raceEditorSelectedItem)
     raceEditorMenu:AddItem(raceEditorOpenItem)
     raceEditorMenu:AddItem(raceEditorWidthItem)
@@ -1431,32 +1644,49 @@ local function initializeRaceMenu()
     raceEditorMenu:AddItem(raceEditorSaveItem)
     raceEditorMenu:AddItem(raceEditorDeleteItem)
 
-    raceMainMenu:BindMenuToItem(raceInvokeMenu, raceOwnedStatusItem)
-    raceMainMenu:BindMenuToItem(raceJoinMenu, raceJoinedStatusItem)
-    raceMainMenu:BindMenuToItem(raceKillMenu, raceKillMenuItem)
+    raceMainMenu:BindMenuToItem(raceMyRaceMenu, raceMyRaceMenuItem)
+    raceMainMenu:BindMenuToItem(raceJoinMenu, raceBrowseMenuItem)
+    raceMainMenu:BindMenuToItem(raceManageMenu, raceManageMenuItem)
     raceMainMenu:BindMenuToItem(raceEditorMenu, raceEditorMenuItem)
-    raceOwnedStatusItem.Activated = function(menu)
-        menu:SwitchTo(raceInvokeMenu, 1, true)
+    raceMyRaceMenu:BindMenuToItem(raceHostRaceMenu, raceHostRaceMenuItem)
+    raceManageMenu:BindMenuToItem(raceKillMenu, raceKillMenuItem)
+
+    raceMyRaceMenuItem.Activated = function(menu)
+        menu:SwitchTo(raceMyRaceMenu, 1, true)
     end
-    raceJoinedStatusItem.Activated = function(menu)
+    raceBrowseMenuItem.Activated = function(menu)
         menu:SwitchTo(raceJoinMenu, 1, true)
     end
-    raceKillMenuItem.Activated = function(menu)
-        menu:SwitchTo(raceKillMenu, 1, true)
+    raceManageMenuItem.Activated = function(menu)
+        menu:SwitchTo(raceManageMenu, 1, true)
     end
     raceEditorMenuItem.Activated = function(menu)
         menu:SwitchTo(raceEditorMenu, 1, true)
+    end
+    raceHostRaceMenuItem.Activated = function(menu)
+        menu:SwitchTo(raceHostRaceMenu, 1, true)
+    end
+    raceKillMenuItem.Activated = function(menu)
+        menu:SwitchTo(raceKillMenu, 1, true)
     end
 
     raceMainMenu.OnMenuClose = function()
         setRaceMenuOpenState(isRaceMenuVisible())
     end
 
-    raceInvokeMenu.OnMenuClose = function()
+    raceMyRaceMenu.OnMenuClose = function()
+        setRaceMenuOpenState(isRaceMenuVisible())
+    end
+
+    raceHostRaceMenu.OnMenuClose = function()
         setRaceMenuOpenState(isRaceMenuVisible())
     end
 
     raceJoinMenu.OnMenuClose = function()
+        setRaceMenuOpenState(isRaceMenuVisible())
+    end
+
+    raceManageMenu.OnMenuClose = function()
         setRaceMenuOpenState(isRaceMenuVisible())
     end
 
@@ -1476,7 +1706,13 @@ local function initializeRaceMenu()
         if item == raceRefreshItem then
             requestRaceStateSnapshot()
             refreshRaceMenu()
-        elseif item == raceQuickLeaveItem then
+        elseif item == raceImportGTAOItem then
+            openGTAORaceUrlPrompt()
+        end
+    end
+
+    raceMyRaceMenu.OnItemSelect = function(_, item, index)
+        if item == raceQuickLeaveItem then
             TriggerServerEvent('racingsystem:leaveRace')
         elseif item == raceQuickFinishItem then
             TriggerServerEvent('racingsystem:finishRace')
@@ -1532,7 +1768,7 @@ local function initializeRaceMenu()
         refreshRaceMenu()
     end
 
-    raceInvokeMenu.OnItemSelect = function(_, item, index)
+    raceHostRaceMenu.OnItemSelect = function(_, item, index)
         if item ~= raceInvokeActionItem then
             return
         end
@@ -1544,7 +1780,7 @@ local function initializeRaceMenu()
         end
 
         TriggerServerEvent('racingsystem:invokeRace', definition.name, getSelectedInvokeLapCount())
-        raceInvokeMenu:GoBack()
+        raceHostRaceMenu:GoBack()
     end
 
     raceJoinMenu.OnListChange = function(_, item, index)
@@ -1594,8 +1830,12 @@ local function initializeRaceMenu()
 
     raceKillMenu.OnItemSelect = function(_, item, index)
         local instance = raceMenuEndOptions[index]
-        if instance then
+        local canKill = raceMenuKillItemActions[index] == true
+        if instance and canKill then
             TriggerServerEvent('racingsystem:killRace', instance.name)
+        elseif instance and not canKill then
+            local _, denyReason = canViewerKillInstance(instance)
+            notify(tostring(denyReason or 'You cannot kill this race instance.'))
         end
     end
 
@@ -1628,6 +1868,12 @@ local function initializeRaceMenu()
             raceMenuDeleteConfirmName = nil
             saveEditorRace(trimmedRaceName)
         elseif item == raceEditorDeleteItem then
+            local viewerPermissions = getViewerPermissions()
+            if viewerPermissions.canDeleteRaceDefinitions ~= true then
+                notify('Admin permission is required to delete race definitions.')
+                return
+            end
+
             local selectedDefinition = raceMenuEditorOptions[raceEditorSelectedItem:Index()]
             if not selectedDefinition then
                 notify('Only indexed races can be deleted from this menu.')
@@ -1930,30 +2176,187 @@ RegisterNetEvent('racingsystem:instanceAssets', function(payload)
     instanceAssetCache[tonumber(payload.instanceId)] = payload
 end)
 
-RegisterNetEvent('racingsystem:teleportToCheckpoint', function(payload)
+local function waitForFadeState(targetFadedOut, timeoutMs, pollIntervalMs)
+    local maxWaitMs = math.max(0, math.floor(tonumber(timeoutMs) or 2500))
+    local pollMs = math.max(1, math.floor(tonumber(pollIntervalMs) or 75))
+    local deadline = GetGameTimer() + maxWaitMs
+    while GetGameTimer() <= deadline do
+        local ready = targetFadedOut and IsScreenFadedOut() or IsScreenFadedIn()
+        if ready then
+            return true
+        end
+        Wait(pollMs)
+    end
+
+    return false
+end
+
+local function tryResolveTeleportGroundZ(destinationX, destinationY, destinationZ, timeoutMs, pollIntervalMs, probeOffsets)
+    local maxWaitMs = math.max(0, math.floor(tonumber(timeoutMs) or 6000))
+    local pollMs = math.max(1, math.floor(tonumber(pollIntervalMs) or 75))
+    local offsets = type(probeOffsets) == 'table' and probeOffsets or { 160.0, 100.0, 60.0, 30.0, 10.0 }
+    local streamDeadline = GetGameTimer() + maxWaitMs
+    while GetGameTimer() <= streamDeadline do
+        SetFocusPosAndVel(destinationX, destinationY, destinationZ, 0.0, 0.0, 0.0)
+        RequestCollisionAtCoord(destinationX, destinationY, destinationZ)
+
+        for _, probeOffset in ipairs(offsets) do
+            local probeZ = destinationZ + (tonumber(probeOffset) or 0.0)
+            local foundGround, groundZ = GetGroundZFor_3dCoord(destinationX, destinationY, probeZ, false)
+            if foundGround then
+                return true, tonumber(groundZ) or destinationZ
+            end
+        end
+
+        Wait(pollMs)
+    end
+
+    return false, destinationZ
+end
+
+local function runSmartJoinTeleport(payload)
     if type(payload) ~= 'table' then
         return
     end
 
-    local ped = PlayerPedId()
-    if not DoesEntityExist(ped) then
+    if joinTeleportInProgress then
         return
     end
+    joinTeleportInProgress = true
 
+    local shouldNotifyFallback = false
+    local didFadeOut = false
     local destinationX = tonumber(payload.x) or 0.0
     local destinationY = tonumber(payload.y) or 0.0
     local destinationZ = tonumber(payload.z) or 0.0
     local heading = tonumber(payload.heading) or 0.0
+    local fadeOutMs = 650
+    local fadeInMs = 650
+    local fadeTimeoutMs = 2500
+    local streamTimeoutMs = 6000
+    local pollIntervalMs = 75
+    local groundProbeOffsets = { 160.0, 100.0, 60.0, 30.0, 10.0 }
 
-    local vehicle = GetVehiclePedIsIn(ped, false)
-    if vehicle ~= 0 and GetPedInVehicleSeat(vehicle, -1) == ped then
-        SetEntityCoordsNoOffset(vehicle, destinationX, destinationY, destinationZ, false, false, false)
-        SetEntityHeading(vehicle, heading)
-        SetVehicleOnGroundProperly(vehicle)
-    else
-        SetEntityCoordsNoOffset(ped, destinationX, destinationY, destinationZ, false, false, false)
-        SetEntityHeading(ped, heading)
+    local ok, err = pcall(function()
+        local ped = PlayerPedId()
+        if not DoesEntityExist(ped) then
+            return
+        end
+
+        local vehicle = GetVehiclePedIsIn(ped, false)
+        local isDriverVehicle = vehicle ~= 0 and GetPedInVehicleSeat(vehicle, -1) == ped
+
+        -- Stage C: fade out and wait.
+        if not IsScreenFadedOut() then
+            DoScreenFadeOut(fadeOutMs)
+            waitForFadeState(true, fadeTimeoutMs, pollIntervalMs)
+        end
+        didFadeOut = true
+
+        -- Stage D: focus + stream + ground resolve.
+        local foundGround, resolvedGroundZ = tryResolveTeleportGroundZ(
+            destinationX,
+            destinationY,
+            destinationZ,
+            streamTimeoutMs,
+            pollIntervalMs,
+            groundProbeOffsets
+        )
+        local targetZ = destinationZ
+        if foundGround then
+            targetZ = resolvedGroundZ + 1.0
+            Wait(1000)
+        else
+            shouldNotifyFallback = true
+        end
+
+        -- Stage E: actual teleport.
+        if isDriverVehicle and DoesEntityExist(vehicle) and GetPedInVehicleSeat(vehicle, -1) == ped then
+            SetEntityCoordsNoOffset(vehicle, destinationX, destinationY, targetZ, false, false, false)
+            SetEntityHeading(vehicle, heading)
+            SetEntityVelocity(vehicle, 0.0, 0.0, 0.0)
+            SetVehicleForwardSpeed(vehicle, 0.0)
+            SetVehicleOnGroundProperly(vehicle)
+
+            -- Ensure player vehicle control is restored after halt+teleport sequencing.
+            ClearPedTasks(ped)
+            SetVehicleHandbrake(vehicle, false)
+            SetVehicleUndriveable(vehicle, false)
+            SetVehicleEngineOn(vehicle, true, true, false)
+            SetVehicleBrakeLights(vehicle, false)
+            SetPlayerControl(PlayerId(), true, 0)
+        else
+            SetEntityCoordsNoOffset(ped, destinationX, destinationY, targetZ, false, false, false)
+            SetEntityHeading(ped, heading)
+            SetEntityVelocity(ped, 0.0, 0.0, 0.0)
+            ClearPedTasks(ped)
+            SetPlayerControl(PlayerId(), true, 0)
+        end
+    end)
+
+    -- Stage F/G: always cleanup focus and fade-in, plus fallback warning.
+    ClearFocus()
+
+    if didFadeOut then
+        if not IsScreenFadedIn() then
+            DoScreenFadeIn(fadeInMs)
+            waitForFadeState(false, fadeTimeoutMs, pollIntervalMs)
+        end
     end
+
+    if shouldNotifyFallback then
+        notify('Teleport fallback used: destination ground was not fully resolved in time.')
+    end
+
+    if not ok then
+        notify(('Teleport failed: %s'):format(tostring(err or 'unknown error')), true)
+    end
+
+    joinTeleportInProgress = false
+end
+
+RegisterNetEvent('racingsystem:teleportToCheckpoint', function(payload)
+    runSmartJoinTeleport(payload)
+end)
+
+RegisterNUICallback('racingsystem:gtAoRaceUrlSubmit', function(data, cb)
+    closeGTAORaceUrlPrompt()
+    cb({})
+
+    local typedValue = type(data) == 'table' and data.value or ''
+    local ugcId = extractGTAOUGCIdFromInput(typedValue)
+    if not ugcId then
+        notify('Could not parse a GTAO race ID from that URL.')
+        showWarningSubtitle('Could not parse a GTAO race ID from that URL.', 2500, '~r~')
+        return
+    end
+
+    TriggerServerEvent('racingsystem:validateGTAORaceUGCId', ugcId)
+end)
+
+RegisterNUICallback('racingsystem:gtAoRaceUrlCancel', function(_, cb)
+    closeGTAORaceUrlPrompt()
+    cb({})
+end)
+
+RegisterNetEvent('racingsystem:gtAoRaceValidationResult', function(payload)
+    if type(payload) ~= 'table' then
+        return
+    end
+
+    if payload.ok ~= true then
+        local message = type(payload.error) == 'string' and payload.error or 'Could not validate GTAO race URL.'
+        notify(message)
+        showWarningSubtitle(message, 2500, '~r~')
+        return
+    end
+
+    local successMessage = ('GTAO race %s is valid (%s checkpoints).'):format(
+        tostring(payload.ugcId or 'unknown'),
+        tostring(math.max(0, math.floor(tonumber(payload.checkpointCount) or 0)))
+    )
+    notify(successMessage)
+    showWarningSubtitle(successMessage, 2500, '~g~')
 end)
 
 RegisterNetEvent('racingsystem:editorRaceLoaded', function(payload)
@@ -2527,8 +2930,20 @@ AddEventHandler('onClientResourceStop', function(resourceName)
         return
     end
 
+    closeGTAORaceUrlPrompt(true)
     clearPowerPenaltyVehicleOverride()
     unloadActiveInstanceAssets()
+end)
+
+AddEventHandler('onClientResourceStart', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then
+        return
+    end
+
+    closeGTAORaceUrlPrompt(true)
+    SetTimeout(250, function()
+        closeGTAORaceUrlPrompt(true)
+    end)
 end)
 
 print('[racingsystem] Client system loaded.')

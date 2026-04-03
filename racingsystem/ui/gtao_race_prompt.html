@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GTAO Race URL Prompt</title>
+    <link rel="stylesheet" href="gtao_race_prompt.css" />
+</head>
+<body style="background: transparent;">
+    <main id="overlay" class="overlay hidden" aria-hidden="true" style="display: none;">
+        <section class="panel" role="dialog" aria-modal="true" aria-label="Add GTAO Race URL">
+            <h1>Add GTAO Race URL</h1>
+            <p>Paste URL, then press Enter. Press Escape to cancel.</p>
+            <input
+                id="raceUrlInput"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="https://socialclub.rockstargames.com/job/gtav/..."
+                maxlength="512"
+            />
+        </section>
+    </main>
+    <script src="gtao_race_prompt.js"></script>
+</body>
+</html>
