@@ -8,6 +8,10 @@ local ownerIdentifierPrefixes = SaveConfig.ownerIdentifierPrefixes or {
     "steam:",
     "discord:",
 }
+local function logVm(action, sourceId, message)
+    local who = sourceId == 0 and "console" or (GetPlayerName(sourceId) or ("player:%s"):format(tostring(sourceId)))
+    print(("[vehiclemanager][%s] by=%s(%s) %s"):format(tostring(action), tostring(who), tostring(sourceId), tostring(message or "")))
+end
 local TUNING_SELECTION_SCHEMA = {
     { key = "enginePack", parse = function(value) return type(value) == "string" and value or "stock" end },
     { key = "transmissionPack", parse = function(value) return type(value) == "string" and value or "stock" end },
@@ -38,6 +42,19 @@ local function normalizeSelectionMap(source)
         normalized[key] = value
     end
     return normalized
+end
+
+local function isValidSavePayload(vehicleData)
+    if type(vehicleData) ~= "table" then
+        return false, "payload_not_table"
+    end
+    if type(vehicleData.saveId) ~= "string" or vehicleData.saveId == "" then
+        return false, "missing_save_id"
+    end
+    if type(vehicleData.vehicle) ~= "table" then
+        return false, "missing_vehicle_block"
+    end
+    return true, nil
 end
 
 local function roundToThreeDecimals(value, fallback)
@@ -236,15 +253,16 @@ local function removeIndexEntryByFile(ownerKey, fileName)
 end
 
 RegisterNetEvent("vehiclemanager:saveVehicle", function(vehicleData)
-    if type(vehicleData) ~= "table" then
-        return
-    end
-    if type(vehicleData.saveId) ~= "string" or vehicleData.saveId == "" then
+    local src = source
+    local validPayload, payloadError = isValidSavePayload(vehicleData)
+    if not validPayload then
+        logVm("saveVehicle.reject", src, payloadError)
         return
     end
 
-    local ownerKey, ownerIdentifier = getOwnerDirectory(source)
+    local ownerKey, ownerIdentifier = getOwnerDirectory(src)
     if not ownerKey or not ownerIdentifier then
+        logVm("saveVehicle.reject", src, "missing_owner_identifier")
         return
     end
 
@@ -255,7 +273,7 @@ RegisterNetEvent("vehiclemanager:saveVehicle", function(vehicleData)
     vehicleData.savedAt = os.date("!%Y-%m-%dT%H:%M:%SZ")
     vehicleData.server = {
         resource = GetCurrentResourceName(),
-        savedBy = source,
+        savedBy = src,
         receivedAt = os.date("!%Y-%m-%dT%H:%M:%SZ"),
     }
     vehicleData.tuning = normalizeTuningEnvelope(vehicleData.tuning)
@@ -268,14 +286,17 @@ RegisterNetEvent("vehiclemanager:saveVehicle", function(vehicleData)
     local fileName = buildSaveFileName(ownerKey, vehicleData)
     local ok = SaveResourceFile(GetCurrentResourceName(), fileName, encoded, -1)
     if not ok then
+        logVm("saveVehicle.reject", src, ("write_failed file=%s"):format(fileName))
         return
     end
 
     if not upsertIndexEntry(ownerKey, buildIndexEntry(fileName, vehicleData)) then
+        logVm("saveVehicle.reject", src, ("index_upsert_failed file=%s"):format(fileName))
         return
     end
 
-    TriggerClientEvent("vehiclemanager:vehicleSaved", source, vehicleData.saveId)
+    logVm("saveVehicle.ok", src, ("saveId=%s file=%s"):format(tostring(vehicleData.saveId), tostring(fileName)))
+    TriggerClientEvent("vehiclemanager:vehicleSaved", src, vehicleData.saveId)
 end)
 
 RegisterNetEvent("vehiclemanager:requestSavedVehicleIndex", function()
@@ -304,6 +325,7 @@ RegisterNetEvent("vehiclemanager:requestSavedVehiclePayload", function(fileName)
 
     local allowedPrefix = ("%s/%s_"):format(saveDirectory, ownerKey)
     if string.sub(fileName, 1, #allowedPrefix) ~= allowedPrefix then
+        logVm("requestSavedVehiclePayload.reject", src, ("prefix_mismatch file=%s"):format(tostring(fileName)))
         TriggerClientEvent("vehiclemanager:receiveSavedVehiclePayload", src, nil)
         return
     end
@@ -322,10 +344,12 @@ RegisterNetEvent("vehiclemanager:requestSavedVehiclePayload", function(fileName)
 
     local owner = payload.owner or {}
     if owner.license ~= ownerIdentifier then
+        logVm("requestSavedVehiclePayload.reject", src, ("owner_mismatch file=%s"):format(tostring(fileName)))
         TriggerClientEvent("vehiclemanager:receiveSavedVehiclePayload", src, nil)
         return
     end
 
+    logVm("requestSavedVehiclePayload.ok", src, ("file=%s saveId=%s"):format(tostring(fileName), tostring(payload.saveId or "")))
     TriggerClientEvent("vehiclemanager:receiveSavedVehiclePayload", src, payload)
 end)
 
@@ -357,12 +381,14 @@ RegisterNetEvent("vehiclemanager:updateSavedVehicleSnapshot", function(saveId, v
 
     local ownerKey, ownerIdentifier = getOwnerDirectory(src)
     if not ownerKey or not ownerIdentifier then
+        logVm("updateSavedVehicleSnapshot.reject", src, "missing_owner_identifier")
         return
     end
 
     local fileName = buildSaveFileNameFromId(ownerKey, saveId)
     local rawPayload = LoadResourceFile(GetCurrentResourceName(), fileName)
     if not rawPayload or rawPayload == "" then
+        logVm("updateSavedVehicleSnapshot.reject", src, ("missing_payload file=%s"):format(tostring(fileName)))
         return
     end
 
@@ -373,6 +399,7 @@ RegisterNetEvent("vehiclemanager:updateSavedVehicleSnapshot", function(saveId, v
 
     local owner = payload.owner or {}
     if owner.license ~= ownerIdentifier then
+        logVm("updateSavedVehicleSnapshot.reject", src, ("owner_mismatch file=%s"):format(tostring(fileName)))
         return
     end
 
@@ -409,9 +436,67 @@ RegisterNetEvent("vehiclemanager:updateSavedVehicleSnapshot", function(saveId, v
 
     local ok = SaveResourceFile(GetCurrentResourceName(), fileName, encoded, -1)
     if not ok then
+        logVm("updateSavedVehicleSnapshot.reject", src, ("write_failed file=%s"):format(tostring(fileName)))
         return
     end
 
     upsertIndexEntry(ownerKey, buildIndexEntry(fileName, payload))
+    logVm("updateSavedVehicleSnapshot.ok", src, ("saveId=%s file=%s"):format(tostring(saveId), tostring(fileName)))
     TriggerClientEvent("vehiclemanager:vehicleSnapshotUpdated", src, saveId)
 end)
+
+RegisterCommand("vm_save_inspect", function(src, args)
+    if not src or src <= 0 then
+        print("Usage in-game: /vm_save_inspect <saveId>")
+        return
+    end
+    local saveId = tostring((args or {})[1] or "")
+    if saveId == "" then
+        TriggerClientEvent("chat:addMessage", src, { args = { "^1vehiclemanager", "Usage: /vm_save_inspect <saveId>" } })
+        return
+    end
+    local ownerKey = getOwnerDirectory(src)
+    if not ownerKey then
+        TriggerClientEvent("chat:addMessage", src, { args = { "^1vehiclemanager", "Could not resolve owner identifier." } })
+        return
+    end
+    local fileName = buildSaveFileNameFromId(ownerKey, saveId)
+    local rawPayload = LoadResourceFile(GetCurrentResourceName(), fileName)
+    if not rawPayload or rawPayload == "" then
+        TriggerClientEvent("chat:addMessage", src, { args = { "^1vehiclemanager", ("Save not found: %s"):format(saveId) } })
+        return
+    end
+    local payload = json.decode(rawPayload) or {}
+    local identity = type(payload.identity) == "table" and payload.identity or {}
+    local plate = tostring(identity.plate or "")
+    local model = tostring(identity.displayName or identity.model or "unknown")
+    local savedAt = tostring(payload.savedAt or "unknown")
+    TriggerClientEvent("chat:addMessage", src, { args = { "^2vehiclemanager", ("saveId=%s model=%s plate=%s savedAt=%s"):format(saveId, model, plate, savedAt) } })
+end, false)
+
+RegisterCommand("vm_save_delete", function(src, args)
+    if not src or src <= 0 then
+        print("Usage in-game: /vm_save_delete <saveId>")
+        return
+    end
+    local saveId = tostring((args or {})[1] or "")
+    if saveId == "" then
+        TriggerClientEvent("chat:addMessage", src, { args = { "^1vehiclemanager", "Usage: /vm_save_delete <saveId>" } })
+        return
+    end
+    local ownerKey = getOwnerDirectory(src)
+    if not ownerKey then
+        TriggerClientEvent("chat:addMessage", src, { args = { "^1vehiclemanager", "Could not resolve owner identifier." } })
+        return
+    end
+    local fileName = buildSaveFileNameFromId(ownerKey, saveId)
+    local removed = removeIndexEntryByFile(ownerKey, fileName)
+    if not removed then
+        TriggerClientEvent("chat:addMessage", src, { args = { "^1vehiclemanager", ("Save not found in index: %s"):format(saveId) } })
+        return
+    end
+    SaveResourceFile(GetCurrentResourceName(), fileName, "", -1)
+    logVm("vm_save_delete.ok", src, ("saveId=%s file=%s"):format(tostring(saveId), tostring(fileName)))
+    TriggerClientEvent("vehiclemanager:receiveSavedVehicleIndex", src, loadVehicleIndex(ownerKey))
+    TriggerClientEvent("chat:addMessage", src, { args = { "^2vehiclemanager", ("Deleted save: %s"):format(saveId) } })
+end, false)

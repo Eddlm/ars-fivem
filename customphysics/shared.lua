@@ -14,12 +14,25 @@ rolloversEnabled = true,
     offroadMaxMultiplier = 5.0,
 
     -- Fallback value in case the car does not get a rev limiter state bag from performancetuning.
+    -- If performancetuning tune state is missing, this fallback controls whether customphysics still enforces a limiter.
     fallbackRevLimiterEnabled = false,
 
     -- Powerslides
     slideAngleStepDegrees = 20.0,
     slideMaxMultiplier = 5.0,
     slideSpeedThresholdMetersPerSecond = 3.0,
+
+    nitrous = {
+        controlId = 73,
+        defaultOverrideLevel = 1.0,
+        defaultHudFill = 100.0,
+        debugStatusIntervalMs = 1000,
+    },
+
+    debug = {
+        command = "customphysicsdebug",
+        printStartupSummary = true,
+    },
 
     materialTyreDragByIndex = {
         [0] = -0.15,

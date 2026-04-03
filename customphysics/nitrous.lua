@@ -1,16 +1,25 @@
 CustomPhysicsNitrous = CustomPhysicsNitrous or {}
+local Config = (CustomPhysics or {}).Config or {}
+local NitrousConfig = type(Config.nitrous) == "table" and Config.nitrous or {}
 
 local Nitrous = {
     ptfxAsset = 'veh_xs_vehicle_mods',
-    defaultOverrideLevel = 1.0,
-    defaultHudFill = 100.0,
-    controlId = 73,
+    defaultOverrideLevel = tonumber(NitrousConfig.defaultOverrideLevel) or 1.0,
+    defaultHudFill = tonumber(NitrousConfig.defaultHudFill) or 100.0,
+    controlId = math.max(0, math.floor(tonumber(NitrousConfig.controlId) or 73)),
 }
 
 local activeNitrousShot = {
     vehicle = nil,
     activeUntil = 0,
+    lastStatusNotifyAt = 0,
 }
+
+local function notify(message)
+    BeginTextCommandThefeedPost("STRING")
+    AddTextComponentSubstringPlayerName(tostring(message or ""))
+    EndTextCommandThefeedPostTicker(false, false)
+end
 
 local function requestNitrousPtfxAsset()
     if HasNamedPtfxAssetLoaded(Nitrous.ptfxAsset) then
@@ -33,8 +42,12 @@ end
 function CustomPhysicsNitrous.reset(vehicle)
     local targetVehicle = vehicle or activeNitrousShot.vehicle
     stopNitrousOverride(targetVehicle)
+    if activeNitrousShot.vehicle ~= nil then
+        notify("Nitrous ended.")
+    end
     activeNitrousShot.vehicle = nil
     activeNitrousShot.activeUntil = 0
+    activeNitrousShot.lastStatusNotifyAt = 0
 end
 
 function CustomPhysicsNitrous.executeShot(vehicle, instructions)
@@ -62,6 +75,8 @@ function CustomPhysicsNitrous.executeShot(vehicle, instructions)
     SetVehicleHudSpecialAbilityBarActive(vehicle, false)
     activeNitrousShot.vehicle = vehicle
     activeNitrousShot.activeUntil = GetGameTimer() + durationMs
+    activeNitrousShot.lastStatusNotifyAt = 0
+    notify(("Nitrous active for %.1fs."):format(durationMs / 1000.0))
     return true
 end
 
@@ -83,6 +98,27 @@ function CustomPhysicsNitrous.update(vehicle, now)
     DisableControlAction(0, Nitrous.controlId, true)
     DisableControlAction(1, Nitrous.controlId, true)
     DisableControlAction(2, Nitrous.controlId, true)
+
+    local intervalMs = math.max(250, math.floor(tonumber(NitrousConfig.debugStatusIntervalMs) or 1000))
+    if (now - (activeNitrousShot.lastStatusNotifyAt or 0)) >= intervalMs then
+        activeNitrousShot.lastStatusNotifyAt = now
+        local remainingMs = math.max(0, (activeNitrousShot.activeUntil or 0) - now)
+        notify(("Nitrous remaining: %.1fs"):format(remainingMs / 1000.0))
+    end
+end
+
+function CustomPhysicsNitrous.getDebugSnapshot()
+    local now = GetGameTimer()
+    local activeVehicle = activeNitrousShot.vehicle
+    local active = activeVehicle ~= nil and now < (activeNitrousShot.activeUntil or 0)
+    local remainingMs = active and math.max(0, (activeNitrousShot.activeUntil or 0) - now) or 0
+    return {
+        active = active,
+        remainingMs = remainingMs,
+        controlId = Nitrous.controlId,
+        defaultOverrideLevel = Nitrous.defaultOverrideLevel,
+        defaultHudFill = Nitrous.defaultHudFill,
+    }
 end
 
 RegisterNetEvent('customphysics:nitrous:executeShot', function(vehicle, instructions)

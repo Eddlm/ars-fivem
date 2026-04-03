@@ -10,6 +10,8 @@ RacingSystem.Config = {
     maxLapCount = 10,
     playerCanInvokeMultipleRaces = false,
     countdownMs = 5000,
+    debugLogging = true,
+    adminAce = "racingsystem.admin",
 }
 
 RacingSystem.States = {

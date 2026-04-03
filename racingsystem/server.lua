@@ -10,7 +10,28 @@ local CUSTOM_RACE_FOLDER = 'CustomRaces'
 local ONLINE_RACE_FOLDER = 'OnlineRaces'
 
 local function log(message)
-    return
+    if ((RacingSystem.Config or {}).debugLogging) ~= true then
+        return
+    end
+    print(("[racingsystem] %s"):format(tostring(message or "")))
+end
+
+local function hasAdminAccess(sourceId)
+    local ace = tostring(((RacingSystem.Config or {}).adminAce) or "racingsystem.admin")
+    if sourceId == 0 then
+        return true
+    end
+    return IsPlayerAceAllowed(sourceId, ace)
+end
+
+local function auditLog(action, sourceId, details)
+    local playerName = sourceId == 0 and "console" or (GetPlayerName(sourceId) or ("player:%s"):format(tostring(sourceId)))
+    log(("audit action=%s by=%s(%s) details=%s"):format(
+        tostring(action),
+        tostring(playerName),
+        tostring(sourceId),
+        tostring(details or "")
+    ))
 end
 
 -- Mirrors server-side messages to the target player when possible.
@@ -1425,6 +1446,7 @@ local function broadcastLapCompleted(instance, entrant, lapNumber, lapTimeMs, to
         if entrantSource > 0 then
             TriggerClientEvent('racingsystem:lapCompleted', entrantSource, {
                 instanceId = instance.id,
+                playerSource = tonumber(entrant.source) or 0,
                 playerName = tostring(entrant.name or ('Player %s'):format(tostring(entrant.source or '?'))),
                 lapNumber = tonumber(lapNumber) or 1,
                 lapTimeMs = tonumber(lapTimeMs) or 0,
@@ -1592,6 +1614,7 @@ RegisterNetEvent('racingsystem:saveEditorRace', function(payload)
         return
     end
 
+    auditLog("saveEditorRace", src, tostring(definition.name or ""))
     broadcastSnapshot()
     TriggerClientEvent('racingsystem:editorRaceSaved', src, {
         ok = true,
@@ -1620,6 +1643,10 @@ end)
 
 RegisterNetEvent('racingsystem:deleteRaceDefinition', function(raceName)
     local src = source
+    if not hasAdminAccess(src) then
+        notifyPlayer(src, "You do not have permission to delete races.", true)
+        return
+    end
     local deletedDefinition, deleteError = deleteRaceDefinition(raceName)
 
     if not deletedDefinition then
@@ -1630,6 +1657,7 @@ RegisterNetEvent('racingsystem:deleteRaceDefinition', function(raceName)
         return
     end
 
+    auditLog("deleteRaceDefinition", src, tostring((deletedDefinition or {}).name or raceName))
     broadcastSnapshot()
     TriggerClientEvent('racingsystem:raceDefinitionDeleted', src, {
         ok = true,
@@ -1646,6 +1674,7 @@ RegisterNetEvent('racingsystem:invokeRace', function(raceName, lapCount)
         return
     end
 
+    auditLog("invokeRace", src, ("%s laps=%s"):format(tostring(raceName), tostring(lapCount)))
     broadcastSnapshot()
 end)
 
@@ -1697,6 +1726,7 @@ RegisterNetEvent('racingsystem:finishRace', function()
         return
     end
 
+    auditLog("finishRace", src, tostring((instance or {}).name or "unknown"))
     broadcastSnapshot()
 end)
 
@@ -1734,6 +1764,10 @@ end)
 
 RegisterNetEvent('racingsystem:killRace', function(raceName)
     local src = source
+    if not hasAdminAccess(src) then
+        notifyPlayer(src, "You do not have permission to kill race instances.", true)
+        return
+    end
     local instance, killError = killRaceInstanceByName(raceName)
 
     if not instance then
@@ -1741,6 +1775,7 @@ RegisterNetEvent('racingsystem:killRace', function(raceName)
         return
     end
 
+    auditLog("killRace", src, tostring(raceName))
     broadcastSnapshot()
 end)
 
@@ -1787,7 +1822,7 @@ syncKnownRaceDefinitionsFromFiles()
 
 local startupSnapshot = buildFullSnapshot()
 log(
-    ('Server scaffolding loaded with %s saved races (%s custom, %s online) and %s active instances.'):format(
+    ('Server system loaded with %s saved races (%s custom, %s online) and %s active instances.'):format(
         startupSnapshot.definitionCount,
         startupSnapshot.customRaceCount or 0,
         startupSnapshot.onlineRaceCount or 0,

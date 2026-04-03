@@ -1,5 +1,4 @@
 local Config = (CustomCam or {}).Config or {}
-local LOOK_BACK_CONTROL = 79 -- INPUT_VEH_LOOK_BEHIND
 local DEFAULT_GAMEPLAY_CAM_FOV = 60.0
 local VIRTUAL_MIRROR_HORIZONTAL_FOV_DEGREES = 90.0
 local VIRTUAL_MIRROR_VERTICAL_FOV_DEGREES = 15.0
@@ -69,6 +68,67 @@ local toggleHoldState = {
     heldSince = nil,
     hasTriggered = false
 }
+local lastControlHintAt = 0
+
+local function getToggleControlId()
+    local controls = type(Config.Controls) == "table" and Config.Controls or {}
+    return math.max(0, math.floor(tonumber(controls.toggleControlId) or 0))
+end
+
+local function getLookBackControlId()
+    local controls = type(Config.Controls) == "table" and Config.Controls or {}
+    return math.max(0, math.floor(tonumber(controls.lookBackControlId) or 79))
+end
+
+local function warnConfig(message)
+    print(("[customcam] config warning: %s"):format(tostring(message or "unknown")))
+end
+
+local function validateConfig()
+    local holdMs = math.floor(tonumber(Config.toggleHoldMs) or 1000)
+    if holdMs < 250 or holdMs > 5000 then
+        warnConfig(("toggleHoldMs out of range (%s). Clamping to 250..5000."):format(tostring(Config.toggleHoldMs)))
+    end
+    Config.toggleHoldMs = math.max(250, math.min(5000, holdMs))
+
+    local mirror = type(Config.VirtualMirror) == "table" and Config.VirtualMirror or {}
+    local width = tonumber(mirror.widthNormalized)
+    local height = tonumber(mirror.heightNormalized)
+    if width and (width < 0.05 or width > 0.9) then
+        warnConfig(("VirtualMirror.widthNormalized=%s looks unsafe (expected 0.05..0.9)."):format(tostring(width)))
+    end
+    if height and (height < 0.03 or height > 0.4) then
+        warnConfig(("VirtualMirror.heightNormalized=%s looks unsafe (expected 0.03..0.4)."):format(tostring(height)))
+    end
+    if getToggleControlId() == getLookBackControlId() then
+        warnConfig("Controls.toggleControlId matches Controls.lookBackControlId and may conflict.")
+    end
+end
+
+local function showControlHint(message)
+    BeginTextCommandDisplayHelp("STRING")
+    AddTextComponentSubstringPlayerName(tostring(message))
+    EndTextCommandDisplayHelp(0, false, false, 2200)
+end
+
+local function showInactiveControlHints()
+    if Config.showControlHints ~= true then
+        return
+    end
+
+    local now = GetGameTimer()
+    if (now - lastControlHintAt) < 12000 then
+        return
+    end
+
+    local ped = PlayerPedId()
+    if not IsPedInAnyVehicle(ped, false) then
+        return
+    end
+
+    lastControlHintAt = now
+    showControlHint("Hold camera toggle to enable custom cam. Press look-back to reverse view while active.")
+end
 
 -- Shared math helpers keep the camera motion code readable.
 local function clamp(value, minValue, maxValue)
@@ -494,9 +554,10 @@ end
 
 local function updateLookBackState()
     local previousLookBackState = state.lookBackActive
+    local lookBackControlId = getLookBackControlId()
 
-    local justPressed = isControlJustPressedAnyPad(LOOK_BACK_CONTROL)
-    local justReleased = isControlJustReleasedAnyPad(LOOK_BACK_CONTROL)
+    local justPressed = isControlJustPressedAnyPad(lookBackControlId)
+    local justReleased = isControlJustReleasedAnyPad(lookBackControlId)
 
     if justPressed then
         state.lookBackActive = true
@@ -504,7 +565,7 @@ local function updateLookBackState()
         state.lookBackActive = false
     elseif state.lookBackActive then
         -- Keep the state sticky only while the key remains held.
-        state.lookBackActive = isControlPressedAnyPad(LOOK_BACK_CONTROL)
+        state.lookBackActive = isControlPressedAnyPad(lookBackControlId)
     end
 
     return previousLookBackState ~= state.lookBackActive
@@ -625,10 +686,15 @@ end
 local function startFollowCam()
     local ped = PlayerPedId()
     if not IsPedInAnyVehicle(ped, false) then
+        warnConfig("startFollowCam aborted: player is not in a vehicle.")
         return
     end
 
     local vehicle = GetVehiclePedIsIn(ped, false)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+        warnConfig("startFollowCam aborted: invalid vehicle entity.")
+        return
+    end
     activateCamera()
     state.lookBackActive = false
     seedFollowState(vehicle)
@@ -1065,6 +1131,11 @@ local function updateFollowCam()
     end
 
     local vehicle = GetVehiclePedIsIn(ped, false)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+        warnConfig("updateFollowCam cleanup: active camera lost vehicle context.")
+        cleanupCamera()
+        return
+    end
     if isHoodViewMode() then
         updateHoodCam(vehicle)
         return
@@ -1162,7 +1233,7 @@ end
 
 -- Holding the camera control for long enough toggles the custom camera state.
 local function isToggleCameraHeld()
-    return IsControlPressed(0, 0)
+    return IsControlPressed(0, getToggleControlId())
 end
 
 -- The hold-toggle state machine prevents accidental camera flicker.
@@ -1254,10 +1325,26 @@ CreateThread(function()
             drawVirtualMirrorOverlay()
             updateFollowCam()
         else
+            showInactiveControlHints()
             Wait(handledToggle and 0 or 250)
         end
     end
 end)
+
+RegisterCommand((((Config.Debug or {}).command) or "customcamdebug"), function()
+    local mode = state.active and "active" or "inactive"
+    local camState = state.cam and DoesCamExist(state.cam) and "created" or "none"
+    local mirrorEnabled = (type(Config.VirtualMirror) == "table" and Config.VirtualMirror.enabled == true) and "on" or "off"
+    print(("[customcam] mode=%s cam=%s lookBack=%s toggleHoldMs=%s toggleControl=%s lookBackControl=%s mirror=%s"):format(
+        mode,
+        camState,
+        tostring(state.lookBackActive == true),
+        tostring(Config.toggleHoldMs or 1000),
+        tostring(getToggleControlId()),
+        tostring(getLookBackControlId()),
+        mirrorEnabled
+    ))
+end, false)
 
 -- Resource shutdown always cleans up the active scripted camera.
 AddEventHandler('onResourceStop', function(resourceName)
@@ -1267,3 +1354,5 @@ AddEventHandler('onResourceStop', function(resourceName)
 
     cleanupCamera()
 end)
+
+validateConfig()

@@ -1,4 +1,5 @@
 local lastVehicle = nil
+local Config = (CustomPhysics or {}).Config or {}
 
 -- Vehicle discovery helpers
 
@@ -19,6 +20,20 @@ local function clearOverrides(vehicle)
     CustomPhysicsWheelies.reset()
     CustomPhysicsRollovers.reset()
     CustomPhysicsNitrous.reset(vehicle)
+end
+
+local function printStartupSummary()
+    if not (type(Config.debug) == "table" and Config.debug.printStartupSummary == true) then
+        return
+    end
+
+    print(("[customphysics] startup: nativeWheeliesDisabled=%s customWheelieEnabled=%s rolloversEnabled=%s offroadBoostEnabled=%s fallbackRevLimiterEnabled=%s"):format(
+        tostring(Config.nativeWheeliesDisabled == true),
+        tostring(Config.customWheelieEnabled == true),
+        tostring(Config.rolloversEnabled == true),
+        tostring(Config.offroadBoostEnabled == true),
+        tostring(Config.fallbackRevLimiterEnabled == true)
+    ))
 end
 
 -- Runtime entrypoints
@@ -70,3 +85,19 @@ AddEventHandler('onResourceStop', function(resourceName)
 
     clearOverrides(lastVehicle)
 end)
+
+RegisterCommand((((Config.debug or {}).command) or "customphysicsdebug"), function()
+    local power = (CustomPhysicsPower and CustomPhysicsPower.getDebugSnapshot and CustomPhysicsPower.getDebugSnapshot()) or {}
+    local nitrous = (CustomPhysicsNitrous and CustomPhysicsNitrous.getDebugSnapshot and CustomPhysicsNitrous.getDebugSnapshot()) or {}
+    print(("[customphysics] antiBoost=%.3f stabilityErr=%.3f ratio=%.3f nitrousActive=%s nitrousRemainingMs=%s fallbackRevLimiter=%s stateBagTuneKey=%s"):format(
+        tonumber(power.antiBoostMultiplier) or 0.0,
+        tonumber(power.stabilityError) or 0.0,
+        tonumber(power.accelerationToWheelRatio) or 0.0,
+        tostring(nitrous.active == true),
+        tostring(math.floor(tonumber(nitrous.remainingMs) or 0)),
+        tostring(Config.fallbackRevLimiterEnabled == true),
+        tostring("performancetuning:tuneState")
+    ))
+end, false)
+
+printStartupSummary()

@@ -3,6 +3,16 @@ CustomCam.Config = {}
 
 -- Camera hold timing.
 CustomCam.Config.toggleHoldMs = 1000
+CustomCam.Config.showControlHints = true
+
+CustomCam.Config.Controls = {
+    toggleControlId = 0, -- INPUT_NEXT_CAMERA
+    lookBackControlId = 79, -- INPUT_VEH_LOOK_BEHIND
+}
+
+CustomCam.Config.Debug = {
+    command = "customcamdebug",
+}
 
 CustomCam.Config.VirtualMirror = {
     enabled = true,

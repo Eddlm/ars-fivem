@@ -55,7 +55,7 @@ local TextConfig = {
     performanceSteeringLockModeLabel = "Steering Lock Mode",
     performanceSteeringLockModeDescription = "Adjust how steering lock scales from tire lateral grip.",
     noVehicleLabel = "No vehicle",
-    noVehicleDescription = "Get into a vehicle to see options here.",
+    noVehicleDescription = "Get into a vehicle and take the driver seat to use this option.",
     noLiveriesLabel = "No liveries available",
     partsEmptyTitle = "No parts available",
     partsEmptyDescription = "This vehicle doesn't have any customizable parts here.",
@@ -215,6 +215,7 @@ local availabilityState = {
     hasVehicle = nil,
     hasDriverVehicle = nil,
 }
+local pendingOverwriteSaveId = nil
 local TUNE_STATE_BAG_KEY = "performancetuning:tuneState"
 local HANDLING_STATE_BAG_KEY = "performancetuning:handlingState"
 local SAVE_ID_STATE_BAG_KEY = "vehiclemanager:saveId"
@@ -1954,7 +1955,26 @@ local function buildSavedVehicleLabel(entry)
     local piLabel = piValue and tostring(math.max(0, math.floor(piValue + 0.5))) or "--"
     local colorLabel = tostring((entry and (entry.primaryColorLabel or entry.colorLabel)) or (TextConfig.unknownColorLabel or "Unknown"))
     local vehicleName = tostring((entry and (entry.localizedName or entry.displayName)) or "Saved Vehicle")
-    return ("%s | %s %s"):format(piLabel, colorLabel, vehicleName)
+    local plateText = tostring((entry and entry.plate) or "")
+    local savedAtText = tostring((entry and entry.savedAt) or "")
+    local compactSavedAt = savedAtText ~= "" and savedAtText:gsub("T", " "):gsub("Z", " UTC") or ""
+    local platePart = plateText ~= "" and (" | Plate %s"):format(plateText) or ""
+    local savedPart = compactSavedAt ~= "" and (" | %s"):format(compactSavedAt) or ""
+    return ("%s | %s %s%s%s"):format(piLabel, colorLabel, vehicleName, platePart, savedPart)
+end
+
+local function hasExistingSaveId(saveId)
+    local normalized = tostring(saveId or ""):lower()
+    if normalized == "" then
+        return false
+    end
+    for index = 1, #savedVehicleEntries do
+        local entrySaveId = tostring(savedVehicleEntries[index] and savedVehicleEntries[index].saveId or ""):lower()
+        if entrySaveId == normalized then
+            return true
+        end
+    end
+    return false
 end
 
 local function rebuildSavedVehicleMenu()
@@ -2047,7 +2067,7 @@ local function buildVehicleSavePayload(vehicle)
     local roofLivery = GetVehicleRoofLivery(vehicle)
     return {
         source = "VehicleManager",
-        scaffoldVersion = 1,
+        schemaVersion = 1,
         format = {
             name = "VehicleManagerSavedVehicle",
             variant = "menyoo-inspired-json",
@@ -2123,10 +2143,17 @@ local function saveCurrentVehicle()
     if not saveId then
         return
     end
+    if hasExistingSaveId(saveId) and pendingOverwriteSaveId ~= saveId then
+        pendingOverwriteSaveId = saveId
+        notify(("Save '%s' already exists. Press Save again to confirm overwrite."):format(saveId))
+        return
+    end
+    pendingOverwriteSaveId = nil
 
     local payload = buildVehicleSavePayload(vehicle)
     payload.saveId = saveId
     setVehicleSaveIdState(vehicle, saveId)
+    notify(("Saving vehicle as '%s'..."):format(saveId))
 
     TriggerServerEvent("vehiclemanager:saveVehicle", payload)
 end
@@ -2158,6 +2185,7 @@ local function autosaveManagedVehicleToExistingSave()
 
     local payload = buildVehicleSavePayload(vehicle)
     payload.saveId = saveId
+    notify(("Autosaving '%s'..."):format(saveId))
     TriggerServerEvent("vehiclemanager:updateSavedVehicleSnapshot", saveId, payload)
 end
 
@@ -2592,10 +2620,12 @@ end)
 
 RegisterNetEvent("vehiclemanager:receiveSavedVehiclePayload", function(savedData)
     if type(savedData) ~= "table" then
+        notify("Could not load saved vehicle payload.")
         return
     end
 
     spawnSavedVehicle(savedData)
+    notify(("Loaded saved vehicle: %s"):format(tostring(savedData.saveId or "unknown")))
     rebuildPartsMenu()
     rebuildStatsMenu()
 end)
@@ -2606,6 +2636,7 @@ RegisterNetEvent("vehiclemanager:vehicleSnapshotUpdated", function(saveId)
 end)
 
 RegisterNetEvent("vehiclemanager:vehicleSaved", function(saveId)
+    pendingOverwriteSaveId = nil
     if type(saveId) ~= "string" or saveId == "" then
         notify("Vehicle saved.")
     else
@@ -2616,6 +2647,11 @@ end)
 
 RegisterCommand(MenuConfig.keybindCommand or "+vehiclemanager_menu", function()
     updateVehicleAvailabilityState(true)
+    if not availabilityState.hasVehicle then
+        notify("Get into a vehicle to use Vehicle Manager.")
+    elseif not availabilityState.hasDriverVehicle then
+        notify("Switch to the driver seat to use all Vehicle Manager actions.")
+    end
     if MenuHandler:IsAnyMenuOpen() then
         vehicleMenuPool:CloseAllMenus()
     else

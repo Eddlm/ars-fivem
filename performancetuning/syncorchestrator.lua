@@ -194,6 +194,16 @@ function SyncOrchestrator.movePendingVehicleResyncToBack(netId)
     end
 end
 
+function SyncOrchestrator.getDiagnostics()
+    local runtimeState = PerformanceTuning.RuntimeState or {}
+    local trackedKeys = runtimeState.trackedVehicleKeys or {}
+    local pendingNetIds = runtimeState.pendingVehicleResyncNetIds or {}
+    return {
+        trackedVehicleCount = #trackedKeys,
+        pendingResyncCount = #pendingNetIds,
+    }
+end
+
 function SyncOrchestrator.tryResyncVehicleByNetId(netId)
     local stateBagKeys = (PerformanceTuning._internals or {}).StateBagKeys or {}
     local vehicleManager = PerformanceTuning.VehicleManager or {}

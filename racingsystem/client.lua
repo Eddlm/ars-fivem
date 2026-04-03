@@ -15,9 +15,26 @@ local editorState = {
 local raceRuntimeState = {
     pendingCheckpointPass = nil,
     predictedProgress = nil,
+    previousPosition = nil,
+    lastOutsideCheckpointCrossKey = nil,
+    accelerationPenaltyUntil = 0,
+    checkpointPassArm = nil,
 }
 local raceCountdownLocalEndByInstanceId = {}
 local raceCountdownReportedZeroByInstanceId = {}
+local raceStartCueShownByInstanceId = {}
+local raceCountdownVisualState = {
+    instanceId = nil,
+    scaleform = nil,
+    lastLabel = nil,
+    goVisibleUntil = 0,
+}
+local raceEventVisualState = {
+    scaleform = nil,
+    title = nil,
+    subtitle = nil,
+    expiresAt = 0,
+}
 local raceTimingState = {
     instanceId = nil,
     raceStartedAt = nil,
@@ -92,6 +109,9 @@ local activeInstanceAssets = {
     objects = {},
     modelHides = {},
 }
+
+local CHECKPOINT_PASS_ARM_DISTANCE = 30.0
+local CHECKPOINT_PASS_RELEASE_DELTA = 0.75
 
 local GetPropSpeedModificationParameters
 
@@ -186,6 +206,134 @@ local function notifyFeed(message)
     BeginTextCommandThefeedPost('STRING')
     AddTextComponentSubstringPlayerName(tostring(message or ''))
     EndTextCommandThefeedPostTicker(false, false)
+end
+
+local function clearCountdownScaleform()
+    if raceCountdownVisualState.scaleform and raceCountdownVisualState.scaleform ~= 0 then
+        SetScaleformMovieAsNoLongerNeeded(raceCountdownVisualState.scaleform)
+    end
+    raceCountdownVisualState.scaleform = nil
+    raceCountdownVisualState.lastLabel = nil
+    raceCountdownVisualState.instanceId = nil
+    raceCountdownVisualState.goVisibleUntil = 0
+end
+
+local function ensureCountdownScaleform()
+    if raceCountdownVisualState.scaleform and raceCountdownVisualState.scaleform ~= 0 then
+        return raceCountdownVisualState.scaleform
+    end
+
+    local handle = RequestScaleformMovie('MP_BIG_MESSAGE_FREEMODE')
+    if not handle or handle == 0 then
+        return nil
+    end
+
+    raceCountdownVisualState.scaleform = handle
+    return handle
+end
+
+local function clearRaceEventScaleform()
+    if raceEventVisualState.scaleform and raceEventVisualState.scaleform ~= 0 then
+        SetScaleformMovieAsNoLongerNeeded(raceEventVisualState.scaleform)
+    end
+    raceEventVisualState.scaleform = nil
+    raceEventVisualState.title = nil
+    raceEventVisualState.subtitle = nil
+    raceEventVisualState.expiresAt = 0
+end
+
+local function ensureRaceEventScaleform()
+    if raceEventVisualState.scaleform and raceEventVisualState.scaleform ~= 0 then
+        return raceEventVisualState.scaleform
+    end
+
+    local handle = RequestScaleformMovie('MP_BIG_MESSAGE_FREEMODE')
+    if not handle or handle == 0 then
+        return nil
+    end
+
+    raceEventVisualState.scaleform = handle
+    return handle
+end
+
+local function showRaceEventVisual(title, subtitle, durationMs)
+    raceEventVisualState.title = tostring(title or '')
+    raceEventVisualState.subtitle = tostring(subtitle or '')
+    raceEventVisualState.expiresAt = GetGameTimer() + math.max(250, math.floor(tonumber(durationMs) or 1500))
+end
+
+local function drawRaceEventVisual()
+    local now = GetGameTimer()
+    if (tonumber(raceEventVisualState.expiresAt) or 0) <= now then
+        if raceEventVisualState.scaleform then
+            clearRaceEventScaleform()
+        end
+        return
+    end
+
+    local scaleform = ensureRaceEventScaleform()
+    if not scaleform or scaleform == 0 or not HasScaleformMovieLoaded(scaleform) then
+        return
+    end
+
+    BeginScaleformMovieMethod(scaleform, 'SHOW_SHARD_CENTERED_MP_MESSAGE')
+    PushScaleformMovieMethodParameterString(raceEventVisualState.title or '')
+    PushScaleformMovieMethodParameterString(raceEventVisualState.subtitle or '')
+    EndScaleformMovieMethod()
+    DrawScaleformMovie(scaleform, 0.5, 0.34, 1.0, 1.0, 255, 255, 255, 255, 0)
+end
+
+local function updateCountdownVisual(instanceId, remainingMs)
+    local resolvedInstanceId = tonumber(instanceId)
+    if not resolvedInstanceId then
+        clearCountdownScaleform()
+        return
+    end
+
+    if raceCountdownVisualState.instanceId ~= resolvedInstanceId then
+        raceCountdownVisualState.instanceId = resolvedInstanceId
+        raceCountdownVisualState.lastLabel = nil
+        raceCountdownVisualState.goVisibleUntil = 0
+    end
+
+    local now = GetGameTimer()
+    local label = nil
+    local ms = math.max(0, tonumber(remainingMs) or 0)
+    if ms <= 0 then
+        label = 'GO'
+        if raceCountdownVisualState.goVisibleUntil <= 0 then
+            raceCountdownVisualState.goVisibleUntil = now + 1000
+        end
+        if now > raceCountdownVisualState.goVisibleUntil then
+            clearCountdownScaleform()
+            return
+        end
+    elseif ms <= 1000 then
+        label = '1'
+    elseif ms <= 2000 then
+        label = '2'
+    elseif ms <= 3000 then
+        label = '3'
+    else
+        raceCountdownVisualState.lastLabel = nil
+        return
+    end
+
+    local scaleform = ensureCountdownScaleform()
+    if not scaleform or scaleform == 0 or not HasScaleformMovieLoaded(scaleform) then
+        return
+    end
+
+    if raceCountdownVisualState.lastLabel ~= label then
+        raceCountdownVisualState.lastLabel = label
+        local styledLabel = (label == 'GO') and '~g~GO' or ('~y~%s'):format(label)
+        BeginScaleformMovieMethod(scaleform, 'SHOW_SHARD_CENTERED_MP_MESSAGE')
+        PushScaleformMovieMethodParameterString(styledLabel)
+        PushScaleformMovieMethodParameterString('')
+        EndScaleformMovieMethod()
+    end
+
+    DrawScaleformMovie(scaleform, 0.5, 0.3, 1.0, 1.0, 255, 255, 255, 255, 0)
 end
 
 RegisterNetEvent('racingsystem:notify', function(payload)
@@ -360,12 +508,12 @@ local function refreshCheckpointMarkerAlignment(checkpoint)
             normalZ = -normalZ
         end
 
-        checkpoint.markerZ = averageZ - 6.0
+        checkpoint.markerZ = averageZ - 3.0
         checkpoint.rotX = -math.deg(math.atan2(normalY, normalZ))
         checkpoint.rotY = -math.deg(math.atan2(normalX, normalZ))
         checkpoint.rotZ = 0.0
     else
-        checkpoint.markerZ = z - 5.0
+        checkpoint.markerZ = z - 2.5
         checkpoint.rotX = 0.0
         checkpoint.rotY = 0.0
         checkpoint.rotZ = 0.0
@@ -625,7 +773,7 @@ local function getPreviewCheckpointMarker(checkpoint)
 
     local x = tonumber(checkpoint and checkpoint.x) or 0.0
     local y = tonumber(checkpoint and checkpoint.y) or 0.0
-    local markerZ = tonumber(checkpoint and checkpoint.markerZ) or ((tonumber(checkpoint and checkpoint.z) or 0.0) - 5.0)
+    local markerZ = tonumber(checkpoint and checkpoint.markerZ) or ((tonumber(checkpoint and checkpoint.z) or 0.0) - 2.5)
     local rotX = tonumber(checkpoint and checkpoint.rotX) or 0.0
     local rotY = tonumber(checkpoint and checkpoint.rotY) or 0.0
     local rotZ = tonumber(checkpoint and checkpoint.rotZ) or 0.0
@@ -647,6 +795,41 @@ local function getVisualCheckpointRadius(checkpoint)
     local baseRadius = tonumber(checkpoint and checkpoint.radius) or 8.0
     local visualScale = tonumber(RacingSystem.Config.visualCheckpointRadiusScale) or 1.0
     return baseRadius * visualScale
+end
+
+local function getHeadingToNextCheckpoint(currentCheckpoint, nextCheckpoint)
+    local currentX = tonumber(currentCheckpoint and currentCheckpoint.x) or 0.0
+    local currentY = tonumber(currentCheckpoint and currentCheckpoint.y) or 0.0
+    local nextX = tonumber(nextCheckpoint and nextCheckpoint.x) or currentX
+    local nextY = tonumber(nextCheckpoint and nextCheckpoint.y) or currentY
+    local dx = nextX - currentX
+    local dy = nextY - currentY
+    if math.abs(dx) <= 0.0001 and math.abs(dy) <= 0.0001 then
+        return 0.0
+    end
+    return math.deg(math.atan2(dy, dx)) - 90.0
+end
+
+local function getCheckpointPassArmKey(instanceId, checkpointIndex, lapNumber)
+    return ('%s:%s:%s'):format(tonumber(instanceId) or 0, tonumber(checkpointIndex) or 0, tonumber(lapNumber) or 1)
+end
+
+local function teleportEntityToCheckpoint(entity, checkpoint, nextCheckpoint)
+    if not entity or entity == 0 or not DoesEntityExist(entity) then
+        return
+    end
+
+    local x = tonumber(checkpoint and checkpoint.x) or 0.0
+    local y = tonumber(checkpoint and checkpoint.y) or 0.0
+    local z = (tonumber(checkpoint and checkpoint.z) or 0.0) + 2.0
+    local heading = getHeadingToNextCheckpoint(checkpoint, nextCheckpoint) + 90.0
+    SetEntityCoordsNoOffset(entity, x, y, z, false, false, false)
+    SetEntityHeading(entity, heading)
+    SetEntityVelocity(entity, 0.0, 0.0, 0.0)
+
+    if IsEntityAVehicle(entity) then
+        SetVehicleForwardSpeed(entity, 0.0)
+    end
 end
 
 local function getJoinedRaceInstance()
@@ -1644,13 +1827,31 @@ RegisterNetEvent('racingsystem:startCountdown', function(payload)
     ensureLocalRaceTiming(instanceId)
     raceCountdownLocalEndByInstanceId[instanceId] = GetGameTimer() + countdownMs
     raceCountdownReportedZeroByInstanceId[instanceId] = nil
+    raceStartCueShownByInstanceId[instanceId] = nil
     raceTimingState.raceStartedAt = raceCountdownLocalEndByInstanceId[instanceId]
     raceTimingState.lapStartedAt = raceCountdownLocalEndByInstanceId[instanceId]
+    notifyFeed(("Race starts in %.1fs"):format(countdownMs / 1000.0))
 end)
 
 RegisterNetEvent('racingsystem:lapCompleted', function(payload)
     if type(payload) ~= 'table' then
         return
+    end
+
+    local localServerId = tonumber(GetPlayerServerId(PlayerId())) or 0
+    local lapOwnerSource = tonumber(payload.playerSource) or 0
+    if lapOwnerSource ~= localServerId then
+        return
+    end
+
+    if payload.finished == true then
+        local instance = getJoinedRaceInstance()
+        local entrant = getLocalEntrant(instance)
+        local positionText = getPlayerPositionText(instance, entrant)
+        showRaceEventVisual('~g~FINISHED', ('~w~%s'):format(positionText), 2200)
+    else
+        local lapNumber = math.max(1, math.floor(tonumber(payload.lapNumber) or 1))
+        showRaceEventVisual(('~b~LAP %d COMPLETED'):format(lapNumber), '', 1400)
     end
 
     local bestLapDeltaMs = tonumber(payload.bestLapDeltaMs) or 0
@@ -1882,7 +2083,12 @@ CreateThread(function()
 
         if not joinedInstance then
             raceRuntimeState.pendingCheckpointPass = nil
+            raceRuntimeState.previousPosition = nil
+            raceRuntimeState.checkpointPassArm = nil
+            raceRuntimeState.lastOutsideCheckpointCrossKey = nil
+            raceRuntimeState.accelerationPenaltyUntil = 0
             resetLocalRaceTiming()
+            clearCountdownScaleform()
             if activeInstanceAssets.instanceId then
                 unloadActiveInstanceAssets()
             end
@@ -1948,6 +2154,7 @@ CreateThread(function()
                     local joinedInstanceId = tonumber(joinedInstance.id)
                     local countdownEndsAt = raceCountdownLocalEndByInstanceId[joinedInstanceId]
                     local remainingMs = countdownEndsAt and math.max(0, countdownEndsAt - GetGameTimer()) or 0
+                    updateCountdownVisual(joinedInstanceId, remainingMs)
 
                     if pedVehicle ~= 0 and GetPedInVehicleSeat(pedVehicle, -1) == ped then
                         SetVehicleHandbrake(pedVehicle, true)
@@ -1958,6 +2165,13 @@ CreateThread(function()
                         TriggerServerEvent('racingsystem:countdownReachedZero', joinedInstanceId, GetGameTimer())
                     end
                 elseif joinedInstance.state == RacingSystem.States.running then
+                    clearCountdownScaleform()
+                    local joinedInstanceId = tonumber(joinedInstance.id)
+                    if joinedInstanceId and not raceStartCueShownByInstanceId[joinedInstanceId] then
+                        raceStartCueShownByInstanceId[joinedInstanceId] = true
+                        showRaceEventVisual('~g~GO!', '~w~Race is live', 1400)
+                        notifyFeed('GO! Race is live.')
+                    end
                     if raceTimingState.raceStartedAt == nil then
                         raceTimingState.raceStartedAt = GetGameTimer()
                     end
@@ -1968,10 +2182,12 @@ CreateThread(function()
                         SetVehicleHandbrake(pedVehicle, false)
                     end
                 elseif joinedInstance.state == RacingSystem.States.finished and tonumber(entrantProgress.finishedAt) then
+                    clearCountdownScaleform()
                     if pedVehicle ~= 0 and GetPedInVehicleSeat(pedVehicle, -1) == ped then
                         SetVehicleHandbrake(pedVehicle, false)
                     end
                 else
+                    clearCountdownScaleform()
                     if pedVehicle ~= 0 and GetPedInVehicleSeat(pedVehicle, -1) == ped then
                         SetVehicleHandbrake(pedVehicle, false)
                     end
@@ -1980,6 +2196,8 @@ CreateThread(function()
 
             local targetCheckpoint = checkpoints[targetIndex]
             if not targetCheckpoint or totalCheckpoints == 0 then
+                raceRuntimeState.checkpointPassArm = nil
+                raceRuntimeState.previousPosition = origin
                 Wait(1000)
             else
                 local checkpointCoords = vector3(targetCheckpoint.x or 0.0, targetCheckpoint.y or 0.0, targetCheckpoint.z or 0.0)
@@ -2018,6 +2236,44 @@ CreateThread(function()
                         nil,
                         false
                     )
+
+                    if totalCheckpoints > 1 then
+                        local nextIndex = targetIndex + 1
+                        if nextIndex > totalCheckpoints then
+                            nextIndex = 1
+                        end
+                        local nextCheckpoint = checkpoints[nextIndex]
+                        if nextCheckpoint then
+                            local chevronHeading = getHeadingToNextCheckpoint(targetCheckpoint, nextCheckpoint)
+                            local chevronZ = (tonumber(targetCheckpoint.z) or markerDraw.z) + math.max(0.8, visualRadius * 0.08)
+                            DrawMarker(
+                                20,
+                                markerDraw.x,
+                                markerDraw.y,
+                                chevronZ,
+                                0.0,
+                                0.0,
+                                0.0,
+                                90.0,
+                                0.0,
+                                chevronHeading,
+                                math.max(1.5, visualRadius * 0.25),
+                                math.max(1.5, visualRadius * 0.25),
+                                1.0,
+                                255,
+                                235,
+                                80,
+                                220,
+                                false,
+                                false,
+                                2,
+                                false,
+                                nil,
+                                nil,
+                                false
+                            )
+                        end
+                    end
                 end
 
                 if joinedInstance.state == RacingSystem.States.running and entrant and tonumber(entrantProgress.finishedAt) == nil then
@@ -2026,8 +2282,62 @@ CreateThread(function()
                         and tonumber(pending.instanceId) == tonumber(joinedInstance.id)
                         and tonumber(pending.checkpointIndex) == tonumber(targetIndex)
                         and GetGameTimer() <= (pending.expiresAt or 0)
+                    local withinPassDetectionRange = distance <= CHECKPOINT_PASS_ARM_DISTANCE
 
-                    if distance <= (tonumber(targetCheckpoint.radius) or 8.0) and not isPendingSameCheckpoint then
+                    local checkpointPassed = false
+                    local passedOutsideRadius = false
+                    local outsideLateralDistance = nil
+                    local currentLap = math.max(1, tonumber(entrantProgress.currentLap) or 1)
+                    local currentArmKey = getCheckpointPassArmKey(joinedInstance.id, targetIndex, currentLap)
+                    local checkpointPassArm = raceRuntimeState.checkpointPassArm
+
+                    if withinPassDetectionRange and not isPendingSameCheckpoint then
+                        if checkpointPassArm == nil or checkpointPassArm.key ~= currentArmKey then
+                            checkpointPassArm = {
+                                key = currentArmKey,
+                                minDistance = distance,
+                            }
+                            raceRuntimeState.checkpointPassArm = checkpointPassArm
+                        else
+                            checkpointPassArm.minDistance = math.min(tonumber(checkpointPassArm.minDistance) or distance, distance)
+                            if distance >= ((tonumber(checkpointPassArm.minDistance) or distance) + CHECKPOINT_PASS_RELEASE_DELTA) then
+                                checkpointPassed = true
+                                outsideLateralDistance = tonumber(checkpointPassArm.minDistance) or distance
+                                passedOutsideRadius = outsideLateralDistance > (tonumber(targetCheckpoint.radius) or 8.0)
+                                raceRuntimeState.checkpointPassArm = nil
+                            end
+                        end
+                    elseif checkpointPassArm and checkpointPassArm.key == currentArmKey and distance > (CHECKPOINT_PASS_ARM_DISTANCE + 5.0) then
+                        raceRuntimeState.checkpointPassArm = nil
+                    end
+
+                    if checkpointPassed then
+                        if passedOutsideRadius then
+                            local outsideOffset = math.max(0.0, (tonumber(outsideLateralDistance) or 0.0) - (tonumber(targetCheckpoint.radius) or 8.0))
+                            local instanceId = tonumber(joinedInstance.id) or 0
+                            local lapNumber = math.max(1, tonumber(entrantProgress.currentLap) or 1)
+                            local outsideKey = ('%s:%s:%s'):format(instanceId, targetIndex, lapNumber)
+                            if raceRuntimeState.lastOutsideCheckpointCrossKey ~= outsideKey then
+                                raceRuntimeState.lastOutsideCheckpointCrossKey = outsideKey
+                                if outsideOffset > 25.0 then
+                                    notifyFeed(('Checkpoint cut (+%.1fm): no correction applied (over 25m cap).'):format(outsideOffset))
+                                elseif outsideOffset >= 15.0 then
+                                    local correctionEntity = (pedVehicle ~= 0 and DoesEntityExist(pedVehicle)) and pedVehicle or ped
+                                    local correctionNextIndex = targetIndex + 1
+                                    if correctionNextIndex > totalCheckpoints then
+                                        correctionNextIndex = 1
+                                    end
+                                    teleportEntityToCheckpoint(correctionEntity, targetCheckpoint, checkpoints[correctionNextIndex])
+                                    notifyFeed(('Checkpoint cut (+%.1fm): teleport correction applied.'):format(outsideOffset))
+                                elseif outsideOffset <= 5.0 then
+                                    raceRuntimeState.accelerationPenaltyUntil = GetGameTimer() + 2000
+                                    notifyFeed(('Checkpoint cut (+%.1fm): 2s throttle penalty applied.'):format(outsideOffset))
+                                else
+                                    notifyFeed(('Checkpoint cut (+%.1fm): warning only.'):format(outsideOffset))
+                                end
+                            end
+                        end
+
                         local lapTimingPayload = nil
                         local totalLaps = math.max(1, tonumber(joinedInstance.laps) or 1)
                         local lapTriggerCheckpoint = (totalLaps > 1 and totalCheckpoints > 1) and 1 or totalCheckpoints
@@ -2062,9 +2372,23 @@ CreateThread(function()
                     end
                 end
 
+                raceRuntimeState.previousPosition = origin
+                local penaltyUntil = tonumber(raceRuntimeState.accelerationPenaltyUntil) or 0
+                if penaltyUntil > GetGameTimer() then
+                    DisableControlAction(0, 71, true)
+                    DisableControlAction(1, 71, true)
+                    DisableControlAction(2, 71, true)
+                end
                 Wait(0)
             end
         end
+    end
+end)
+
+CreateThread(function()
+    while true do
+        drawRaceEventVisual()
+        Wait(0)
     end
 end)
 
@@ -2076,4 +2400,4 @@ AddEventHandler('onClientResourceStop', function(resourceName)
     unloadActiveInstanceAssets()
 end)
 
-print('[racingsystem] Client scaffolding loaded.')
+print('[racingsystem] Client system loaded.')

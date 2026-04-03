@@ -628,9 +628,14 @@ end)
 
 RegisterCommand('ptune', function()
     if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.openMainMenu then
+        local scaleformUI = PerformanceTuning.ScaleformUI
+        local mode = (type(scaleformUI.getPerformanceBarsDisplayMode) == "function" and scaleformUI.getPerformanceBarsDisplayMode()) or "absolute_benchmark"
+        local modeLabel = tostring(mode) == "vehicle_relative" and "Relative" or "Absolute"
+        notify(("Opening performance tuning menu (PI mode: %s)."):format(modeLabel))
         PerformanceTuning.ScaleformUI.openMainMenu()
     else
         notify('ScaleformUI tuning menu is not available.')
+        notify('Ensure resource `performancetuning` and ScaleformUI dependencies are started.')
     end
 end, false)
 
@@ -643,6 +648,10 @@ RegisterCommand('ptbarsmode', function(_, args)
     end
 
     local targetMode = requested
+    if requested == "help" or requested == "?" then
+        notify("Usage: /ptbarsmode [toggle|relative|absolute]")
+        return
+    end
     if targetMode == '' or targetMode == 'toggle' then
         local current = tostring(scaleformUI.getPerformanceBarsDisplayMode() or 'absolute_benchmark')
         targetMode = (current == 'vehicle_relative') and 'absolute' or 'relative'
@@ -652,6 +661,28 @@ RegisterCommand('ptbarsmode', function(_, args)
     local label = applied == 'vehicle_relative' and 'Relative' or 'Absolute'
     notify(('PI bars mode: %s'):format(label))
 end, false)
+
+RegisterCommand('ptdiag', function()
+    local diagnostics = (PerformanceTuning.SyncOrchestrator and PerformanceTuning.SyncOrchestrator.getDiagnostics and PerformanceTuning.SyncOrchestrator.getDiagnostics()) or {}
+    local pending = tonumber(diagnostics.pendingResyncCount) or 0
+    local tracked = tonumber(diagnostics.trackedVehicleCount) or 0
+    local mode = (PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.getPerformanceBarsDisplayMode and PerformanceTuning.ScaleformUI.getPerformanceBarsDisplayMode()) or "absolute_benchmark"
+    local modeLabel = tostring(mode) == "vehicle_relative" and "Relative" or "Absolute"
+    notify(("PT diagnostics | tracked=%d pendingResync=%d PI mode=%s"):format(tracked, pending, modeLabel))
+    TriggerServerEvent('performancetuning:requestServerDiagnostics')
+end, false)
+
+RegisterNetEvent('performancetuning:serverDiagnostics', function(payload)
+    if type(payload) ~= "table" then
+        return
+    end
+
+    notify(("PT server diagnostics | tracked=%s scopePairs=%s models=%s"):format(
+        tostring(payload.trackedTunedVehicles or 0),
+        tostring(payload.scopePairs or 0),
+        tostring(payload.stableLapModelCount or 0)
+    ))
+end)
 
 PerformanceTuning.RuntimeState = RuntimeState
 PerformanceTuning.RuntimeConfig = RuntimeConfig

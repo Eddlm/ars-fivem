@@ -4,6 +4,7 @@ local ServerState = {
     trackedTunedVehiclesByNetId = {},
     playersInScopeByPlayer = {},
 }
+local STABLE_LAPTIMES_FILE = 'stable_laptimes.json'
 
 local function isVehicleEntity(entity)
     return entity and entity ~= 0 and DoesEntityExist(entity) and GetEntityType(entity) == 2
@@ -67,6 +68,51 @@ local function notifyScopedPlayersToResync(sourceId, netId)
             TriggerClientEvent('performancetuning:requestVehicleResync', observerSource, netId)
         end
     end
+end
+
+local function countTrackedVehicles()
+    local count = 0
+    for _ in pairs(ServerState.trackedTunedVehiclesByNetId) do
+        count = count + 1
+    end
+    return count
+end
+
+local function countScopePairs()
+    local count = 0
+    for _, scopedPlayers in pairs(ServerState.playersInScopeByPlayer) do
+        for _ in pairs(scopedPlayers) do
+            count = count + 1
+        end
+    end
+    return count
+end
+
+local function loadStableLapDocument()
+    local resourceName = GetCurrentResourceName()
+    local raw = LoadResourceFile(resourceName, STABLE_LAPTIMES_FILE)
+    local document = type(raw) == 'string' and raw ~= '' and json.decode(raw) or nil
+    if type(document) ~= 'table' then
+        document = {
+            version = 2,
+            records = {}
+        }
+    end
+    if type(document.records) ~= 'table' then
+        document.records = {}
+    end
+    return document
+end
+
+local function saveStableLapDocument(document)
+    if type(document) ~= "table" then
+        return false
+    end
+    local encoded = json.encode(document)
+    if type(encoded) ~= "string" or encoded == "" then
+        return false
+    end
+    return SaveResourceFile(GetCurrentResourceName(), STABLE_LAPTIMES_FILE, encoded, -1) == true
 end
 
 local function getPlayerCurrentVehicle(sourceId)
@@ -232,7 +278,7 @@ RegisterNetEvent('performancetuning:storeStableLapSample', function(payload)
 
     local sourceId = source
     local resourceName = GetCurrentResourceName()
-    local fileName = 'stable_laptimes.json'
+    local fileName = STABLE_LAPTIMES_FILE
     local model = tostring(payload.model or '')
     local modelKey = getModelKey(model)
     if model == '' or modelKey == '' then
@@ -288,3 +334,86 @@ RegisterNetEvent('performancetuning:storeStableLapSample', function(payload)
         })
     end
 end)
+
+RegisterNetEvent('performancetuning:requestServerDiagnostics', function()
+    local src = source
+    if not src or src <= 0 then
+        return
+    end
+    local stable = loadStableLapDocument()
+    TriggerClientEvent('performancetuning:serverDiagnostics', src, {
+        trackedTunedVehicles = countTrackedVehicles(),
+        scopePairs = countScopePairs(),
+        stableLapModelCount = #((stable and stable.records) or {}),
+    })
+end)
+
+RegisterCommand('ptlaptimes', function(src, args)
+    local subcommand = tostring((args or {})[1] or "help"):lower()
+    local model = tostring((args or {})[2] or ""):upper()
+    local document = loadStableLapDocument()
+
+    if subcommand == "help" then
+        local helpText = "Usage: /ptlaptimes [list|clear] [MODEL|all]"
+        if src and src > 0 then
+            TriggerClientEvent('chat:addMessage', src, { args = { '^2performancetuning', helpText } })
+        else
+            print(helpText)
+        end
+        return
+    end
+
+    if subcommand == "list" then
+        local count = #document.records
+        local message = ("Stable lap records: %d model(s)."):format(count)
+        if src and src > 0 then
+            TriggerClientEvent('chat:addMessage', src, { args = { '^2performancetuning', message } })
+        else
+            print(message)
+        end
+        return
+    end
+
+    if subcommand == "clear" then
+        if model == "" then
+            model = "ALL"
+        end
+
+        if model == "ALL" then
+            document.records = {}
+            local ok = saveStableLapDocument(document)
+            local message = ok and "Cleared all stable lap records." or "Failed to clear stable lap records."
+            if src and src > 0 then
+                TriggerClientEvent('chat:addMessage', src, { args = { '^2performancetuning', message } })
+            else
+                print(message)
+            end
+            return
+        end
+
+        local removed = 0
+        for index = #document.records, 1, -1 do
+            local record = document.records[index]
+            if type(record) == "table" and tostring(record.model or ""):upper() == model then
+                table.remove(document.records, index)
+                removed = removed + 1
+            end
+        end
+
+        local ok = saveStableLapDocument(document)
+        local message = ok and ("Cleared %d record(s) for %s."):format(removed, model) or ("Failed to clear records for %s."):format(model)
+        if src and src > 0 then
+            TriggerClientEvent('chat:addMessage', src, { args = { '^2performancetuning', message } })
+        else
+            print(message)
+        end
+        return
+    end
+
+    local unknownMessage = ("Unknown subcommand '%s'. Use /ptlaptimes help."):format(subcommand)
+    if src and src > 0 then
+        TriggerClientEvent('chat:addMessage', src, { args = { '^2performancetuning', unknownMessage } })
+    else
+        print(unknownMessage)
+    end
+end, false)

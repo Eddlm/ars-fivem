@@ -1,110 +1,78 @@
 I make sure to not lose track of the user/admin experience by regularly asking Codex to do sanity checks on features, gameplay, settings and overall experience. I keep its suggestions here, authored and adjusted by me.
 
 # For `customcam`
-
-Admin
-
-- Keep only server-wide camera defaults that establish a common camera identity.
-- Keep shared default follow/hood camera placement presets only if the server wants a common camera identity.
-
----
-
-Player
-
-- Allow the player to configure `customcam` clientside.
-- Move `toggleHoldMs` to clientside preferences.
-- Move virtual mirror on/off to clientside preferences, with an optional server default if needed.
-- Add clientside preferences for virtual mirror on/off, mirror position/size, follow-camera distance/height preset, hood offset/tilt, and rear-look behavior.
-
----
-
-Internal
-
-- Trim the remaining `customcam` framing constants from server config and keep them hardcoded clientside.
-- Keep camera smoothing, look-ahead logic, mirror polling/rendering constants, and attach/framing math hardcoded.
+## Internal code improvements
+- Split `client.lua` into follow-cam, hood-cam, and virtual-mirror modules to reduce coupling and regression risk. | Simplicity (4 of 9)
+- Move remaining hardcoded constants/input IDs into `shared.lua` and validate ranges at startup. | On it
+- Add safer handoff/seed guards when vehicles/entities become invalid mid-transition. | On it
+## Admin experience
+- Add a debug command to print active camera mode/state and loaded config values. | On it
+- Emit startup warnings when camera config values are out of sensible ranges. | On it
+## Player experience
+- Add discoverability hints for hold-to-toggle and look-back controls. | On it
+- Make toggle/look-back bindings configurable. | On it
+- Smooth follow/hood handoffs to reduce abrupt camera snaps. | Simplicity (4 of 9)
 
 # For `customphysics`
-
-Admin
-
-- Keep wheelie enable/scope, rollover enable, offroad boost enable/max multiplier, fallback rev limiter, powerslide angle/max/speed threshold, and the surface drag map configurable.
-
----
-
-Player
-
-- Do not add player-specific config by default; this resource is gameplay-affecting and should stay server-authoritative.
-
----
-
-Internal
-
-- Keep wheelie force math, offroad ramp/fall rates, stabilization/controller details, and effect timing hardcoded.
+## Internal code improvements
+- Decompose `power.lua` into subsystem-focused flows (overspeed, offroad, stability, rev limiter). | Simplicity (4 of 9)
+- Centralize vehicle guard/reset logic in `client.lua` so all subsystems share one consistency path. | Simplicity (6 of 9)
+- Replace tuning magic numbers with config-backed keys and defaults. | On it
+## Admin experience
+- Add a debug command for live state (`power`, `antiBoost`, `overspeed`, `offroad`, wheelie/nitrous state). | On it
+- Print a startup feature/config summary for quick server verification. | On it
+- Document how behavior changes when `performancetuning` state bags are unavailable. | On it
+## Player experience
+- Smooth ramp-up/ramp-down of power changes after offroad/overspeed events. | Simplicity (5 of 9)
+- Tune threshold flicker handling to reduce snap-like wheelie/rollover behavior. | Simplicity (6 of 9)
+- Add clearer nitrous active/remaining feedback. | On it
 
 # For `performancetuning`
-
-Admin
-
-- Keep pack behavior values, nitrous duration/power/refill rules, PI multipliers/classes, nearby PI panel enable, and the user-facing slider limits that define allowed tuning scope.
-- Decide whether pack availability should remain globally configurable or become fixed content.
-
----
-
-Player
-
-- Add clientside preferences for menu keybind, PI panel visibility mode/default, panel placement/visual style, and any non-gameplay display preferences.
-- Consider remembering the last-used menu state/open path as a local preference.
-
----
-
-Internal
-
-- Move pack metadata (`id`, `label`, `description`, `enabled`) out of shared config if the pack lineup is not meant to be server-edited.
-- Decide whether `performancetuning` pack metadata should stay configurable or move into internal code/data.
-- Move nearby PI panel range/count to internal defaults unless there is a strong admin use case for tuning HUD behavior.
-- Consider separating engine swap choice from engine upgrade level so players can swap first, then still progress through upgrade stages on top of the swapped engine baseline.
-- Keep UI copy, panel math constants, brake-scaling constants, normalization defaults, and menu helper text hardcoded.
+## Internal code improvements
+- Split `tuningpackmanager.lua` and unify tune sync/refresh helpers used across client modules. | Simplicity (3 of 9)
+- Harden runtime config coercion/validation so malformed PI/performance values fail predictably. | Simplicity (6 of 9)
+- Reuse a shared tune-bucket initializer across serialize/resync/apply paths. | Simplicity (5 of 9)
+## Admin experience
+- Add diagnostics for tracked tuned vehicles and pending resync queues. | On it
+- Improve `ptune`/`ptbarsmode` command feedback with help/current mode output. | On it
+- Add maintenance commands to inspect/clean `stable_laptimes.json` by model. | On it
+## Player experience
+- Show explicit reasons for disabled pack options. | Simplicity (6 of 9)
+- Surface PI bars mode (`absolute_benchmark` vs `vehicle_relative`) more clearly. | On it
+- Add visible nitrous charge/refill status and quick per-category reset actions. | Simplicity (5 of 9)
 
 # For `racingsystem`
-
-Admin
-
-- Keep checkpoint draw distance, marker type, checkpoint radius limits, lap count limits, countdown, and the “multiple owned races” policy configurable.
-
----
-
-Player
-
-- Add or consider clientside preferences for race menu keybind, menu placement, editor helper readability, and local race HUD verbosity only where they do not affect race logic.
-
----
-
-Internal
-
-- Keep file/folder names, resource plumbing, editor control IDs, snapshot/index persistence details, editor step size, and marker alignment internals hardcoded.
+## Internal code improvements
+- Consolidate race definition lifecycle helpers (load/save/sync/delete) to remove duplicated naming/path logic. | Simplicity (4 of 9)
+- Unify checkpoint serialization between editor/runtime/mission JSON paths. | Simplicity (5 of 9)
+- Replace no-op logging with configurable debug logging. | On it
+## Admin experience
+- Gate destructive actions (`kill`, `delete`) behind ACE/role checks. | On it
+- Add audit logging for `invoke`, `save`, `delete`, `kill`, and race-completion lifecycle events. | On it
+- Expand destructive confirmations with clearer impact scope. | Simplicity (6 of 9)
+## Player experience
+- Improve clarity of penalty/correction feedback while racing. | On it
+- Add a stronger “race started” cue when countdown completes. | On it
+- Enrich join/invoke browser and race-finish summary details. | Simplicity (5 of 9)
 
 # For `vehiclemanager`
+## Internal code improvements
+- Split `client/vehiclemanager.lua` into menu, appearance, persistence, and PT integration modules. | Simplicity (3 of 9)
+- Replace duplicated menu branch logic with shared action dispatchers. | Simplicity (5 of 9)
+- Move large static appearance/category datasets into dedicated data modules. | Simplicity (6 of 9)
+- Strengthen validation/logging across save/update/load payload flows. | On it
+## Admin experience
+- Add maintenance commands to inspect/list/repair `index_*.json` and payload consistency. | Simplicity (6 of 9)
+- Add server tools to delete/inspect saves by ID without manual file edits. | On it
+- Emit structured logs for save/update/load/delete requests. | On it
+## Player experience
+- Improve saved vehicle row metadata (name, plate, time, PI) and overwrite confirmations. | On it
+- Improve autosave and load/save status feedback. | On it
+- Improve empty-state guidance for “not in vehicle” and “not driver seat” flows. | On it
 
-Admin
-
-- Keep save ownership precedence configurable.
-- Keep only shared menu availability/policy decisions, not local presentation details.
-
----
-
-Player
-
-- Add clientside preferences for menu keybind, menu position/alignment/theme, and any personal vehicle-manager UI behavior.
-
----
-
-Internal
-
-- Treat paint categories and mod-category visibility as internal by default, and only promote them to admin config if there is a real server-owner need to curate options.
-- Decide whether `vehiclemanager` paint catalogs and category tables should remain in `shared.lua` or move into internal code/data.
-- Keep menu copy, save directory/index naming, static color catalogs, livery/wheel label data, and category tables hardcoded unless there is a real server-owner need to customize them.
-
-## Done
-
-- Unified resource config entry points around `shared.lua`.
-- Reduced the public config surface to more server-facing settings.
+# Cross-resource priorities (high to lower)
+- High: Add explicit admin permission + audit paths for destructive operations (`racingsystem`, `vehiclemanager`).
+- High: Standardize debug/diagnostic visibility for live runtime state (`customcam`, `customphysics`, `performancetuning`).
+- Medium: Modularize the largest client scripts to reduce regression risk and speed up iteration.
+- Medium: Improve player-facing messaging for hidden systems (race penalties/start cues, PI mode, nitrous state).
+- Lower: Standardize config validation and startup warnings across all resources.

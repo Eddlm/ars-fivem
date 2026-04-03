@@ -6,7 +6,7 @@ game 'gta5'
 -- ensure racingsystem
 
 author 'Eddlm'
-description 'Client-server Lua scaffolding for a racing system resource'
+description 'Client-server Lua system for a racing system resource'
 version '0.1.0'
 
 lua54 'yes'
