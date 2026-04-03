@@ -2361,6 +2361,11 @@ CreateThread(function()
                         local lowSpeedRecoveryPass = false
                         local offWheelsRecoveryPass = false
                         local outsideOffset = 0.0
+                        local throttlePenaltyMs = 0
+                        local powerPenaltyMs = 0
+                        local applyTeleportPenalty = false
+                        local applyThrottlePenalty = false
+                        local applyPowerPenalty = false
                         if pedVehicle ~= 0 and DoesEntityExist(pedVehicle) then
                             local speedMph = (tonumber(GetEntitySpeed(pedVehicle)) or 0.0) * METERS_PER_SECOND_TO_MILES_PER_HOUR
                             lowSpeedRecoveryPass = speedMph < CHECKPOINT_RECOVERY_PASS_MAX_MPH
@@ -2370,11 +2375,57 @@ CreateThread(function()
                             end
                         end
                         local isRecoveryPenaltyBypass = lowSpeedRecoveryPass or offWheelsRecoveryPass
+                        local passContextPayload = {
+                            kind = 'clean_pass',
+                            penalty = 'none',
+                            outsideOffset = 0.0,
+                            assumedCrashPenaltyVoided = false,
+                            throttlePenaltyMs = 0,
+                            powerPenaltyMs = 0,
+                        }
 
-                        if passedOutsideRadius and not isRecoveryPenaltyBypass then
+                        if passedOutsideRadius then
                             outsideOffset = math.max(0.0, (tonumber(outsideLateralDistance) or 0.0) - (tonumber(targetCheckpoint.radius) or 8.0))
-                            if outsideOffset > 20.0 then
-                                checkpointPassIsValid = false
+                            passContextPayload.outsideOffset = outsideOffset
+                            if isRecoveryPenaltyBypass then
+                                if offWheelsRecoveryPass then
+                                    passContextPayload.kind = 'assumed_crash_penalty_voided'
+                                    passContextPayload.penalty = 'voided_assumed_crash'
+                                    passContextPayload.assumedCrashPenaltyVoided = true
+                                else
+                                    passContextPayload.kind = 'recovery_penalty_voided'
+                                    passContextPayload.penalty = 'voided_low_speed'
+                                end
+                            else
+                                if outsideOffset > 20.0 then
+                                    checkpointPassIsValid = false
+                                    passContextPayload.kind = 'invalid_outside_too_far'
+                                    passContextPayload.penalty = 'invalid_no_pass'
+                                elseif outsideOffset > 10.0 then
+                                    applyTeleportPenalty = true
+                                    passContextPayload.kind = 'penalty_teleport'
+                                    passContextPayload.penalty = 'teleport_correction'
+                                elseif outsideOffset >= 1.5 then
+                                    local throttleMinMeters = 1.5
+                                    local throttleMaxMeters = 10.0
+                                    local throttleMinMs = 1000.0
+                                    local throttleMaxMs = 5000.0
+                                    local normalized = math.max(0.0, math.min(1.0, (outsideOffset - throttleMinMeters) / (throttleMaxMeters - throttleMinMeters)))
+                                    throttlePenaltyMs = math.floor(throttleMinMs + ((throttleMaxMs - throttleMinMs) * normalized))
+                                    applyThrottlePenalty = true
+                                    passContextPayload.kind = 'penalty_throttle_cut'
+                                    passContextPayload.penalty = 'throttle_cut'
+                                    passContextPayload.throttlePenaltyMs = throttlePenaltyMs
+                                elseif outsideOffset >= 0.5 then
+                                    powerPenaltyMs = 1000
+                                    applyPowerPenalty = true
+                                    passContextPayload.kind = 'penalty_power_multiplier'
+                                    passContextPayload.penalty = 'power_multiplier'
+                                    passContextPayload.powerPenaltyMs = powerPenaltyMs
+                                else
+                                    passContextPayload.kind = 'outside_no_penalty'
+                                    passContextPayload.penalty = 'none'
+                                end
                             end
                         end
 
@@ -2409,36 +2460,28 @@ CreateThread(function()
                             }
 
                             predictCheckpointPass(joinedInstance, entrantProgress, totalCheckpoints, targetIndex)
-                            TriggerServerEvent('racingsystem:checkpointPassed', joinedInstance.id, targetIndex, lapTimingPayload)
+                            TriggerServerEvent('racingsystem:checkpointPassed', joinedInstance.id, targetIndex, lapTimingPayload, passContextPayload)
 
-                            if passedOutsideRadius and not isRecoveryPenaltyBypass then
-                                if outsideOffset > 10.0 then
-                                    local correctionEntity = (pedVehicle ~= 0 and DoesEntityExist(pedVehicle)) and pedVehicle or ped
-                                    local postPassCheckpointIndex = targetIndex + 1
-                                    if postPassCheckpointIndex > totalCheckpoints then
-                                        postPassCheckpointIndex = 1
-                                    end
-                                    if targetIndex == lapTriggerCheckpoint and not (lapTimingPayload and lapTimingPayload.finished == true) then
-                                        local raceStartCheckpoint = (totalLaps > 1 and totalCheckpoints > 1) and 2 or 1
-                                        postPassCheckpointIndex = raceStartCheckpoint
-                                    end
-
-                                    local passedCheckpoint = targetCheckpoint
-                                    local newCurrentCheckpoint = checkpoints[postPassCheckpointIndex]
-                                    teleportEntityToCheckpoint(correctionEntity, passedCheckpoint, newCurrentCheckpoint)
-                                elseif outsideOffset >= 1.5 then
-                                    local throttleMinMeters = 1.5
-                                    local throttleMaxMeters = 10.0
-                                    local throttleMinMs = 1000.0
-                                    local throttleMaxMs = 5000.0
-                                    local normalized = math.max(0.0, math.min(1.0, (outsideOffset - throttleMinMeters) / (throttleMaxMeters - throttleMinMeters)))
-                                    local throttlePenaltyMs = math.floor(throttleMinMs + ((throttleMaxMs - throttleMinMs) * normalized))
-                                    raceRuntimeState.accelerationPenaltyUntil = GetGameTimer() + throttlePenaltyMs
-                                    showWarningSubtitle('Keep within the radius', throttlePenaltyMs, '~r~')
-                                elseif outsideOffset >= 0.5 then
-                                    applySoftPowerPenalty(pedVehicle, 1000)
-                                    showWarningSubtitle('Keep within the radius', 1000, '~y~')
+                            if applyTeleportPenalty then
+                                local correctionEntity = (pedVehicle ~= 0 and DoesEntityExist(pedVehicle)) and pedVehicle or ped
+                                local postPassCheckpointIndex = targetIndex + 1
+                                if postPassCheckpointIndex > totalCheckpoints then
+                                    postPassCheckpointIndex = 1
                                 end
+                                if targetIndex == lapTriggerCheckpoint and not (lapTimingPayload and lapTimingPayload.finished == true) then
+                                    local raceStartCheckpoint = (totalLaps > 1 and totalCheckpoints > 1) and 2 or 1
+                                    postPassCheckpointIndex = raceStartCheckpoint
+                                end
+
+                                local passedCheckpoint = targetCheckpoint
+                                local newCurrentCheckpoint = checkpoints[postPassCheckpointIndex]
+                                teleportEntityToCheckpoint(correctionEntity, passedCheckpoint, newCurrentCheckpoint)
+                            elseif applyThrottlePenalty then
+                                raceRuntimeState.accelerationPenaltyUntil = GetGameTimer() + throttlePenaltyMs
+                                showWarningSubtitle('Keep within the radius', throttlePenaltyMs, '~r~')
+                            elseif applyPowerPenalty then
+                                applySoftPowerPenalty(pedVehicle, powerPenaltyMs)
+                                showWarningSubtitle('Keep within the radius', powerPenaltyMs, '~y~')
                             end
                         else
                             raceRuntimeState.pendingCheckpointPass = {

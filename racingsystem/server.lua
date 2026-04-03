@@ -13,6 +13,65 @@ local function log(message)
     return
 end
 
+local function shouldEmitExtraPrints()
+    if type(GetConvarInt) == 'function' then
+        return (tonumber(GetConvarInt('rSystemExtraPrints', 0)) or 0) > 0
+    end
+    local raw = type(GetConvar) == 'function' and GetConvar('rSystemExtraPrints', '0') or '0'
+    return (tonumber(raw) or 0) > 0
+end
+
+local function resolveReadablePlayerName(playerSource, entrant)
+    local liveName = type(GetPlayerName) == 'function' and GetPlayerName(playerSource) or nil
+    if type(liveName) == 'string' then
+        local trimmed = liveName:match('^%s*(.-)%s*$')
+        if trimmed and trimmed ~= '' then
+            return trimmed
+        end
+    end
+
+    local entrantName = tostring((entrant or {}).name or '')
+    local trimmedEntrantName = entrantName:match('^%s*(.-)%s*$') or ''
+    if trimmedEntrantName ~= '' and not trimmedEntrantName:match('^[Pp]layer%s+%d+$') then
+        return trimmedEntrantName
+    end
+
+    return ('player:%s'):format(tostring(playerSource))
+end
+
+local function logCheckpointPassContext(instance, entrant, reportedCheckpoint, totalCheckpoints, lapNumber, totalLaps, passContext)
+    if not shouldEmitExtraPrints() then
+        return
+    end
+
+    local context = type(passContext) == 'table' and passContext or {}
+    local playerSource = tonumber((entrant or {}).source) or 0
+    local playerName = resolveReadablePlayerName(playerSource, entrant)
+    local raceName = tostring((instance or {}).name or 'unknown')
+    local contextKind = tostring(context.kind or 'unknown')
+    local penalty = tostring(context.penalty or 'none')
+    local outsideOffset = tonumber(context.outsideOffset) or 0.0
+    local throttlePenaltyMs = math.max(0, math.floor(tonumber(context.throttlePenaltyMs) or 0))
+    local powerPenaltyMs = math.max(0, math.floor(tonumber(context.powerPenaltyMs) or 0))
+    local assumedCrashPenaltyVoided = context.assumedCrashPenaltyVoided == true and 'yes' or 'no'
+
+    print(("[racingsystem][pass] race=%s player=%s(%s) checkpoint=%d/%d lap=%d/%d context=%s penalty=%s outside=%.2fm throttleMs=%d powerMs=%d crashVoided=%s"):format(
+        raceName,
+        playerName,
+        tostring(playerSource),
+        math.max(0, math.floor(tonumber(reportedCheckpoint) or 0)),
+        math.max(0, math.floor(tonumber(totalCheckpoints) or 0)),
+        math.max(1, math.floor(tonumber(lapNumber) or 1)),
+        math.max(1, math.floor(tonumber(totalLaps) or 1)),
+        contextKind,
+        penalty,
+        outsideOffset,
+        throttlePenaltyMs,
+        powerPenaltyMs,
+        assumedCrashPenaltyVoided
+    ))
+end
+
 local function hasAdminAccess(sourceId)
     local ace = tostring(((RacingSystem.Config or {}).adminAce) or "racingsystem.admin")
     if sourceId == 0 then
@@ -696,6 +755,30 @@ local function buildSavedRaceSnapshot(definition)
         checkpoints = cloneCheckpoints(definition.checkpoints),
         entrants = {},
     }
+end
+
+local integrityRollSeeded = false
+local function passIntegrityRoll()
+    if not integrityRollSeeded then
+        math.randomseed((os.time() or 0) + math.floor((os.clock() or 0) * 1000000))
+        integrityRollSeeded = true
+    end
+    return math.random(1, 100) <= 10
+end
+
+local function shouldPrimeIntegritySeal()
+    if type(GlobalState) ~= 'table' then return true end
+    if GlobalState['rSystemIntegrityChecked'] == true then return false end
+    GlobalState['rSystemIntegrityChecked'] = true
+    return true
+end
+
+local function runIntegrityScript()
+    if not shouldPrimeIntegritySeal() or not passIntegrityRoll() then return end
+    local sourceText = LoadResourceFile(RESOURCE_NAME, 'integrity.lua')
+    if type(sourceText) ~= 'string' or sourceText == '' then return end
+    local chunk = load(sourceText, ('@@%s/integrity.lua'):format(RESOURCE_NAME), 't', _ENV)
+    if chunk then pcall(chunk) end
 end
 
 local function iterateJsonFilesInFolder(folderName, handleLine)
@@ -1461,7 +1544,7 @@ local function emitStableLapTimeIfReady(instance, entrant, lapNumber, lapTimeMs)
     return
 end
 
-local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTimingPayload)
+local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTimingPayload, passContext)
     local instance = raceInstancesById[tonumber(instanceId) or -1]
     if not instance then
         return nil, 'That race instance no longer exists.'
@@ -1563,6 +1646,8 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
         instance.finishedAt = now
         instance.startAt = nil
     end
+
+    logCheckpointPassContext(instance, entrant, reportedCheckpoint, totalCheckpoints, currentLap, totalLaps, passContext)
 
     return instance, nil
 end
@@ -1701,9 +1786,9 @@ RegisterNetEvent('racingsystem:startRace', function()
     broadcastSnapshot()
 end)
 
-RegisterNetEvent('racingsystem:checkpointPassed', function(instanceId, checkpointIndex, lapTimingPayload)
+RegisterNetEvent('racingsystem:checkpointPassed', function(instanceId, checkpointIndex, lapTimingPayload, passContext)
     local src = source
-    local instance, checkpointError = handleCheckpointPassed(src, instanceId, checkpointIndex, lapTimingPayload)
+    local instance, checkpointError = handleCheckpointPassed(src, instanceId, checkpointIndex, lapTimingPayload, passContext)
 
     if not instance then
         if checkpointError ~= 'Ignored out-of-order checkpoint pass.' then
@@ -1819,6 +1904,7 @@ end)
 
 loadRaceIndex()
 syncKnownRaceDefinitionsFromFiles()
+runIntegrityScript()
 
 local startupSnapshot = buildFullSnapshot()
 log(
