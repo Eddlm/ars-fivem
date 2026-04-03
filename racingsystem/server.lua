@@ -7,12 +7,15 @@ local buildCheckpointsFromMissionRace
 local parseRaceDefinitionFromJson
 local buildNormalizedOnlineRaceJson
 local loadBundledOnlineRace
+local cloneMissionValue
 local knownRaceDefinitionsByName = {}
 local RACE_INDEX_FILE = 'race_index.json'
 local RESOURCE_NAME = 'racingsystem'
 local CUSTOM_RACE_FOLDER = 'CustomRaces'
 local ONLINE_RACE_FOLDER = 'OnlineRaces'
 local checkpointAnomalyLogByKey = {}
+local UGC_FETCH_RETRY_COOLDOWN_MS = 700
+local nextAllowedUGCFetchAt = 0
 
 local function getExtraPrintLevel()
     local rawLevel = 0
@@ -100,6 +103,7 @@ local function logCheckpointPassContext(instance, entrant, reportedCheckpoint, t
     local raceName = tostring((instance or {}).name or 'unknown')
     local contextKind = tostring(context.kind or 'unknown')
     local penalty = tostring(context.penalty or 'none')
+    local routeVariant = tostring(context.routeVariant or 'primary')
     local outsideOffset = tonumber(context.outsideOffset) or 0.0
     local throttlePenaltyMs = math.max(0, math.floor(tonumber(context.throttlePenaltyMs) or 0))
     local powerPenaltyMs = math.max(0, math.floor(tonumber(context.powerPenaltyMs) or 0))
@@ -140,6 +144,9 @@ local function logCheckpointPassContext(instance, entrant, reportedCheckpoint, t
     end
     if assumedCrashPenaltyVoided == 'yes' then
         table.insert(details, 'crash penalty voided')
+    end
+    if routeVariant ~= 'primary' then
+        table.insert(details, ('route: %s'):format(routeVariant))
     end
 
     local detailText = #details > 0 and (' Details: %s.'):format(table.concat(details, ', ')) or ''
@@ -205,6 +212,97 @@ local function cloneCheckpoints(checkpoints)
     end
 
     return cloned
+end
+
+local function isSecondaryCoordinateValid(x, y, z)
+    if not x or not y or not z then
+        return false
+    end
+
+    if math.abs(x) < 0.001 and math.abs(y) < 0.001 and math.abs(z) < 0.001 then
+        return false
+    end
+
+    if math.abs(x) > 10000.0 or math.abs(y) > 10000.0 or math.abs(z) > 5000.0 then
+        return false
+    end
+
+    return true
+end
+
+local function buildSecondaryCheckpointFromMetadata(index, primaryCheckpoint, raceMetadata)
+    if type(primaryCheckpoint) ~= 'table' then
+        return nil
+    end
+
+    local metadata = type(raceMetadata) == 'table' and raceMetadata or nil
+    local secondaryPoints = metadata and type(metadata.sndchk) == 'table' and metadata.sndchk or nil
+    if not secondaryPoints then
+        return nil
+    end
+
+    local rawSecondary = secondaryPoints[index]
+    if type(rawSecondary) ~= 'table' then
+        return nil
+    end
+
+    local x = tonumber(rawSecondary.x)
+    local y = tonumber(rawSecondary.y)
+    local z = tonumber(rawSecondary.z)
+    if not isSecondaryCoordinateValid(x, y, z) then
+        return nil
+    end
+
+    local primaryX = tonumber(primaryCheckpoint.x) or 0.0
+    local primaryY = tonumber(primaryCheckpoint.y) or 0.0
+    local primaryZ = tonumber(primaryCheckpoint.z) or 0.0
+    local dx = x - primaryX
+    local dy = y - primaryY
+    local dz = z - primaryZ
+    local distance = math.sqrt((dx * dx) + (dy * dy) + (dz * dz))
+
+    if distance < 4.0 or distance > 2500.0 then
+        return nil
+    end
+
+    local radius = tonumber(primaryCheckpoint.radius) or 8.0
+    local secondarySizes = type(metadata.sndsz) == 'table' and metadata.sndsz or nil
+    if secondarySizes then
+        local size = tonumber(secondarySizes[index])
+        if size then
+            radius = math.max(2.0, 8.0 * size)
+        end
+    end
+
+    return {
+        index = tonumber(primaryCheckpoint.index) or index,
+        x = x,
+        y = y,
+        z = z,
+        radius = radius,
+    }
+end
+
+local function buildCheckpointVariantSnapshot(instance)
+    local checkpoints = cloneCheckpoints((instance or {}).checkpoints)
+    local raceMetadata = cloneMissionValue(type((instance or {}).raceMetadata) == 'table' and instance.raceMetadata or {})
+    local checkpointVariants = {}
+
+    for index, primaryCheckpoint in ipairs(checkpoints) do
+        checkpointVariants[index] = {
+            index = index,
+            primary = {
+                index = tonumber(primaryCheckpoint.index) or index,
+                x = tonumber(primaryCheckpoint.x) or 0.0,
+                y = tonumber(primaryCheckpoint.y) or 0.0,
+                z = tonumber(primaryCheckpoint.z) or 0.0,
+                radius = tonumber(primaryCheckpoint.radius) or 8.0,
+            },
+            secondary = buildSecondaryCheckpointFromMetadata(index, primaryCheckpoint, raceMetadata),
+        }
+    end
+
+    return checkpoints, raceMetadata, checkpointVariants
 end
 
 local function cloneKnownRaceDefinition(definition)
@@ -541,6 +639,8 @@ local function buildRaceInstanceSnapshot(instance)
         return nil
     end
 
+    local checkpoints, raceMetadata, checkpointVariants = buildCheckpointVariantSnapshot(instance)
+
     return {
         id = instance.id,
         name = instance.name,
@@ -557,7 +657,9 @@ local function buildRaceInstanceSnapshot(instance)
         startedAt = instance.startedAt,
         bestLapTimeMs = tonumber(instance.bestLapTimeMs) or nil,
         finishedAt = instance.finishedAt,
-        checkpoints = cloneCheckpoints(instance.checkpoints),
+        checkpoints = checkpoints,
+        raceMetadata = raceMetadata,
+        checkpointVariants = checkpointVariants,
         entrants = buildOrderedEntrants(instance),
     }
 end
@@ -1092,8 +1194,63 @@ local function buildMissionJsonFromCheckpoints(checkpoints, existingMissionJson)
     return json.encode(missionRoot)
 end
 
-local function buildUGCJsonUrl(ugcId)
-    return ('https://prod.cloud.rockstargames.com/ugc/gta5mission/5639/%s/0_0_en.json'):format(ugcId)
+local function normalizeMissionLanguageTag(rawTag)
+    local tag = tostring(rawTag or ''):lower()
+    if tag == '' then
+        return nil
+    end
+
+    tag = tag:gsub('-', '_')
+    if tag == 'zh_cn' or tag == 'cn' then
+        return 'zh'
+    end
+    if tag == 'zh_tw' or tag == 'tw' or tag == 'zh_hk' then
+        return 'cht'
+    end
+
+    local language = tag:match('^([a-z][a-z][a-z]?)')
+    if not language or language == '' then
+        return nil
+    end
+
+    return language
+end
+
+local function buildUGCJsonUrlCandidates(ugcId)
+    local languages = { 'en', 'fr', 'es', 'de', 'it', 'pt', 'pl', 'ru', 'ja', 'ko', 'zh', 'cht' }
+    local titleIds = { '5639', '0000' }
+    local candidates = {}
+    local inserted = {}
+    local genericInserted = {}
+
+    local function appendLanguage(language)
+        local normalized = normalizeMissionLanguageTag(language)
+        if not normalized or inserted[normalized] then
+            return
+        end
+
+        inserted[normalized] = true
+        for _, titleId in ipairs(titleIds) do
+            candidates[#candidates + 1] = ('https://prod.cloud.rockstargames.com/ugc/gta5mission/%s/%s/0_0_%s.json'):format(titleId, ugcId, normalized)
+        end
+    end
+
+    appendLanguage(GetConvar and GetConvar('locale', '') or '')
+    appendLanguage(GetConvar and GetConvar('sv_locale', '') or '')
+
+    for _, language in ipairs(languages) do
+        appendLanguage(language)
+    end
+
+    -- Some jobs may expose only a generic file name.
+    for _, titleId in ipairs(titleIds) do
+        if not genericInserted[titleId] then
+            candidates[#candidates + 1] = ('https://prod.cloud.rockstargames.com/ugc/gta5mission/%s/%s/0_0.json'):format(titleId, ugcId)
+            genericInserted[titleId] = true
+        end
+    end
+
+    return candidates
 end
 
 local function fetchUGCJsonContent(url)
@@ -1125,13 +1282,35 @@ local function fetchUGCJsonContent(url)
     return urlContent
 end
 
+local function fetchUGCJsonContentById(ugcId)
+    local urls = buildUGCJsonUrlCandidates(ugcId)
+    local lastError = nil
+
+    for _, url in ipairs(urls) do
+        local now = GetGameTimer()
+        local waitMs = math.max(0, math.floor((tonumber(nextAllowedUGCFetchAt) or 0) - now))
+        if waitMs > 0 then
+            Wait(waitMs)
+        end
+
+        nextAllowedUGCFetchAt = GetGameTimer() + UGC_FETCH_RETRY_COOLDOWN_MS
+        local content, fetchError = fetchUGCJsonContent(url)
+        if content then
+            return content, nil
+        end
+        lastError = fetchError or lastError
+    end
+
+    return nil, lastError or ('No mission JSON variant was found for UGC id "%s".'):format(tostring(ugcId))
+end
+
 local function saveBundledUGCById(ugcId)
     local normalizedUGCId = sanitizeUGCId(ugcId)
     if not normalizedUGCId then
         return nil, 'A valid UGC id is required.'
     end
 
-    local rawMissionJson, fetchError = fetchUGCJsonContent(buildUGCJsonUrl(normalizedUGCId))
+    local rawMissionJson, fetchError = fetchUGCJsonContentById(normalizedUGCId)
     if not rawMissionJson then
         return nil, fetchError or 'Could not download the UGC JSON.'
     end
@@ -1198,7 +1377,7 @@ local function validateBundledUGCById(ugcId)
         return nil, 'A valid UGC id is required.'
     end
 
-    local rawMissionJson, fetchError = fetchUGCJsonContent(buildUGCJsonUrl(normalizedUGCId))
+    local rawMissionJson, fetchError = fetchUGCJsonContentById(normalizedUGCId)
     if not rawMissionJson then
         return nil, fetchError or 'Could not download the UGC JSON.'
     end
@@ -1311,6 +1490,46 @@ buildCheckpointsFromMissionRace = function(raceData)
     return checkpoints
 end
 
+cloneMissionValue = function(value)
+    if type(value) ~= 'table' then
+        return value
+    end
+
+    local cloned = {}
+    for key, item in pairs(value) do
+        cloned[key] = cloneMissionValue(item)
+    end
+
+    return cloned
+end
+
+local function buildMissionRaceMetadata(raceData)
+    if type(raceData) ~= 'table' then
+        return {}
+    end
+
+    local metadata = {}
+    for key, value in pairs(raceData) do
+        if key ~= 'chl' and key ~= 'chs' and key ~= 'chp' then
+            metadata[key] = cloneMissionValue(value)
+        end
+    end
+
+    return metadata
+end
+
+local function hasTableEntries(value)
+    if type(value) ~= 'table' then
+        return false
+    end
+
+    for _ in pairs(value) do
+        return true
+    end
+
+    return false
+end
+
 parseRaceDefinitionFromJson = function(rawRaceJson, contextLabel)
     local label = tostring(contextLabel or 'race JSON')
     if type(rawRaceJson) ~= 'string' or rawRaceJson == '' then
@@ -1324,6 +1543,7 @@ parseRaceDefinitionFromJson = function(rawRaceJson, contextLabel)
 
     local mission = type(decoded.mission) == 'table' and decoded.mission or nil
     if mission then
+        local raceData = type(mission.race) == 'table' and mission.race or {}
         local checkpoints = buildCheckpointsFromMissionRace(mission.race)
         if #checkpoints == 0 then
             return nil, ('The %s mission has no checkpoints.'):format(label)
@@ -1333,6 +1553,7 @@ parseRaceDefinitionFromJson = function(rawRaceJson, contextLabel)
             checkpoints = checkpoints,
             props = buildOnlineRacePropsFromMission(mission.prop),
             modelHides = buildOnlineRaceModelHidesFromMission(mission.dhprop),
+            raceMetadata = buildMissionRaceMetadata(raceData),
         }, nil
     end
 
@@ -1345,6 +1566,7 @@ parseRaceDefinitionFromJson = function(rawRaceJson, contextLabel)
         checkpoints = checkpoints,
         props = cloneOnlineRaceProps(decoded.props),
         modelHides = cloneOnlineRaceModelHides(decoded.modelHides),
+        raceMetadata = cloneMissionValue(type(decoded.raceMetadata) == 'table' and decoded.raceMetadata or {}),
     }, nil
 end
 
@@ -1358,6 +1580,10 @@ buildNormalizedOnlineRaceJson = function(raceName, ugcId, parsedRace)
         props = cloneOnlineRaceProps((parsedRace or {}).props),
         modelHides = cloneOnlineRaceModelHides((parsedRace or {}).modelHides),
     }
+    local raceMetadata = cloneMissionValue((parsedRace or {}).raceMetadata)
+    if hasTableEntries(raceMetadata) then
+        normalized.raceMetadata = raceMetadata
+    end
 
     return json.encode(normalized)
 end
@@ -1390,6 +1616,7 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
         checkpoints = cloneCheckpoints(parsedRace.checkpoints),
         props = cloneOnlineRaceProps(parsedRace.props),
         modelHides = cloneOnlineRaceModelHides(parsedRace.modelHides),
+        raceMetadata = cloneMissionValue(parsedRace.raceMetadata),
         missionJson = rawMissionJson,
     }
 end
@@ -1547,6 +1774,7 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
     local checkpoints = {}
     local props = {}
     local modelHides = {}
+    local raceMetadata = {}
     local sourceType = 'saved'
     local sourceName = nil
     local laps = sanitizeLapCount(lapCount)
@@ -1557,6 +1785,7 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         checkpoints = cloneCheckpoints(customRace.checkpoints)
         props = cloneOnlineRaceProps(customRace.props)
         modelHides = cloneOnlineRaceModelHides(customRace.modelHides)
+        raceMetadata = cloneMissionValue(customRace.raceMetadata)
         sourceType = 'custom'
         sourceName = customRace.name
         registerKnownRaceDefinition(customRace.name, 'custom')
@@ -1566,6 +1795,7 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         checkpoints = cloneCheckpoints(onlineRace.checkpoints)
         props = cloneOnlineRaceProps(onlineRace.props)
         modelHides = cloneOnlineRaceModelHides(onlineRace.modelHides)
+        raceMetadata = cloneMissionValue(onlineRace.raceMetadata)
         sourceType = 'online'
         sourceName = onlineRace.name
         registerKnownRaceDefinition(onlineRace.name, 'online')
@@ -1597,6 +1827,7 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         bestLapTimeMs = nil,
         finishedAt = nil,
         checkpoints = checkpoints,
+        raceMetadata = raceMetadata,
         props = props,
         modelHides = modelHides,
         entrants = {},

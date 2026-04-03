@@ -50,7 +50,6 @@ I make sure to not lose track of the user/admin experience by regularly asking C
 - Gate destructive actions (`kill`, `delete`) behind ACE/role checks. | On it
 - Add audit logging for `invoke`, `save`, `delete`, `kill`, and race-completion lifecycle events. | On it
 - Expand destructive confirmations with clearer impact scope. | Simplicity (6 of 9)
-- Review why `notify`/`notifyFeed` are currently no-op in `racingsystem/client.lua` and restore/replace player-facing feedback path before next push. | On it
 ## Player experience
 - Improve clarity of penalty/correction feedback while racing. | On it
 - Add a stronger “race started” cue when countdown completes. | On it
