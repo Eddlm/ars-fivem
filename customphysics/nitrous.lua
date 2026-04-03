@@ -42,9 +42,6 @@ end
 function CustomPhysicsNitrous.reset(vehicle)
     local targetVehicle = vehicle or activeNitrousShot.vehicle
     stopNitrousOverride(targetVehicle)
-    if activeNitrousShot.vehicle ~= nil then
-        notify("Nitrous ended.")
-    end
     activeNitrousShot.vehicle = nil
     activeNitrousShot.activeUntil = 0
     activeNitrousShot.lastStatusNotifyAt = 0
@@ -76,7 +73,6 @@ function CustomPhysicsNitrous.executeShot(vehicle, instructions)
     activeNitrousShot.vehicle = vehicle
     activeNitrousShot.activeUntil = GetGameTimer() + durationMs
     activeNitrousShot.lastStatusNotifyAt = 0
-    notify(("Nitrous active for %.1fs."):format(durationMs / 1000.0))
     return true
 end
 
@@ -102,8 +98,6 @@ function CustomPhysicsNitrous.update(vehicle, now)
     local intervalMs = math.max(250, math.floor(tonumber(NitrousConfig.debugStatusIntervalMs) or 1000))
     if (now - (activeNitrousShot.lastStatusNotifyAt or 0)) >= intervalMs then
         activeNitrousShot.lastStatusNotifyAt = now
-        local remainingMs = math.max(0, (activeNitrousShot.activeUntil or 0) - now)
-        notify(("Nitrous remaining: %.1fs"):format(remainingMs / 1000.0))
     end
 end
 

@@ -9,8 +9,7 @@ local ownerIdentifierPrefixes = SaveConfig.ownerIdentifierPrefixes or {
     "discord:",
 }
 local function logVm(action, sourceId, message)
-    local who = sourceId == 0 and "console" or (GetPlayerName(sourceId) or ("player:%s"):format(tostring(sourceId)))
-    print(("[vehiclemanager][%s] by=%s(%s) %s"):format(tostring(action), tostring(who), tostring(sourceId), tostring(message or "")))
+    return
 end
 local TUNING_SELECTION_SCHEMA = {
     { key = "enginePack", parse = function(value) return type(value) == "string" and value or "stock" end },
@@ -447,7 +446,6 @@ end)
 
 RegisterCommand("vm_save_inspect", function(src, args)
     if not src or src <= 0 then
-        print("Usage in-game: /vm_save_inspect <saveId>")
         return
     end
     local saveId = tostring((args or {})[1] or "")
@@ -476,7 +474,6 @@ end, false)
 
 RegisterCommand("vm_save_delete", function(src, args)
     if not src or src <= 0 then
-        print("Usage in-game: /vm_save_delete <saveId>")
         return
     end
     local saveId = tostring((args or {})[1] or "")

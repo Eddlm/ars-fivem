@@ -357,8 +357,6 @@ RegisterCommand('ptlaptimes', function(src, args)
         local helpText = "Usage: /ptlaptimes [list|clear] [MODEL|all]"
         if src and src > 0 then
             TriggerClientEvent('chat:addMessage', src, { args = { '^2performancetuning', helpText } })
-        else
-            print(helpText)
         end
         return
     end
@@ -368,8 +366,6 @@ RegisterCommand('ptlaptimes', function(src, args)
         local message = ("Stable lap records: %d model(s)."):format(count)
         if src and src > 0 then
             TriggerClientEvent('chat:addMessage', src, { args = { '^2performancetuning', message } })
-        else
-            print(message)
         end
         return
     end
@@ -385,8 +381,6 @@ RegisterCommand('ptlaptimes', function(src, args)
             local message = ok and "Cleared all stable lap records." or "Failed to clear stable lap records."
             if src and src > 0 then
                 TriggerClientEvent('chat:addMessage', src, { args = { '^2performancetuning', message } })
-            else
-                print(message)
             end
             return
         end
@@ -404,8 +398,6 @@ RegisterCommand('ptlaptimes', function(src, args)
         local message = ok and ("Cleared %d record(s) for %s."):format(removed, model) or ("Failed to clear records for %s."):format(model)
         if src and src > 0 then
             TriggerClientEvent('chat:addMessage', src, { args = { '^2performancetuning', message } })
-        else
-            print(message)
         end
         return
     end
@@ -413,7 +405,5 @@ RegisterCommand('ptlaptimes', function(src, args)
     local unknownMessage = ("Unknown subcommand '%s'. Use /ptlaptimes help."):format(subcommand)
     if src and src > 0 then
         TriggerClientEvent('chat:addMessage', src, { args = { '^2performancetuning', unknownMessage } })
-    else
-        print(unknownMessage)
     end
 end, false)

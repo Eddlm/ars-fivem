@@ -86,7 +86,7 @@ local function getScaleformUIState()
     scaleformUI.state.sliderValues = scaleformUI.state.sliderValues or {}
     scaleformUI.state.dynamicSliderProfiles = scaleformUI.state.dynamicSliderProfiles or {}
     scaleformUI.state.panels = scaleformUI.state.panels or {}
-    scaleformUI.state.piDisplayModeIndex = math.max(1, math.min(2, math.floor(tonumber(scaleformUI.state.piDisplayModeIndex) or 2)))
+    scaleformUI.state.piDisplayModeIndex = math.max(1, math.min(2, math.floor(tonumber(scaleformUI.state.piDisplayModeIndex) or 1)))
     scaleformUI.state.piPanelDisplayModeIndex = math.max(1, math.min(2, math.floor(tonumber(scaleformUI.state.piPanelDisplayModeIndex) or 1)))
     if scaleformUI.state.performanceBarsDisplayMode == nil then
         local runtimeModel = (((PerformanceTuning or {}).RuntimeConfig or {}).performanceModel or ((PerformanceTuning or {}).RuntimeConfig or {}).performanceBars or {})

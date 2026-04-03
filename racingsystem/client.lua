@@ -16,8 +16,9 @@ local raceRuntimeState = {
     pendingCheckpointPass = nil,
     predictedProgress = nil,
     previousPosition = nil,
-    lastOutsideCheckpointCrossKey = nil,
     accelerationPenaltyUntil = 0,
+    powerPenaltyUntil = 0,
+    powerPenaltyVehicle = nil,
     checkpointPassArm = nil,
 }
 local raceCountdownLocalEndByInstanceId = {}
@@ -112,6 +113,52 @@ local activeInstanceAssets = {
 
 local CHECKPOINT_PASS_ARM_DISTANCE = 30.0
 local CHECKPOINT_PASS_RELEASE_DELTA = 0.75
+local CHECKPOINT_RECOVERY_PASS_MAX_MPH = 5.0
+local CHECKPOINT_RECOVERY_FORWARD_VELOCITY_RATIO_MAX = 0.66
+local METERS_PER_SECOND_TO_MILES_PER_HOUR = 2.236936
+local MILES_PER_HOUR_TO_METERS_PER_SECOND = 0.44704
+local CHECKPOINT_SOFT_POWER_PENALTY_MULTIPLIER = 0.05
+
+local function clearPowerPenaltyVehicleOverride()
+    local penaltyVehicle = raceRuntimeState.powerPenaltyVehicle
+    if penaltyVehicle and DoesEntityExist(penaltyVehicle) then
+        SetVehicleEnginePowerMultiplier(penaltyVehicle, 0.0)
+    end
+    raceRuntimeState.powerPenaltyVehicle = nil
+    raceRuntimeState.powerPenaltyUntil = 0
+end
+
+local function applySoftPowerPenalty(vehicle, durationMs)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+        return
+    end
+
+    local now = GetGameTimer()
+    local penaltyDurationMs = math.max(0, math.floor(tonumber(durationMs) or 0))
+    if penaltyDurationMs <= 0 then
+        return
+    end
+
+    raceRuntimeState.powerPenaltyVehicle = vehicle
+    raceRuntimeState.powerPenaltyUntil = now + penaltyDurationMs
+    SetVehicleEnginePowerMultiplier(vehicle, CHECKPOINT_SOFT_POWER_PENALTY_MULTIPLIER)
+end
+
+local function getVehicleForwardVelocityRatio(vehicle)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+        return 1.0
+    end
+
+    local velocity = GetEntityVelocity(vehicle)
+    local speedSquared = (velocity.x * velocity.x) + (velocity.y * velocity.y) + (velocity.z * velocity.z)
+    if speedSquared <= 0.0001 then
+        return 0.0
+    end
+
+    local forward = GetEntityForwardVector(vehicle)
+    local forwardSpeed = (velocity.x * forward.x) + (velocity.y * forward.y) + (velocity.z * forward.z)
+    return forwardSpeed / math.sqrt(speedSquared)
+end
 
 local GetPropSpeedModificationParameters
 
@@ -192,20 +239,18 @@ end
 
 -- Sends a lightweight in-game message for the local player.
 local function notify(message, isError)
-    local text = tostring(message or '')
-    if isError then
-        text = ('~r~%s~s~'):format(text)
-    end
-
-    BeginTextCommandThefeedPost('STRING')
-    AddTextComponentSubstringPlayerName(text)
-    EndTextCommandThefeedPostTicker(false, false)
+    return
 end
 
 local function notifyFeed(message)
-    BeginTextCommandThefeedPost('STRING')
-    AddTextComponentSubstringPlayerName(tostring(message or ''))
-    EndTextCommandThefeedPostTicker(false, false)
+    return
+end
+
+local function showWarningSubtitle(message, durationMs, colorTag)
+    BeginTextCommandPrint('STRING')
+    local colorPrefix = tostring(colorTag or '~y~')
+    AddTextComponentSubstringPlayerName(('%s%s~s~'):format(colorPrefix, tostring(message or '')))
+    EndTextCommandPrint(math.max(0, math.floor(tonumber(durationMs) or 1000)), true)
 end
 
 local function clearCountdownScaleform()
@@ -822,13 +867,13 @@ local function teleportEntityToCheckpoint(entity, checkpoint, nextCheckpoint)
     local x = tonumber(checkpoint and checkpoint.x) or 0.0
     local y = tonumber(checkpoint and checkpoint.y) or 0.0
     local z = (tonumber(checkpoint and checkpoint.z) or 0.0) + 2.0
-    local heading = getHeadingToNextCheckpoint(checkpoint, nextCheckpoint) + 90.0
+    local heading = getHeadingToNextCheckpoint(checkpoint, nextCheckpoint) + 270.0
     SetEntityCoordsNoOffset(entity, x, y, z, false, false, false)
     SetEntityHeading(entity, heading)
     SetEntityVelocity(entity, 0.0, 0.0, 0.0)
 
     if IsEntityAVehicle(entity) then
-        SetVehicleForwardSpeed(entity, 0.0)
+        SetVehicleForwardSpeed(entity, 5.0 * MILES_PER_HOUR_TO_METERS_PER_SECOND)
     end
 end
 
@@ -2085,8 +2130,8 @@ CreateThread(function()
             raceRuntimeState.pendingCheckpointPass = nil
             raceRuntimeState.previousPosition = nil
             raceRuntimeState.checkpointPassArm = nil
-            raceRuntimeState.lastOutsideCheckpointCrossKey = nil
             raceRuntimeState.accelerationPenaltyUntil = 0
+            clearPowerPenaltyVehicleOverride()
             resetLocalRaceTiming()
             clearCountdownScaleform()
             if activeInstanceAssets.instanceId then
@@ -2312,67 +2357,109 @@ CreateThread(function()
                     end
 
                     if checkpointPassed then
-                        if passedOutsideRadius then
-                            local outsideOffset = math.max(0.0, (tonumber(outsideLateralDistance) or 0.0) - (tonumber(targetCheckpoint.radius) or 8.0))
-                            local instanceId = tonumber(joinedInstance.id) or 0
-                            local lapNumber = math.max(1, tonumber(entrantProgress.currentLap) or 1)
-                            local outsideKey = ('%s:%s:%s'):format(instanceId, targetIndex, lapNumber)
-                            if raceRuntimeState.lastOutsideCheckpointCrossKey ~= outsideKey then
-                                raceRuntimeState.lastOutsideCheckpointCrossKey = outsideKey
-                                if outsideOffset > 25.0 then
-                                    notifyFeed(('Checkpoint cut (+%.1fm): no correction applied (over 25m cap).'):format(outsideOffset))
-                                elseif outsideOffset >= 15.0 then
-                                    local correctionEntity = (pedVehicle ~= 0 and DoesEntityExist(pedVehicle)) and pedVehicle or ped
-                                    local correctionNextIndex = targetIndex + 1
-                                    if correctionNextIndex > totalCheckpoints then
-                                        correctionNextIndex = 1
-                                    end
-                                    teleportEntityToCheckpoint(correctionEntity, targetCheckpoint, checkpoints[correctionNextIndex])
-                                    notifyFeed(('Checkpoint cut (+%.1fm): teleport correction applied.'):format(outsideOffset))
-                                elseif outsideOffset <= 5.0 then
-                                    raceRuntimeState.accelerationPenaltyUntil = GetGameTimer() + 2000
-                                    notifyFeed(('Checkpoint cut (+%.1fm): 2s throttle penalty applied.'):format(outsideOffset))
+                        local checkpointPassIsValid = true
+                        local lowSpeedRecoveryPass = false
+                        local offWheelsRecoveryPass = false
+                        local outsideOffset = 0.0
+                        if pedVehicle ~= 0 and DoesEntityExist(pedVehicle) then
+                            local speedMph = (tonumber(GetEntitySpeed(pedVehicle)) or 0.0) * METERS_PER_SECOND_TO_MILES_PER_HOUR
+                            lowSpeedRecoveryPass = speedMph < CHECKPOINT_RECOVERY_PASS_MAX_MPH
+                            if not IsVehicleOnAllWheels(pedVehicle) then
+                                local forwardVelocityRatio = getVehicleForwardVelocityRatio(pedVehicle)
+                                offWheelsRecoveryPass = forwardVelocityRatio < CHECKPOINT_RECOVERY_FORWARD_VELOCITY_RATIO_MAX
+                            end
+                        end
+                        local isRecoveryPenaltyBypass = lowSpeedRecoveryPass or offWheelsRecoveryPass
+
+                        if passedOutsideRadius and not isRecoveryPenaltyBypass then
+                            outsideOffset = math.max(0.0, (tonumber(outsideLateralDistance) or 0.0) - (tonumber(targetCheckpoint.radius) or 8.0))
+                            if outsideOffset > 20.0 then
+                                checkpointPassIsValid = false
+                            end
+                        end
+
+                        if checkpointPassIsValid then
+                            local lapTimingPayload = nil
+                            local totalLaps = math.max(1, tonumber(joinedInstance.laps) or 1)
+                            local lapTriggerCheckpoint = (totalLaps > 1 and totalCheckpoints > 1) and 1 or totalCheckpoints
+                            if targetIndex == lapTriggerCheckpoint then
+                                local nowMs = GetGameTimer()
+                                local raceStartedAt = tonumber(raceTimingState.raceStartedAt) or nowMs
+                                local lapStartedAt = tonumber(raceTimingState.lapStartedAt) or raceStartedAt
+                                local currentLap = math.max(1, tonumber(entrantProgress.currentLap) or 1)
+
+                                lapTimingPayload = {
+                                    lapNumber = currentLap,
+                                    lapTimeMs = math.max(0, nowMs - lapStartedAt),
+                                    totalTimeMs = math.max(0, nowMs - raceStartedAt),
+                                    finished = currentLap >= totalLaps,
+                                }
+
+                                if lapTimingPayload.finished then
+                                    raceTimingState.lapStartedAt = nil
                                 else
-                                    notifyFeed(('Checkpoint cut (+%.1fm): warning only.'):format(outsideOffset))
+                                    raceTimingState.lapStartedAt = nowMs
                                 end
                             end
-                        end
 
-                        local lapTimingPayload = nil
-                        local totalLaps = math.max(1, tonumber(joinedInstance.laps) or 1)
-                        local lapTriggerCheckpoint = (totalLaps > 1 and totalCheckpoints > 1) and 1 or totalCheckpoints
-                        if targetIndex == lapTriggerCheckpoint then
-                            local nowMs = GetGameTimer()
-                            local raceStartedAt = tonumber(raceTimingState.raceStartedAt) or nowMs
-                            local lapStartedAt = tonumber(raceTimingState.lapStartedAt) or raceStartedAt
-                            local currentLap = math.max(1, tonumber(entrantProgress.currentLap) or 1)
-
-                            lapTimingPayload = {
-                                lapNumber = currentLap,
-                                lapTimeMs = math.max(0, nowMs - lapStartedAt),
-                                totalTimeMs = math.max(0, nowMs - raceStartedAt),
-                                finished = currentLap >= totalLaps,
+                            raceRuntimeState.pendingCheckpointPass = {
+                                instanceId = joinedInstance.id,
+                                checkpointIndex = targetIndex,
+                                expiresAt = GetGameTimer() + 1500,
                             }
 
-                            if lapTimingPayload.finished then
-                                raceTimingState.lapStartedAt = nil
-                            else
-                                raceTimingState.lapStartedAt = nowMs
+                            predictCheckpointPass(joinedInstance, entrantProgress, totalCheckpoints, targetIndex)
+                            TriggerServerEvent('racingsystem:checkpointPassed', joinedInstance.id, targetIndex, lapTimingPayload)
+
+                            if passedOutsideRadius and not isRecoveryPenaltyBypass then
+                                if outsideOffset > 10.0 then
+                                    local correctionEntity = (pedVehicle ~= 0 and DoesEntityExist(pedVehicle)) and pedVehicle or ped
+                                    local postPassCheckpointIndex = targetIndex + 1
+                                    if postPassCheckpointIndex > totalCheckpoints then
+                                        postPassCheckpointIndex = 1
+                                    end
+                                    if targetIndex == lapTriggerCheckpoint and not (lapTimingPayload and lapTimingPayload.finished == true) then
+                                        local raceStartCheckpoint = (totalLaps > 1 and totalCheckpoints > 1) and 2 or 1
+                                        postPassCheckpointIndex = raceStartCheckpoint
+                                    end
+
+                                    local passedCheckpoint = targetCheckpoint
+                                    local newCurrentCheckpoint = checkpoints[postPassCheckpointIndex]
+                                    teleportEntityToCheckpoint(correctionEntity, passedCheckpoint, newCurrentCheckpoint)
+                                elseif outsideOffset >= 1.5 then
+                                    local throttleMinMeters = 1.5
+                                    local throttleMaxMeters = 10.0
+                                    local throttleMinMs = 1000.0
+                                    local throttleMaxMs = 5000.0
+                                    local normalized = math.max(0.0, math.min(1.0, (outsideOffset - throttleMinMeters) / (throttleMaxMeters - throttleMinMeters)))
+                                    local throttlePenaltyMs = math.floor(throttleMinMs + ((throttleMaxMs - throttleMinMs) * normalized))
+                                    raceRuntimeState.accelerationPenaltyUntil = GetGameTimer() + throttlePenaltyMs
+                                    showWarningSubtitle('Keep within the radius', throttlePenaltyMs, '~r~')
+                                elseif outsideOffset >= 0.5 then
+                                    applySoftPowerPenalty(pedVehicle, 1000)
+                                    showWarningSubtitle('Keep within the radius', 1000, '~y~')
+                                end
                             end
+                        else
+                            raceRuntimeState.pendingCheckpointPass = {
+                                instanceId = joinedInstance.id,
+                                checkpointIndex = targetIndex,
+                                expiresAt = GetGameTimer() + 1500,
+                            }
                         end
-
-                        raceRuntimeState.pendingCheckpointPass = {
-                            instanceId = joinedInstance.id,
-                            checkpointIndex = targetIndex,
-                            expiresAt = GetGameTimer() + 1500,
-                        }
-
-                        predictCheckpointPass(joinedInstance, entrantProgress, totalCheckpoints, targetIndex)
-                        TriggerServerEvent('racingsystem:checkpointPassed', joinedInstance.id, targetIndex, lapTimingPayload)
                     end
                 end
 
                 raceRuntimeState.previousPosition = origin
+                local powerPenaltyUntil = tonumber(raceRuntimeState.powerPenaltyUntil) or 0
+                if powerPenaltyUntil > GetGameTimer() then
+                    local penaltyVehicle = raceRuntimeState.powerPenaltyVehicle
+                    if penaltyVehicle and DoesEntityExist(penaltyVehicle) then
+                        SetVehicleEnginePowerMultiplier(penaltyVehicle, CHECKPOINT_SOFT_POWER_PENALTY_MULTIPLIER)
+                    end
+                elseif raceRuntimeState.powerPenaltyVehicle ~= nil then
+                    clearPowerPenaltyVehicleOverride()
+                end
                 local penaltyUntil = tonumber(raceRuntimeState.accelerationPenaltyUntil) or 0
                 if penaltyUntil > GetGameTimer() then
                     DisableControlAction(0, 71, true)
@@ -2397,6 +2484,7 @@ AddEventHandler('onClientResourceStop', function(resourceName)
         return
     end
 
+    clearPowerPenaltyVehicleOverride()
     unloadActiveInstanceAssets()
 end)
 

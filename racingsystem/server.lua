@@ -10,10 +10,7 @@ local CUSTOM_RACE_FOLDER = 'CustomRaces'
 local ONLINE_RACE_FOLDER = 'OnlineRaces'
 
 local function log(message)
-    if ((RacingSystem.Config or {}).debugLogging) ~= true then
-        return
-    end
-    print(("[racingsystem] %s"):format(tostring(message or "")))
+    return
 end
 
 local function hasAdminAccess(sourceId)
@@ -1764,13 +1761,16 @@ end)
 
 RegisterNetEvent('racingsystem:killRace', function(raceName)
     local src = source
-    if not hasAdminAccess(src) then
+    local instance = findRaceInstanceByName(raceName)
+    local ownerKillEnabled = ((RacingSystem.Config or {}).raceOwnerCanKillOwnedRace) == true
+    local ownsRace = instance and tonumber(instance.owner) == tonumber(src)
+    if not hasAdminAccess(src) and not (ownerKillEnabled and ownsRace) then
         notifyPlayer(src, "You do not have permission to kill race instances.", true)
         return
     end
-    local instance, killError = killRaceInstanceByName(raceName)
+    local killedInstance, killError = killRaceInstanceByName(raceName)
 
-    if not instance then
+    if not killedInstance then
         notifyPlayer(src, killError or 'Could not kill race instance.', true)
         return
     end

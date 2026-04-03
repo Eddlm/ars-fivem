@@ -2185,7 +2185,6 @@ local function autosaveManagedVehicleToExistingSave()
 
     local payload = buildVehicleSavePayload(vehicle)
     payload.saveId = saveId
-    notify(("Autosaving '%s'..."):format(saveId))
     TriggerServerEvent("vehiclemanager:updateSavedVehicleSnapshot", saveId, payload)
 end
 

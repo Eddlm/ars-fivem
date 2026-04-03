@@ -9,6 +9,7 @@ RacingSystem.Config = {
     minLapCount = 1,
     maxLapCount = 10,
     playerCanInvokeMultipleRaces = false,
+    raceOwnerCanKillOwnedRace = false,
     countdownMs = 5000,
     debugLogging = true,
     adminAce = "racingsystem.admin",

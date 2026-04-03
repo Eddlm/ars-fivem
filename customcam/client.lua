@@ -68,7 +68,19 @@ local toggleHoldState = {
     heldSince = nil,
     hasTriggered = false
 }
-local lastControlHintAt = 0
+local controlHintShown = false
+local controlHintReadyAt = nil
+local controlHintRandomSeeded = false
+
+local function getRandomControlHintDelayMs()
+    if not controlHintRandomSeeded then
+        local cloudTime = type(GetCloudTimeAsInt) == "function" and tonumber(GetCloudTimeAsInt()) or 0
+        math.randomseed((tonumber(GetGameTimer()) or 0) + cloudTime + (PlayerId() * 7919))
+        controlHintRandomSeeded = true
+    end
+
+    return math.random(60000, 240000)
+end
 
 local function getToggleControlId()
     local controls = type(Config.Controls) == "table" and Config.Controls or {}
@@ -116,8 +128,16 @@ local function showInactiveControlHints()
         return
     end
 
+    if controlHintShown then
+        return
+    end
+
     local now = GetGameTimer()
-    if (now - lastControlHintAt) < 12000 then
+    if not controlHintReadyAt then
+        controlHintReadyAt = now + getRandomControlHintDelayMs()
+    end
+
+    if now < controlHintReadyAt then
         return
     end
 
@@ -126,7 +146,7 @@ local function showInactiveControlHints()
         return
     end
 
-    lastControlHintAt = now
+    controlHintShown = true
     showControlHint("Hold camera toggle to enable custom cam. Press look-back to reverse view while active.")
 end
 
