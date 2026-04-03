@@ -1,3 +1,48 @@
+RacingSystemUtil = type(RacingSystemUtil) == 'table' and RacingSystemUtil or {}
+
+if type(RacingSystemUtil.NotifyPlayer) ~= 'function' then
+    function RacingSystemUtil.NotifyPlayer(message, isError)
+        local colorPrefix = isError and '~o~' or '~g~'
+        local text = ('%s%s~s~'):format(colorPrefix, tostring(message or ''))
+        BeginTextCommandThefeedPost('STRING')
+        AddTextComponentSubstringPlayerName(text)
+        EndTextCommandThefeedPostTicker(false, false)
+    end
+end
+
+if type(RacingSystemUtil.ShowWarningSubtitle) ~= 'function' then
+    function RacingSystemUtil.ShowWarningSubtitle(message, durationMs, colorTag)
+        BeginTextCommandPrint('STRING')
+        local colorPrefix = tostring(colorTag or '~y~')
+        AddTextComponentSubstringPlayerName(('%s%s~s~'):format(colorPrefix, tostring(message or '')))
+        EndTextCommandPrint(math.max(0, math.floor(tonumber(durationMs) or 1000)), true)
+    end
+end
+
+if type(RacingSystemUtil.ShowRaceEventVisual) ~= 'function' then
+    function RacingSystemUtil.ShowRaceEventVisual(title, subtitle, durationMs)
+        return
+    end
+end
+
+if type(RacingSystemUtil.DrawRaceEventVisual) ~= 'function' then
+    function RacingSystemUtil.DrawRaceEventVisual()
+        return
+    end
+end
+
+if type(RacingSystemUtil.UpdateCountdownVisual) ~= 'function' then
+    function RacingSystemUtil.UpdateCountdownVisual(instanceId, remainingMs)
+        return
+    end
+end
+
+if type(RacingSystemUtil.ClearCountdownVisual) ~= 'function' then
+    function RacingSystemUtil.ClearCountdownVisual()
+        return
+    end
+end
+
 local latestSnapshot = {
     races = {},
     count = 0,
@@ -29,18 +74,6 @@ local raceRuntimeState = {
 local raceCountdownLocalEndByInstanceId = {}
 local raceCountdownReportedZeroByInstanceId = {}
 local raceStartCueShownByInstanceId = {}
-local raceCountdownVisualState = {
-    instanceId = nil,
-    scaleform = nil,
-    lastLabel = nil,
-    goVisibleUntil = 0,
-}
-local raceEventVisualState = {
-    scaleform = nil,
-    title = nil,
-    subtitle = nil,
-    expiresAt = 0,
-}
 local raceTimingState = {
     instanceId = nil,
     raceStartedAt = nil,
@@ -252,157 +285,11 @@ do
     end
 end
 
--- Sends a lightweight in-game message for the local player.
-local function notify(message, isError)
-    return
-end
-
-local function notifyFeed(message)
-    return
-end
-
-local function showWarningSubtitle(message, durationMs, colorTag)
-    BeginTextCommandPrint('STRING')
-    local colorPrefix = tostring(colorTag or '~y~')
-    AddTextComponentSubstringPlayerName(('%s%s~s~'):format(colorPrefix, tostring(message or '')))
-    EndTextCommandPrint(math.max(0, math.floor(tonumber(durationMs) or 1000)), true)
-end
-
-local function clearCountdownScaleform()
-    if raceCountdownVisualState.scaleform and raceCountdownVisualState.scaleform ~= 0 then
-        SetScaleformMovieAsNoLongerNeeded(raceCountdownVisualState.scaleform)
-    end
-    raceCountdownVisualState.scaleform = nil
-    raceCountdownVisualState.lastLabel = nil
-    raceCountdownVisualState.instanceId = nil
-    raceCountdownVisualState.goVisibleUntil = 0
-end
-
-local function ensureCountdownScaleform()
-    if raceCountdownVisualState.scaleform and raceCountdownVisualState.scaleform ~= 0 then
-        return raceCountdownVisualState.scaleform
-    end
-
-    local handle = RequestScaleformMovie('MP_BIG_MESSAGE_FREEMODE')
-    if not handle or handle == 0 then
-        return nil
-    end
-
-    raceCountdownVisualState.scaleform = handle
-    return handle
-end
-
-local function clearRaceEventScaleform()
-    if raceEventVisualState.scaleform and raceEventVisualState.scaleform ~= 0 then
-        SetScaleformMovieAsNoLongerNeeded(raceEventVisualState.scaleform)
-    end
-    raceEventVisualState.scaleform = nil
-    raceEventVisualState.title = nil
-    raceEventVisualState.subtitle = nil
-    raceEventVisualState.expiresAt = 0
-end
-
-local function ensureRaceEventScaleform()
-    if raceEventVisualState.scaleform and raceEventVisualState.scaleform ~= 0 then
-        return raceEventVisualState.scaleform
-    end
-
-    local handle = RequestScaleformMovie('MP_BIG_MESSAGE_FREEMODE')
-    if not handle or handle == 0 then
-        return nil
-    end
-
-    raceEventVisualState.scaleform = handle
-    return handle
-end
-
-local function showRaceEventVisual(title, subtitle, durationMs)
-    raceEventVisualState.title = tostring(title or '')
-    raceEventVisualState.subtitle = tostring(subtitle or '')
-    raceEventVisualState.expiresAt = GetGameTimer() + math.max(250, math.floor(tonumber(durationMs) or 1500))
-end
-
-local function drawRaceEventVisual()
-    local now = GetGameTimer()
-    if (tonumber(raceEventVisualState.expiresAt) or 0) <= now then
-        if raceEventVisualState.scaleform then
-            clearRaceEventScaleform()
-        end
-        return
-    end
-
-    local scaleform = ensureRaceEventScaleform()
-    if not scaleform or scaleform == 0 or not HasScaleformMovieLoaded(scaleform) then
-        return
-    end
-
-    BeginScaleformMovieMethod(scaleform, 'SHOW_SHARD_CENTERED_MP_MESSAGE')
-    PushScaleformMovieMethodParameterString(raceEventVisualState.title or '')
-    PushScaleformMovieMethodParameterString(raceEventVisualState.subtitle or '')
-    EndScaleformMovieMethod()
-    DrawScaleformMovie(scaleform, 0.5, 0.34, 1.0, 1.0, 255, 255, 255, 255, 0)
-end
-
-local function updateCountdownVisual(instanceId, remainingMs)
-    local resolvedInstanceId = tonumber(instanceId)
-    if not resolvedInstanceId then
-        clearCountdownScaleform()
-        return
-    end
-
-    if raceCountdownVisualState.instanceId ~= resolvedInstanceId then
-        raceCountdownVisualState.instanceId = resolvedInstanceId
-        raceCountdownVisualState.lastLabel = nil
-        raceCountdownVisualState.goVisibleUntil = 0
-    end
-
-    local now = GetGameTimer()
-    local label = nil
-    local ms = math.max(0, tonumber(remainingMs) or 0)
-    if ms <= 0 then
-        label = 'GO'
-        if raceCountdownVisualState.goVisibleUntil <= 0 then
-            raceCountdownVisualState.goVisibleUntil = now + 1000
-        end
-        if now > raceCountdownVisualState.goVisibleUntil then
-            clearCountdownScaleform()
-            return
-        end
-    elseif ms <= 1000 then
-        label = '1'
-    elseif ms <= 2000 then
-        label = '2'
-    elseif ms <= 3000 then
-        label = '3'
-    else
-        raceCountdownVisualState.lastLabel = nil
-        return
-    end
-
-    local scaleform = ensureCountdownScaleform()
-    if not scaleform or scaleform == 0 or not HasScaleformMovieLoaded(scaleform) then
-        return
-    end
-
-    if raceCountdownVisualState.lastLabel ~= label then
-        raceCountdownVisualState.lastLabel = label
-        local styledLabel = (label == 'GO') and '~g~GO' or ('~y~%s'):format(label)
-        BeginScaleformMovieMethod(scaleform, 'SHOW_SHARD_CENTERED_MP_MESSAGE')
-        PushScaleformMovieMethodParameterString(styledLabel)
-        PushScaleformMovieMethodParameterString('')
-        EndScaleformMovieMethod()
-    end
-
-    DrawScaleformMovie(scaleform, 0.5, 0.3, 1.0, 1.0, 255, 255, 255, 255, 0)
-end
-
 RegisterNetEvent('racingsystem:notify', function(payload)
     if type(payload) == 'table' then
-        notify(payload.message, payload.isError == true)
         return
     end
 
-    notify(payload)
 end)
 
 local function requestRaceStateSnapshot()
@@ -655,7 +542,6 @@ local function ensureEditorActive()
         return true
     end
 
-        notify('Race creation mode is not active. Open the race menu (F7) and choose a race to edit first.')
     return false
 end
 
@@ -685,7 +571,6 @@ local function addCheckpointAtPlayer()
 
     local coords = getPlayerCoords()
     if not coords then
-        notify('Could not read your current position.')
         return
     end
 
@@ -707,7 +592,6 @@ local function moveClosestCheckpointToPlayer()
     local closestIndex, closestDistance = getClosestCheckpointIndex()
     local coords = getPlayerCoords()
     if not closestIndex or not coords then
-        notify('There is no checkpoint to move yet.')
         return
     end
 
@@ -725,7 +609,6 @@ local function deleteClosestCheckpoint()
 
     local closestIndex, closestDistance = getClosestCheckpointIndex()
     if not closestIndex then
-        notify('There is no checkpoint to delete yet.')
         return
     end
 
@@ -744,7 +627,6 @@ local function adjustClosestCheckpointRadius(direction)
     end
 
     if not targetIndex then
-        notify('There is no checkpoint to resize yet.')
         return
     end
 
@@ -773,7 +655,6 @@ local function toggleGrabClosestCheckpoint()
 
     local closestIndex, closestDistance = getClosestCheckpointIndex()
     if not closestIndex then
-        notify('There is no checkpoint to grab yet.')
         return
     end
     editorState.grabbedCheckpointIndex = closestIndex
@@ -794,7 +675,6 @@ local function saveEditorRace(optionalName)
     local requestedName = type(optionalName) == 'string' and optionalName or ''
     local raceName = RacingSystem.Trim(requestedName ~= '' and requestedName or editorState.name)
     if raceName == '' then
-        notify('A race name is required before saving.')
         return
     end
 
@@ -1553,7 +1433,7 @@ local function refreshRaceMenu()
 
     raceImportGTAOItem:Enabled(true)
     raceImportGTAOItem:RightLabel('URL')
-    raceImportGTAOItem:Description('Paste a GTAO race URL and validate the race ID/JSON without saving yet.')
+    raceImportGTAOItem:Description('Paste a GTAO race URL to import it via loader and auto-host it as a 2-lap online race.')
 
     local editorAllowed = menuMode ~= 'in_race'
     raceEditorMenuItem:Enabled(editorAllowed)
@@ -1775,7 +1655,6 @@ local function initializeRaceMenu()
 
         local definition = getSelectedInvokeDefinition()
         if not definition then
-            notify('There is no saved race available to invoke.')
             return
         end
 
@@ -1821,7 +1700,6 @@ local function initializeRaceMenu()
         end
 
         if isSameRaceInstance(instance, getJoinedRaceInstance()) then
-            notify('You are already joined to that race.')
             return
         end
 
@@ -1835,7 +1713,6 @@ local function initializeRaceMenu()
             TriggerServerEvent('racingsystem:killRace', instance.name)
         elseif instance and not canKill then
             local _, denyReason = canViewerKillInstance(instance)
-            notify(tostring(denyReason or 'You cannot kill this race instance.'))
         end
     end
 
@@ -1845,7 +1722,6 @@ local function initializeRaceMenu()
             local raceName = editorState.selectedName ~= '' and editorState.selectedName or (selectedDefinition and selectedDefinition.name or '')
             local trimmedRaceName = RacingSystem.Trim(raceName)
             if trimmedRaceName == '' then
-                notify('Choose or type a race name first.')
                 return
             end
 
@@ -1860,7 +1736,6 @@ local function initializeRaceMenu()
             local raceName = editorState.selectedName ~= '' and editorState.selectedName or (selectedDefinition and selectedDefinition.name or '')
             local trimmedRaceName = RacingSystem.Trim(raceName)
             if trimmedRaceName == '' then
-                notify('Choose or type a race name before saving.')
                 return
             end
 
@@ -1870,13 +1745,11 @@ local function initializeRaceMenu()
         elseif item == raceEditorDeleteItem then
             local viewerPermissions = getViewerPermissions()
             if viewerPermissions.canDeleteRaceDefinitions ~= true then
-                notify('Admin permission is required to delete race definitions.')
                 return
             end
 
             local selectedDefinition = raceMenuEditorOptions[raceEditorSelectedItem:Index()]
             if not selectedDefinition then
-                notify('Only indexed races can be deleted from this menu.')
                 return
             end
 
@@ -1931,7 +1804,6 @@ end
 
 local function openRaceMenu()
     if not initializeRaceMenu() then
-        notify('ScaleformUI is not available.')
         return
     end
 
@@ -2121,7 +1993,6 @@ RegisterNetEvent('racingsystem:startCountdown', function(payload)
     raceStartCueShownByInstanceId[instanceId] = nil
     raceTimingState.raceStartedAt = raceCountdownLocalEndByInstanceId[instanceId]
     raceTimingState.lapStartedAt = raceCountdownLocalEndByInstanceId[instanceId]
-    notifyFeed(("Race starts in %.1fs"):format(countdownMs / 1000.0))
 end)
 
 RegisterNetEvent('racingsystem:lapCompleted', function(payload)
@@ -2139,10 +2010,10 @@ RegisterNetEvent('racingsystem:lapCompleted', function(payload)
         local instance = getJoinedRaceInstance()
         local entrant = getLocalEntrant(instance)
         local positionText = getPlayerPositionText(instance, entrant)
-        showRaceEventVisual('~g~FINISHED', ('~w~%s'):format(positionText), 2200)
+        RacingSystemUtil.ShowRaceEventVisual('~g~FINISHED', ('~w~%s'):format(positionText), 2200)
     else
         local lapNumber = math.max(1, math.floor(tonumber(payload.lapNumber) or 1))
-        showRaceEventVisual(('~b~LAP %d COMPLETED'):format(lapNumber), '', 1400)
+        RacingSystemUtil.ShowRaceEventVisual(('~b~LAP %d COMPLETED'):format(lapNumber), '', 1400)
     end
 
     local bestLapDeltaMs = tonumber(payload.bestLapDeltaMs) or 0
@@ -2156,8 +2027,6 @@ RegisterNetEvent('racingsystem:lapCompleted', function(payload)
         comparisonText = 'NEW BEST LAP'
     end
 
-    notifyFeed('Lap completed.')
-    notifyFeed(comparisonText)
 end)
 
 RegisterNetEvent('racingsystem:stableLapTime', function(payload)
@@ -2165,7 +2034,6 @@ RegisterNetEvent('racingsystem:stableLapTime', function(payload)
         return
     end
 
-    notifyFeed('Stable lap recorded.')
 end)
 
 RegisterNetEvent('racingsystem:instanceAssets', function(payload)
@@ -2305,11 +2173,9 @@ local function runSmartJoinTeleport(payload)
     end
 
     if shouldNotifyFallback then
-        notify('Teleport fallback used: destination ground was not fully resolved in time.')
     end
 
     if not ok then
-        notify(('Teleport failed: %s'):format(tostring(err or 'unknown error')), true)
     end
 
     joinTeleportInProgress = false
@@ -2326,11 +2192,15 @@ RegisterNUICallback('racingsystem:gtAoRaceUrlSubmit', function(data, cb)
     local typedValue = type(data) == 'table' and data.value or ''
     local ugcId = extractGTAOUGCIdFromInput(typedValue)
     if not ugcId then
-        notify('Could not parse a GTAO race ID from that URL.')
-        showWarningSubtitle('Could not parse a GTAO race ID from that URL.', 2500, '~r~')
+        local failureMessage = 'Could not parse a GTAO race ID from that URL.'
+        RacingSystemUtil.NotifyPlayer(failureMessage, true)
+        RacingSystemUtil.ShowWarningSubtitle(failureMessage, 2500, '~o~')
         return
     end
 
+    local parsedMessage = ('Parsed GTAO race ID: %s. Validating...'):format(tostring(ugcId))
+    RacingSystemUtil.NotifyPlayer(parsedMessage, false)
+    RacingSystemUtil.ShowWarningSubtitle(parsedMessage, 2000, '~g~')
     TriggerServerEvent('racingsystem:validateGTAORaceUGCId', ugcId)
 end)
 
@@ -2346,22 +2216,40 @@ RegisterNetEvent('racingsystem:gtAoRaceValidationResult', function(payload)
 
     if payload.ok ~= true then
         local message = type(payload.error) == 'string' and payload.error or 'Could not validate GTAO race URL.'
-        notify(message)
-        showWarningSubtitle(message, 2500, '~r~')
+        RacingSystemUtil.NotifyPlayer(message, true)
+        RacingSystemUtil.ShowWarningSubtitle(message, 2500, '~o~')
         return
     end
 
-    local successMessage = ('GTAO race %s is valid (%s checkpoints).'):format(
-        tostring(payload.ugcId or 'unknown'),
-        tostring(math.max(0, math.floor(tonumber(payload.checkpointCount) or 0)))
+    local raceName = tostring(payload.raceName or payload.ugcId or 'unknown')
+    local checkpointCount = tostring(math.max(0, math.floor(tonumber(payload.checkpointCount) or 0)))
+    local autoHosted = payload.autoHosted == true
+    local laps = math.max(1, math.floor(tonumber(payload.autoHostedLaps) or 2))
+    local successMessage
+
+    if autoHosted then
+        successMessage = ('Imported "%s" (%s checkpoints) and auto-hosted %s lap(s).'):format(
+            raceName,
+            checkpointCount,
+            tostring(laps)
+        )
+        RacingSystemUtil.NotifyPlayer(successMessage, false)
+        RacingSystemUtil.ShowWarningSubtitle(successMessage, 3000, '~g~')
+        return
+    end
+
+    local hostError = tostring(payload.autoHostError or 'Could not auto-host race instance.')
+    successMessage = ('Imported "%s" (%s checkpoints), but auto-host failed: %s'):format(
+        raceName,
+        checkpointCount,
+        hostError
     )
-    notify(successMessage)
-    showWarningSubtitle(successMessage, 2500, '~g~')
+    RacingSystemUtil.NotifyPlayer(successMessage, true)
+    RacingSystemUtil.ShowWarningSubtitle(successMessage, 3500, '~o~')
 end)
 
 RegisterNetEvent('racingsystem:editorRaceLoaded', function(payload)
     if type(payload) ~= 'table' or payload.ok ~= true then
-        notify('Could not load race editor data.')
         return
     end
 
@@ -2377,7 +2265,6 @@ end)
 
 RegisterNetEvent('racingsystem:editorRaceSaved', function(payload)
     if type(payload) ~= 'table' or payload.ok ~= true then
-        notify(type(payload) == 'table' and payload.error or 'Could not save race.')
         return
     end
 
@@ -2396,7 +2283,6 @@ end)
 
 RegisterNetEvent('racingsystem:raceDefinitionRegistered', function(payload)
     if type(payload) ~= 'table' or payload.ok ~= true then
-        notify(type(payload) == 'table' and payload.error or 'Could not register race definition.')
         return
     end
 
@@ -2410,7 +2296,6 @@ RegisterNetEvent('racingsystem:raceDefinitionDeleted', function(payload)
     raceMenuDeleteConfirmName = nil
 
     if type(payload) ~= 'table' or payload.ok ~= true then
-        notify(type(payload) == 'table' and payload.error or 'Could not delete race definition.')
         refreshRaceMenu()
         return
     end
@@ -2536,7 +2421,7 @@ CreateThread(function()
             raceRuntimeState.accelerationPenaltyUntil = 0
             clearPowerPenaltyVehicleOverride()
             resetLocalRaceTiming()
-            clearCountdownScaleform()
+            RacingSystemUtil.ClearCountdownVisual()
             if activeInstanceAssets.instanceId then
                 unloadActiveInstanceAssets()
             end
@@ -2602,7 +2487,7 @@ CreateThread(function()
                     local joinedInstanceId = tonumber(joinedInstance.id)
                     local countdownEndsAt = raceCountdownLocalEndByInstanceId[joinedInstanceId]
                     local remainingMs = countdownEndsAt and math.max(0, countdownEndsAt - GetGameTimer()) or 0
-                    updateCountdownVisual(joinedInstanceId, remainingMs)
+                    RacingSystemUtil.UpdateCountdownVisual(joinedInstanceId, remainingMs)
 
                     if pedVehicle ~= 0 and GetPedInVehicleSeat(pedVehicle, -1) == ped then
                         SetVehicleHandbrake(pedVehicle, true)
@@ -2613,12 +2498,11 @@ CreateThread(function()
                         TriggerServerEvent('racingsystem:countdownReachedZero', joinedInstanceId, GetGameTimer())
                     end
                 elseif joinedInstance.state == RacingSystem.States.running then
-                    clearCountdownScaleform()
+                    RacingSystemUtil.ClearCountdownVisual()
                     local joinedInstanceId = tonumber(joinedInstance.id)
                     if joinedInstanceId and not raceStartCueShownByInstanceId[joinedInstanceId] then
                         raceStartCueShownByInstanceId[joinedInstanceId] = true
-                        showRaceEventVisual('~g~GO!', '~w~Race is live', 1400)
-                        notifyFeed('GO! Race is live.')
+                        RacingSystemUtil.ShowRaceEventVisual('~g~GO!', '~w~Race is live', 1400)
                     end
                     if raceTimingState.raceStartedAt == nil then
                         raceTimingState.raceStartedAt = GetGameTimer()
@@ -2630,12 +2514,12 @@ CreateThread(function()
                         SetVehicleHandbrake(pedVehicle, false)
                     end
                 elseif joinedInstance.state == RacingSystem.States.finished and tonumber(entrantProgress.finishedAt) then
-                    clearCountdownScaleform()
+                    RacingSystemUtil.ClearCountdownVisual()
                     if pedVehicle ~= 0 and GetPedInVehicleSeat(pedVehicle, -1) == ped then
                         SetVehicleHandbrake(pedVehicle, false)
                     end
                 else
-                    clearCountdownScaleform()
+                    RacingSystemUtil.ClearCountdownVisual()
                     if pedVehicle ~= 0 and GetPedInVehicleSeat(pedVehicle, -1) == ped then
                         SetVehicleHandbrake(pedVehicle, false)
                     end
@@ -2881,10 +2765,10 @@ CreateThread(function()
                                 teleportEntityToCheckpoint(correctionEntity, passedCheckpoint, newCurrentCheckpoint)
                             elseif applyThrottlePenalty then
                                 raceRuntimeState.accelerationPenaltyUntil = GetGameTimer() + throttlePenaltyMs
-                                showWarningSubtitle('Keep within the radius', throttlePenaltyMs, '~r~')
+                                RacingSystemUtil.ShowWarningSubtitle('Keep within the radius', throttlePenaltyMs, '~r~')
                             elseif applyPowerPenalty then
                                 applySoftPowerPenalty(pedVehicle, powerPenaltyMs)
-                                showWarningSubtitle('Keep within the radius', powerPenaltyMs, '~y~')
+                                RacingSystemUtil.ShowWarningSubtitle('Keep within the radius', powerPenaltyMs, '~y~')
                             end
                         else
                             raceRuntimeState.pendingCheckpointPass = {
@@ -2920,7 +2804,7 @@ end)
 
 CreateThread(function()
     while true do
-        drawRaceEventVisual()
+        RacingSystemUtil.DrawRaceEventVisual()
         Wait(0)
     end
 end)
@@ -2947,3 +2831,4 @@ AddEventHandler('onClientResourceStart', function(resourceName)
 end)
 
 print('[racingsystem] Client system loaded.')
+

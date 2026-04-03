@@ -31,9 +31,11 @@ files {
 
 client_scripts {
     '@ScaleformUI_Lua/ScaleformUI.lua',
+    'util.lua',
     'client.lua'
 }
 
 server_scripts {
     'server.lua'
 }
+

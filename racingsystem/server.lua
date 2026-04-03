@@ -4,6 +4,9 @@ local nextRaceInstanceId = 1
 local getSavedRaceCounts
 local buildSavedRaceDefinitions
 local buildCheckpointsFromMissionRace
+local parseRaceDefinitionFromJson
+local buildNormalizedOnlineRaceJson
+local loadBundledOnlineRace
 local knownRaceDefinitionsByName = {}
 local RACE_INDEX_FILE = 'race_index.json'
 local RESOURCE_NAME = 'racingsystem'
@@ -1133,34 +1136,59 @@ local function saveBundledUGCById(ugcId)
         return nil, fetchError or 'Could not download the UGC JSON.'
     end
 
-    local decodedMissionJson = json.decode(rawMissionJson)
-    local mission = type(decodedMissionJson) == 'table' and decodedMissionJson.mission or nil
-    if type(mission) ~= 'table' then
-        return nil, 'The downloaded UGC JSON could not be decoded back into a mission table.'
+    -- Write the downloaded JSON to disk first, then parse it through the same loader path.
+    local tempFilePath = ('%s/.tmp_%s.tmp'):format(ONLINE_RACE_FOLDER, normalizedUGCId)
+    local function cleanupTempFile()
+        local resourcePath = GetResourcePath(RESOURCE_NAME)
+        if type(resourcePath) ~= 'string' or resourcePath == '' then
+            return
+        end
+
+        local separator = resourcePath:find('\\', 1, true) and '\\' or '/'
+        local absolutePath = resourcePath .. separator .. tempFilePath:gsub('/', separator)
+        os.remove(absolutePath)
     end
 
-    local checkpoints = buildCheckpointsFromMissionRace(mission.race)
-    if #checkpoints == 0 then
-        return nil, 'The downloaded UGC did not produce any usable checkpoints.'
+    local tempSaveOk = SaveResourceFile(RESOURCE_NAME, tempFilePath, rawMissionJson, -1)
+    if not tempSaveOk then
+        return nil, ('Could not save temporary file %s.'):format(tempFilePath)
     end
 
-    -- Run the same extraction paths the runtime loader will use so broken payloads fail early.
-    local props = buildOnlineRacePropsFromMission(mission.prop)
-    local modelHides = buildOnlineRaceModelHidesFromMission(mission.dhprop)
+    local tempRawJson = LoadResourceFile(RESOURCE_NAME, tempFilePath)
+    local parsedRace, parseError = parseRaceDefinitionFromJson(tempRawJson, ('downloaded UGC "%s"'):format(normalizedUGCId))
+    if not parsedRace then
+        cleanupTempFile()
+        return nil, parseError or 'The downloaded UGC could not be parsed.'
+    end
+
+    local normalizedRaceJson = buildNormalizedOnlineRaceJson(normalizedUGCId, normalizedUGCId, parsedRace)
+    if type(normalizedRaceJson) ~= 'string' or normalizedRaceJson == '' then
+        cleanupTempFile()
+        return nil, 'Could not encode normalized online race JSON.'
+    end
 
     local filePath = buildOnlineRaceFilePath(normalizedUGCId)
-    local saveOk = SaveResourceFile(RESOURCE_NAME, filePath, rawMissionJson, -1)
+    local saveOk = SaveResourceFile(RESOURCE_NAME, filePath, normalizedRaceJson, -1)
     if not saveOk then
+        cleanupTempFile()
         logError(("The server could not save imported UGC '%s' to '%s'."):format(tostring(normalizedUGCId), filePath))
         return nil, ('Could not save %s.'):format(filePath)
+    end
+
+    cleanupTempFile()
+
+    local loadedRace, loadError = loadBundledOnlineRace(normalizedUGCId)
+    if not loadedRace then
+        return nil, loadError or 'The imported race could not be loaded after saving.'
     end
 
     return {
         ugcId = normalizedUGCId,
         filePath = filePath,
-        checkpointCount = #checkpoints,
-        propCount = #props,
-        modelHideCount = #modelHides,
+        raceName = tostring(loadedRace.name or normalizedUGCId),
+        checkpointCount = #(loadedRace.checkpoints or {}),
+        propCount = #(loadedRace.props or {}),
+        modelHideCount = #(loadedRace.modelHides or {}),
     }
 end
 
@@ -1175,20 +1203,16 @@ local function validateBundledUGCById(ugcId)
         return nil, fetchError or 'Could not download the UGC JSON.'
     end
 
-    local decodedMissionJson = json.decode(rawMissionJson)
-    local mission = type(decodedMissionJson) == 'table' and decodedMissionJson.mission or nil
-    if type(mission) ~= 'table' then
-        return nil, 'The downloaded UGC JSON could not be decoded back into a mission table.'
-    end
-
-    local checkpoints = buildCheckpointsFromMissionRace(mission.race)
-    if #checkpoints == 0 then
-        return nil, 'The downloaded UGC did not produce any usable checkpoints.'
+    local parsedRace, parseError = parseRaceDefinitionFromJson(rawMissionJson, ('downloaded UGC "%s"'):format(normalizedUGCId))
+    if not parsedRace then
+        return nil, parseError or 'The downloaded UGC could not be parsed.'
     end
 
     return {
         ugcId = normalizedUGCId,
-        checkpointCount = #checkpoints,
+        checkpointCount = #(parsedRace.checkpoints or {}),
+        propCount = #(parsedRace.props or {}),
+        modelHideCount = #(parsedRace.modelHides or {}),
     }, nil
 end
 
@@ -1287,6 +1311,57 @@ buildCheckpointsFromMissionRace = function(raceData)
     return checkpoints
 end
 
+parseRaceDefinitionFromJson = function(rawRaceJson, contextLabel)
+    local label = tostring(contextLabel or 'race JSON')
+    if type(rawRaceJson) ~= 'string' or rawRaceJson == '' then
+        return nil, ('No %s content was provided.'):format(label)
+    end
+
+    local decoded = json.decode(rawRaceJson)
+    if type(decoded) ~= 'table' then
+        return nil, ('The %s payload is not valid JSON.'):format(label)
+    end
+
+    local mission = type(decoded.mission) == 'table' and decoded.mission or nil
+    if mission then
+        local checkpoints = buildCheckpointsFromMissionRace(mission.race)
+        if #checkpoints == 0 then
+            return nil, ('The %s mission has no checkpoints.'):format(label)
+        end
+
+        return {
+            checkpoints = checkpoints,
+            props = buildOnlineRacePropsFromMission(mission.prop),
+            modelHides = buildOnlineRaceModelHidesFromMission(mission.dhprop),
+        }, nil
+    end
+
+    local checkpoints = sanitizeCheckpointList(decoded.checkpoints)
+    if #checkpoints == 0 then
+        return nil, ('The %s payload does not contain usable checkpoints.'):format(label)
+    end
+
+    return {
+        checkpoints = checkpoints,
+        props = cloneOnlineRaceProps(decoded.props),
+        modelHides = cloneOnlineRaceModelHides(decoded.modelHides),
+    }, nil
+end
+
+buildNormalizedOnlineRaceJson = function(raceName, ugcId, parsedRace)
+    local normalized = {
+        format = 'racingsystem_online_v1',
+        name = tostring(raceName or ''),
+        ugcId = tostring(ugcId or ''),
+        importedAt = os.time(),
+        checkpoints = sanitizeCheckpointList((parsedRace or {}).checkpoints),
+        props = cloneOnlineRaceProps((parsedRace or {}).props),
+        modelHides = cloneOnlineRaceModelHides((parsedRace or {}).modelHides),
+    }
+
+    return json.encode(normalized)
+end
+
 local function loadMissionRaceFromFolder(raceName, folderName, label)
     local fileName = sanitizeOnlineRaceFileName(raceName)
     if not fileName then
@@ -1305,22 +1380,16 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
         return nil, ('No %s race named "%s" was found.'):format(label, fileName)
     end
 
-    local decoded = json.decode(rawMissionJson)
-    local mission = type(decoded) == 'table' and decoded.mission or nil
-    if type(mission) ~= 'table' then
-        return nil, ('The %s race "%s" could not be parsed.'):format(label, fileName)
-    end
-
-    local checkpoints = buildCheckpointsFromMissionRace(mission.race)
-    if #checkpoints == 0 then
-        return nil, ('The %s race "%s" has no checkpoints.'):format(label, fileName)
+    local parsedRace, parseError = parseRaceDefinitionFromJson(rawMissionJson, ('%s race "%s"'):format(label, fileName))
+    if not parsedRace then
+        return nil, parseError or ('The %s race "%s" could not be parsed.'):format(label, fileName)
     end
 
     return {
         name = fileName,
-        checkpoints = checkpoints,
-        props = buildOnlineRacePropsFromMission(mission.prop),
-        modelHides = buildOnlineRaceModelHidesFromMission(mission.dhprop),
+        checkpoints = cloneCheckpoints(parsedRace.checkpoints),
+        props = cloneOnlineRaceProps(parsedRace.props),
+        modelHides = cloneOnlineRaceModelHides(parsedRace.modelHides),
         missionJson = rawMissionJson,
     }
 end
@@ -1329,7 +1398,7 @@ local function loadCustomRace(raceName)
     return loadMissionRaceFromFolder(raceName, CUSTOM_RACE_FOLDER, 'custom')
 end
 
-local function loadBundledOnlineRace(raceName)
+loadBundledOnlineRace = function(raceName)
     return loadMissionRaceFromFolder(raceName, ONLINE_RACE_FOLDER, 'online')
 end
 
@@ -1915,10 +1984,42 @@ RegisterNetEvent('racingsystem:validateGTAORaceUGCId', function(ugcId)
         return
     end
 
+    local importedRace, importError = saveBundledUGCById(validation.ugcId)
+    if not importedRace then
+        TriggerClientEvent('racingsystem:gtAoRaceValidationResult', src, {
+            ok = false,
+            ugcId = tostring(validation.ugcId or ugcId or ''),
+            error = importError or 'The UGC JSON validated but could not be imported.',
+        })
+        return
+    end
+
+    registerKnownRaceDefinition(importedRace.raceName, 'online')
+
+    local hostedInstance, hostError = invokeRaceInstance(src, importedRace.raceName, 2)
+    local hosted = hostedInstance ~= nil
+    if hosted then
+        auditLog("importAndAutoHostGTAORace", src, ("imported UGC '%s' and hosted '%s' (instance %s, %s lap(s))"):format(
+            tostring(importedRace.ugcId or validation.ugcId),
+            tostring(importedRace.raceName),
+            tostring(hostedInstance.id),
+            tostring(hostedInstance.laps)
+        ))
+        sendInstanceAssets(src, hostedInstance)
+        sendTeleportToLastCheckpoint(src, hostedInstance)
+    end
+
+    broadcastSnapshot()
     TriggerClientEvent('racingsystem:gtAoRaceValidationResult', src, {
         ok = true,
-        ugcId = tostring(validation.ugcId or ''),
-        checkpointCount = tonumber(validation.checkpointCount) or 0,
+        ugcId = tostring(importedRace.ugcId or validation.ugcId or ''),
+        raceName = tostring(importedRace.raceName or validation.ugcId or ''),
+        checkpointCount = tonumber(importedRace.checkpointCount) or tonumber(validation.checkpointCount) or 0,
+        propCount = tonumber(importedRace.propCount) or tonumber(validation.propCount) or 0,
+        modelHideCount = tonumber(importedRace.modelHideCount) or tonumber(validation.modelHideCount) or 0,
+        autoHosted = hosted,
+        autoHostedLaps = hosted and (tonumber(hostedInstance.laps) or 2) or 2,
+        autoHostError = hosted and nil or (hostError or 'Could not auto-host race instance.'),
     })
 end)
 
