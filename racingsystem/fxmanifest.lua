@@ -7,7 +7,7 @@ game 'gta5'
 
 author 'Eddlm'
 description 'Client-server Lua system for a racing system resource'
-version '0.0.0'
+version '0.0.1'
 
 lua54 'yes'
 
@@ -39,4 +39,3 @@ server_scripts {
     'UpdateNotifier.lua',
     'server.lua'
 }
-
