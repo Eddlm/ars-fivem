@@ -7,7 +7,7 @@ game 'gta5'
 
 author 'Eddlm'
 description 'Client-server Lua system for a racing system resource'
-version '0.0.3'
+version '0.0.4'
 
 lua54 'yes'
 
