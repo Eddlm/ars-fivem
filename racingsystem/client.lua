@@ -996,7 +996,7 @@ local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, 
 
     local edgeRadius = tonumber(checkpoint.radius) or 8.0
     local chevronZ = currentZ + 2.35
-    local chevronSize = math.max(2.55, math.min(4.05, edgeRadius * 0.33))
+    local chevronSize = 0.9 * math.max(2.55, math.min(4.05, edgeRadius * 0.33))
     local darkBlue = { r = 20, g = 70, b = 170, a = 220 }
     local spinSpeed = tonumber(spinDegreesPerSecond) or 0.0
     local spinZ = 0.0
@@ -1065,7 +1065,7 @@ local function drawIdleStartChevron(checkpoint)
 
     local markerDraw = getPreviewCheckpointMarker(checkpoint)
     local baseRadius = tonumber(checkpoint.radius) or 8.0
-    local chevronSize = math.max(3.0, math.min(6.6, baseRadius * 0.42))
+    local chevronSize = 0.9 * math.max(3.0, math.min(6.6, baseRadius * 0.42))
     local drawZ = (tonumber(checkpoint.z) or markerDraw.z) + 5.4
     local playerCoords = GetEntityCoords(PlayerPedId())
     local dx = (tonumber(playerCoords.x) or markerDraw.x) - markerDraw.x
