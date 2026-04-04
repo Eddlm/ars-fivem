@@ -8,7 +8,7 @@ game 'gta5'
 
 author 'Eddlm'
 description 'Live vehicle handling read/write helpers for player vehicles'
-version '0.1.0'
+version '0.0.0'
 
 dependency 'ScaleformUI_Assets'
 dependency 'ScaleformUI_Lua'
@@ -32,7 +32,10 @@ client_scripts {
     'syncorchestrator.lua',
     'scaleformui_menus.lua'
 }
-server_script 'server.lua'
+server_scripts {
+    'UpdateNotifier.lua',
+    'server.lua'
+}
 
 exports {
     'GetCurrentVehicle',

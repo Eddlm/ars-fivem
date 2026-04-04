@@ -1,0 +1,198 @@
+local RESOURCE_NAME = GetCurrentResourceName()
+local DEBUG_CONVAR = 'cPhysicsExtraPrints'
+
+local function trim(value)
+    local text = tostring(value or '')
+    return (text:match('^%s*(.-)%s*$') or '')
+end
+
+local function readConvar(name, fallback)
+    local value = trim(GetConvar(name, tostring(fallback or '')))
+    if value == '' then
+        return tostring(fallback or '')
+    end
+    return value
+end
+
+local function getCheckerConfig()
+    return {
+        repo = readConvar('customphysics_update_repo', 'Eddlm/ars-fivem'),
+        branch = readConvar('customphysics_update_branch', 'main'),
+        path = readConvar('customphysics_update_path', 'customphysics'),
+        token = trim(GetConvar('customphysics_update_token', '')),
+        timeoutMs = 12000,
+    }
+end
+
+local function shouldLogUpdateCheck()
+    if type(GetConvarInt) == 'function' then
+        return math.floor(tonumber(GetConvarInt(DEBUG_CONVAR, 0)) or 0) == 2
+    end
+    local raw = type(GetConvar) == 'function' and GetConvar(DEBUG_CONVAR, '0') or '0'
+    return math.floor(tonumber(raw) or 0) == 2
+end
+
+local function buildHttpHeaders(config)
+    local headers = {
+        ['User-Agent'] = 'customphysics-update-notifier',
+        ['Accept'] = 'application/vnd.github+json',
+    }
+    if config.token ~= '' then
+        headers['Authorization'] = ('Bearer %s'):format(config.token)
+    end
+    return headers
+end
+
+local function httpRequest(url, headers, timeoutMs)
+    local response = {
+        done = false,
+        status = nil,
+        body = nil,
+    }
+
+    local ok = pcall(function()
+        PerformHttpRequest(url, function(statusCode, body)
+            response.status = tonumber(statusCode)
+            response.body = type(body) == 'string' and body or ''
+            response.done = true
+        end, 'GET', '', headers or {})
+    end)
+
+    if not ok then
+        return nil
+    end
+
+    local deadline = GetGameTimer() + math.max(1000, math.floor(tonumber(timeoutMs) or 12000))
+    while not response.done and GetGameTimer() < deadline do
+        Wait(50)
+    end
+
+    if not response.done then
+        return nil
+    end
+
+    return response
+end
+
+local function parseVersionFromManifestText(content)
+    if type(content) ~= 'string' or content == '' then
+        return nil
+    end
+    local version = content:match("%f[%w_]version%f[^%w_]%s*'([^']+)'")
+    if not version then
+        version = content:match('%f[%w_]version%f[^%w_]%s*"([^"]+)"')
+    end
+    version = trim(version)
+    if version == '' then
+        return nil
+    end
+    return version
+end
+
+local function getLocalVersion()
+    local localMetadataVersion = trim(GetResourceMetadata(RESOURCE_NAME, 'version', 0) or '')
+    if localMetadataVersion ~= '' then
+        return localMetadataVersion
+    end
+    local manifest = LoadResourceFile(RESOURCE_NAME, 'fxmanifest.lua')
+    return parseVersionFromManifestText(manifest)
+end
+
+local function getRemoteVersion(config, headers)
+    local rawUrl = ('https://raw.githubusercontent.com/%s/%s/%s/fxmanifest.lua'):format(
+        config.repo,
+        config.branch,
+        config.path
+    )
+
+    local response = httpRequest(rawUrl, headers, config.timeoutMs)
+    if not response or response.status ~= 200 then
+        return nil
+    end
+
+    return parseVersionFromManifestText(response.body)
+end
+
+local function parseVersionSegments(version)
+    local cleaned = trim(version)
+    if cleaned == '' then
+        return nil
+    end
+    local segments = {}
+    for token in cleaned:gmatch('[^%.]+') do
+        local numeric = token:match('^(%d+)')
+        if not numeric then
+            return nil
+        end
+        segments[#segments + 1] = tonumber(numeric) or 0
+    end
+    if #segments == 0 then
+        return nil
+    end
+    return segments
+end
+
+local function isRemoteVersionNewer(localVersion, remoteVersion)
+    local localSegments = parseVersionSegments(localVersion)
+    local remoteSegments = parseVersionSegments(remoteVersion)
+    if not localSegments or not remoteSegments then
+        return false
+    end
+
+    local maxLength = math.max(#localSegments, #remoteSegments)
+    for index = 1, maxLength do
+        local localPart = localSegments[index] or 0
+        local remotePart = remoteSegments[index] or 0
+        if remotePart > localPart then
+            return true
+        end
+        if remotePart < localPart then
+            return false
+        end
+    end
+    return false
+end
+
+local function performUpdateCheck()
+    local config = getCheckerConfig()
+    local headers = buildHttpHeaders(config)
+
+    local localVersion = getLocalVersion()
+    if not localVersion then
+        return false
+    end
+
+    local remoteVersion = getRemoteVersion(config, headers)
+    if not remoteVersion then
+        return false
+    end
+
+    if shouldLogUpdateCheck() then
+        print(('Update check local=%s remote=%s'):format(localVersion, remoteVersion))
+    end
+
+    if isRemoteVersionNewer(localVersion, remoteVersion) then
+        print(('Update available %s -> %s | Git pull or download manually https://github.com/Eddlm/ars-fivem'):format(localVersion, remoteVersion))
+    end
+
+    return true
+end
+
+RegisterCommand('cphysicsupdatecheck', function(source)
+    local numericSource = tonumber(source) or 0
+    if numericSource == 0 then
+        performUpdateCheck()
+    end
+end, false)
+
+AddEventHandler('onResourceStart', function(resourceName)
+    if resourceName ~= RESOURCE_NAME then
+        return
+    end
+
+    CreateThread(function()
+        local delayMs = math.random(3 * 60 * 1000, 6 * 60 * 1000)
+        Wait(delayMs)
+        performUpdateCheck()
+    end)
+end)

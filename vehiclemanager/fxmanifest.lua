@@ -8,7 +8,7 @@ game 'gta5'
 name 'vehiclemanager'
 author 'eddlm'
 description 'Standalone vehicle manager menu built on ScaleformUI_Lua with PerformanceTuning integration.'
-version '0.1.0'
+version '0.0.0'
 
 lua54 'yes'
 
@@ -23,6 +23,7 @@ client_scripts {
 }
 
 server_scripts {
+    'UpdateNotifier.lua',
     'server/vehicle_saves.lua'
 }
 

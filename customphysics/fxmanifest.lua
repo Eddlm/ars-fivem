@@ -7,7 +7,7 @@ game 'gta5'
 
 author 'Eddlm'
 description 'Client-side drivetrain and slide physics helpers'
-version '0.1.0'
+version '0.0.0'
 
 lua54 'yes'
 
@@ -23,3 +23,5 @@ client_scripts {
     'nitrous.lua',
     'client.lua'
 }
+
+server_script 'UpdateNotifier.lua'
