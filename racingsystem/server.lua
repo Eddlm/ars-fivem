@@ -16,6 +16,7 @@ local ONLINE_RACE_FOLDER = 'OnlineRaces'
 local checkpointAnomalyLogByKey = {}
 local UGC_FETCH_RETRY_COOLDOWN_MS = 700
 local nextAllowedUGCFetchAt = 0
+local GTAO_CHECKPOINT_RADIUS_SCALE = 1.5
 
 local function getExtraPrintLevel()
     local rawLevel = 0
@@ -310,8 +311,9 @@ local function cloneKnownRaceDefinition(definition)
         return nil
     end
 
-    local normalizedName = RacingSystem.NormalizeRaceName(definition.name)
-    if not normalizedName then
+    local displayName = RacingSystem.Trim(definition.name)
+    local normalizedName = RacingSystem.NormalizeRaceName(definition.lookupName or definition.name)
+    if not normalizedName or displayName == '' then
         return nil
     end
 
@@ -321,7 +323,8 @@ local function cloneKnownRaceDefinition(definition)
     end
 
     return {
-        name = normalizedName,
+        lookupName = normalizedName,
+        name = displayName,
         sourceType = sourceType,
         updatedAt = tonumber(definition.updatedAt) or os.time(),
     }
@@ -383,7 +386,7 @@ local function loadRaceIndex()
     for _, definition in ipairs(definitions) do
         local clonedDefinition = cloneKnownRaceDefinition(definition)
         if clonedDefinition then
-            local normalizedName = RacingSystem.NormalizeRaceName(clonedDefinition.name)
+            local normalizedName = RacingSystem.NormalizeRaceName(clonedDefinition.lookupName or clonedDefinition.name)
             knownRaceDefinitionsByName[normalizedName] = clonedDefinition
             loadedCount = loadedCount + 1
         end
@@ -393,7 +396,8 @@ local function loadRaceIndex()
 end
 
 local function registerKnownRaceDefinition(raceName, sourceType)
-    local normalizedName = RacingSystem.NormalizeRaceName(raceName)
+    local displayName = RacingSystem.Trim(raceName)
+    local normalizedName = RacingSystem.NormalizeRaceName(displayName)
     if not normalizedName then
         return nil
     end
@@ -404,7 +408,8 @@ local function registerKnownRaceDefinition(raceName, sourceType)
     end
 
     knownRaceDefinitionsByName[normalizedName] = {
-        name = normalizedName,
+        lookupName = normalizedName,
+        name = displayName,
         sourceType = normalizedSourceType,
         updatedAt = os.time(),
     }
@@ -514,23 +519,12 @@ local function resetEntrantProgress(entrant)
 end
 
 local function getRaceStartCheckpoint(instance)
-    local laps = math.max(1, tonumber(instance and instance.laps) or 1)
-    local checkpointCount = #(type(instance and instance.checkpoints) == 'table' and instance.checkpoints or {})
-    if laps > 1 and checkpointCount > 1 then
-        return 2
-    end
-
     return 1
 end
 
 local function getLapTriggerCheckpoint(totalCheckpoints, totalLaps)
     local checkpointCount = math.max(0, tonumber(totalCheckpoints) or 0)
-    local laps = math.max(1, tonumber(totalLaps) or 1)
     if checkpointCount <= 1 then
-        return 1
-    end
-
-    if laps > 1 then
         return 1
     end
 
@@ -906,6 +900,129 @@ local function sanitizeOnlineRaceFileName(name)
     return normalized
 end
 
+local function extractHumanNameFromFileBase(fileName, knownId)
+    local trimmedFileName = RacingSystem.Trim(fileName)
+    if trimmedFileName == '' then
+        return nil
+    end
+
+    local suffixId = nil
+    if knownId then
+        local normalized = RacingSystem.Trim(knownId):gsub('[^%w_-]', '')
+        if normalized ~= '' then
+            suffixId = normalized
+        end
+    end
+    if suffixId and suffixId ~= '' then
+        local loweredFileName = trimmedFileName:lower()
+        local loweredSuffix = suffixId:lower()
+        local expectedSuffix = '_' .. loweredSuffix
+        if loweredFileName:sub(-#expectedSuffix) == expectedSuffix then
+            local base = RacingSystem.Trim(trimmedFileName:sub(1, #trimmedFileName - #expectedSuffix))
+            if base ~= '' then
+                return base
+            end
+        end
+    end
+
+    return trimmedFileName
+end
+
+local function buildOnlineRaceFileName(humanName, ugcId)
+    local sanitizedName = sanitizeOnlineRaceFileName(humanName)
+    local sanitizedId = RacingSystem.Trim(ugcId):gsub('[^%w_-]', '')
+    if sanitizedId == '' then
+        sanitizedId = nil
+    end
+    if not sanitizedName or not sanitizedId then
+        return nil
+    end
+    return ('%s_%s'):format(sanitizedName, sanitizedId)
+end
+
+local function extractMissionRaceName(mission)
+    if type(mission) ~= 'table' then
+        return nil
+    end
+
+    local function readPath(root, ...)
+        local current = root
+        for _, key in ipairs({ ... }) do
+            if type(current) ~= 'table' then
+                return nil
+            end
+            current = current[key]
+        end
+        if type(current) == 'string' then
+            local trimmed = RacingSystem.Trim(current)
+            if trimmed ~= '' then
+                return trimmed
+            end
+        end
+        return nil
+    end
+
+    return readPath(mission, 'race', 'name')
+        or readPath(mission, 'race', 'nm')
+        or readPath(mission, 'name')
+        or readPath(mission, 'nm')
+        or readPath(mission, 'title')
+        or readPath(mission, 'tit')
+        or readPath(mission, 'gen', 'name')
+        or readPath(mission, 'gen', 'nm')
+        or readPath(mission, 'gen', 'title')
+        or readPath(mission, 'gen', 'tit')
+end
+
+local function extractRaceIdentity(decoded, fileNameHint)
+    local fileHint = RacingSystem.Trim(fileNameHint or '')
+    local nameFromPayload = nil
+    local ugcId = nil
+
+    if type(decoded) == 'table' then
+        if type(decoded.ugcId) == 'string' then
+            local normalizedId = RacingSystem.Trim(decoded.ugcId):gsub('[^%w_-]', '')
+            if normalizedId ~= '' then
+                ugcId = normalizedId
+            end
+        end
+
+        if type(decoded.name) == 'string' then
+            local normalizedName = RacingSystem.Trim(decoded.name)
+            if normalizedName ~= '' then
+                nameFromPayload = normalizedName
+            end
+        end
+
+        if not nameFromPayload then
+            nameFromPayload = extractMissionRaceName(decoded.mission)
+        end
+    end
+
+    local inferredFromFile = extractHumanNameFromFileBase(fileHint, ugcId)
+    local finalName = RacingSystem.Trim(nameFromPayload or inferredFromFile or fileHint)
+    if finalName == '' then
+        finalName = nil
+    end
+
+    return finalName, ugcId
+end
+
+local function normalizeRaceLookupKey(value)
+    local trimmedValue = RacingSystem.Trim(value)
+    if trimmedValue == '' then
+        return nil
+    end
+
+    local lowered = trimmedValue:lower():gsub('%s+', ' ')
+    local compact = lowered:gsub('[^%w]', '')
+    if compact ~= '' then
+        return compact
+    end
+
+    return lowered
+end
+
 local function sanitizeLapCount(value)
     local laps = math.floor(tonumber(value) or 1)
     local configuredMin = math.floor(tonumber((RacingSystem.Config or {}).minLapCount) or 1)
@@ -1056,12 +1173,26 @@ local function syncKnownRaceDefinitionsFromFiles()
 
     local function registerDefinitionsFromFolder(folderName, sourceType)
         for _, fileName in ipairs(listJsonFilesInFolder(folderName)) do
-            local normalizedName = RacingSystem.NormalizeRaceName(fileName)
+            local filePath = sourceType == 'custom'
+                and buildCustomRaceFilePath(fileName)
+                or buildOnlineRaceFilePath(fileName)
+            local rawRaceJson = LoadResourceFile(RESOURCE_NAME, filePath)
+            local parsedRaceName = nil
+            if rawRaceJson and rawRaceJson ~= '' then
+                local parsedRace = parseRaceDefinitionFromJson(rawRaceJson, ('%s race "%s"'):format(sourceType, fileName), fileName)
+                if parsedRace then
+                    parsedRaceName = RacingSystem.Trim(parsedRace.name)
+                end
+            end
+
+            local normalizedName = RacingSystem.NormalizeRaceName(parsedRaceName or fileName)
             if normalizedName then
                 local existingDefinition = syncedDefinitionsByName[normalizedName]
+                local resolvedDisplayName = RacingSystem.Trim(parsedRaceName or fileName)
                 if sourceType == 'custom' or existingDefinition == nil then
                     syncedDefinitionsByName[normalizedName] = {
-                        name = normalizedName,
+                        lookupName = normalizedName,
+                        name = resolvedDisplayName ~= '' and resolvedDisplayName or normalizedName,
                         sourceType = sourceType,
                         updatedAt = os.time(),
                     }
@@ -1087,7 +1218,9 @@ local function syncKnownRaceDefinitionsFromFiles()
 
     for normalizedName, definition in pairs(syncedDefinitionsByName) do
         local existingDefinition = knownRaceDefinitionsByName[normalizedName]
-        if existingDefinition == nil or tostring(existingDefinition.sourceType) ~= tostring(definition.sourceType) then
+        if existingDefinition == nil
+            or tostring(existingDefinition.sourceType) ~= tostring(definition.sourceType)
+            or RacingSystem.Trim(existingDefinition.name) ~= RacingSystem.Trim(definition.name) then
             changed = true
             break
         end
@@ -1152,11 +1285,17 @@ getSavedRaceCounts = function()
     return customRaceCount, onlineRaceCount
 end
 
-local function buildMissionRaceFromCheckpoints(checkpoints, existingRaceData)
+local function buildMissionRaceFromCheckpoints(checkpoints, existingRaceData, raceDisplayName)
     local missionRace = type(existingRaceData) == 'table' and existingRaceData or {}
     missionRace.chp = #checkpoints
     missionRace.chl = {}
     missionRace.chs = {}
+    if type(raceDisplayName) == 'string' then
+        local trimmedRaceDisplayName = RacingSystem.Trim(raceDisplayName)
+        if trimmedRaceDisplayName ~= '' then
+            missionRace.name = trimmedRaceDisplayName
+        end
+    end
 
     for index, checkpoint in ipairs(checkpoints) do
         missionRace.chl[index] = {
@@ -1171,11 +1310,11 @@ local function buildMissionRaceFromCheckpoints(checkpoints, existingRaceData)
     return missionRace
 end
 
-local function buildMissionJsonFromCheckpoints(checkpoints, existingMissionJson)
+local function buildMissionJsonFromCheckpoints(checkpoints, existingMissionJson, raceDisplayName)
     local decoded = type(existingMissionJson) == 'string' and json.decode(existingMissionJson) or nil
     local missionRoot = type(decoded) == 'table' and decoded or {}
     missionRoot.mission = type(missionRoot.mission) == 'table' and missionRoot.mission or {}
-    missionRoot.mission.race = buildMissionRaceFromCheckpoints(checkpoints, missionRoot.mission.race)
+    missionRoot.mission.race = buildMissionRaceFromCheckpoints(checkpoints, missionRoot.mission.race, raceDisplayName)
     missionRoot.mission.prop = type(missionRoot.mission.prop) == 'table' and missionRoot.mission.prop or {
         no = 0,
         model = {},
@@ -1334,13 +1473,22 @@ local function saveBundledUGCById(ugcId)
     end
 
     local tempRawJson = LoadResourceFile(RESOURCE_NAME, tempFilePath)
-    local parsedRace, parseError = parseRaceDefinitionFromJson(tempRawJson, ('downloaded UGC "%s"'):format(normalizedUGCId))
+    local parsedRace, parseError = parseRaceDefinitionFromJson(
+        tempRawJson,
+        ('downloaded UGC "%s"'):format(normalizedUGCId),
+        normalizedUGCId
+    )
     if not parsedRace then
         cleanupTempFile()
         return nil, parseError or 'The downloaded UGC could not be parsed.'
     end
 
-    local normalizedRaceJson = buildNormalizedOnlineRaceJson(normalizedUGCId, normalizedUGCId, parsedRace)
+    local displayRaceName = RacingSystem.Trim(parsedRace.name or '')
+    if displayRaceName == '' then
+        displayRaceName = normalizedUGCId
+    end
+
+    local normalizedRaceJson = buildNormalizedOnlineRaceJson(displayRaceName, normalizedUGCId, parsedRace)
     if type(normalizedRaceJson) ~= 'string' or normalizedRaceJson == '' then
         cleanupTempFile()
         return nil, 'Could not encode normalized online race JSON.'
@@ -1382,7 +1530,11 @@ local function validateBundledUGCById(ugcId)
         return nil, fetchError or 'Could not download the UGC JSON.'
     end
 
-    local parsedRace, parseError = parseRaceDefinitionFromJson(rawMissionJson, ('downloaded UGC "%s"'):format(normalizedUGCId))
+    local parsedRace, parseError = parseRaceDefinitionFromJson(
+        rawMissionJson,
+        ('downloaded UGC "%s"'):format(normalizedUGCId),
+        normalizedUGCId
+    )
     if not parsedRace then
         return nil, parseError or 'The downloaded UGC could not be parsed.'
     end
@@ -1482,7 +1634,7 @@ buildCheckpointsFromMissionRace = function(raceData)
                 x = tonumber(location.x) or 0.0,
                 y = tonumber(location.y) or 0.0,
                 z = tonumber(location.z) or 0.0,
-                radius = math.max(2.0, 8.0 * size),
+                radius = math.max(2.0, 8.0 * size * GTAO_CHECKPOINT_RADIUS_SCALE),
             }
         end
     end
@@ -1530,7 +1682,7 @@ local function hasTableEntries(value)
     return false
 end
 
-parseRaceDefinitionFromJson = function(rawRaceJson, contextLabel)
+parseRaceDefinitionFromJson = function(rawRaceJson, contextLabel, fileNameHint)
     local label = tostring(contextLabel or 'race JSON')
     if type(rawRaceJson) ~= 'string' or rawRaceJson == '' then
         return nil, ('No %s content was provided.'):format(label)
@@ -1541,6 +1693,7 @@ parseRaceDefinitionFromJson = function(rawRaceJson, contextLabel)
         return nil, ('The %s payload is not valid JSON.'):format(label)
     end
 
+    local extractedName, extractedUGCId = extractRaceIdentity(decoded, fileNameHint)
     local mission = type(decoded.mission) == 'table' and decoded.mission or nil
     if mission then
         local raceData = type(mission.race) == 'table' and mission.race or {}
@@ -1550,6 +1703,8 @@ parseRaceDefinitionFromJson = function(rawRaceJson, contextLabel)
         end
 
         return {
+            name = extractedName,
+            ugcId = extractedUGCId,
             checkpoints = checkpoints,
             props = buildOnlineRacePropsFromMission(mission.prop),
             modelHides = buildOnlineRaceModelHidesFromMission(mission.dhprop),
@@ -1563,6 +1718,8 @@ parseRaceDefinitionFromJson = function(rawRaceJson, contextLabel)
     end
 
     return {
+        name = extractedName,
+        ugcId = extractedUGCId,
         checkpoints = checkpoints,
         props = cloneOnlineRaceProps(decoded.props),
         modelHides = cloneOnlineRaceModelHides(decoded.modelHides),
@@ -1589,36 +1746,129 @@ buildNormalizedOnlineRaceJson = function(raceName, ugcId, parsedRace)
 end
 
 local function loadMissionRaceFromFolder(raceName, folderName, label)
-    local fileName = sanitizeOnlineRaceFileName(raceName)
-    if not fileName then
+    local normalizedRequestedName = RacingSystem.NormalizeRaceName(raceName)
+    local normalizedRequestedLookupKey = normalizeRaceLookupKey(raceName)
+    if not normalizedRequestedName then
         return nil, ('A valid %s race name is required.'):format(label)
     end
 
-    local filePath
-    if folderName == CUSTOM_RACE_FOLDER then
-        filePath = buildCustomRaceFilePath(fileName)
-    else
-        filePath = buildOnlineRaceFilePath(fileName)
+    local triedFileNames = {}
+    local function tryLoadByFileName(fileName)
+        local normalizedFileToken = RacingSystem.NormalizeRaceName(fileName)
+        if not normalizedFileToken or triedFileNames[normalizedFileToken] then
+            return nil
+        end
+        triedFileNames[normalizedFileToken] = true
+
+        local filePath = folderName == CUSTOM_RACE_FOLDER
+            and buildCustomRaceFilePath(fileName)
+            or buildOnlineRaceFilePath(fileName)
+        local rawMissionJson = LoadResourceFile(RESOURCE_NAME, filePath)
+        if not rawMissionJson or rawMissionJson == '' then
+            return nil
+        end
+
+        local parsedRace, parseError = parseRaceDefinitionFromJson(
+            rawMissionJson,
+            ('%s race "%s"'):format(label, fileName),
+            fileName
+        )
+        if not parsedRace then
+            logLevelOne(parseError or ('Could not parse %s race "%s".'):format(label, fileName))
+            return nil
+        end
+
+        local parsedName = RacingSystem.Trim(parsedRace.name or '')
+        return {
+            name = parsedName ~= '' and parsedName or fileName,
+            fileName = fileName,
+            ugcId = parsedRace.ugcId,
+            checkpoints = cloneCheckpoints(parsedRace.checkpoints),
+            props = cloneOnlineRaceProps(parsedRace.props),
+            modelHides = cloneOnlineRaceModelHides(parsedRace.modelHides),
+            raceMetadata = cloneMissionValue(parsedRace.raceMetadata),
+            missionJson = rawMissionJson,
+        }
     end
 
-    local rawMissionJson = LoadResourceFile(RESOURCE_NAME, filePath)
-    if not rawMissionJson or rawMissionJson == '' then
-        return nil, ('No %s race named "%s" was found.'):format(label, fileName)
+    -- Fast path: exact file token lookup first (important for UGC id based files).
+    local requestedToken = RacingSystem.Trim(raceName)
+    local requestedSlug = sanitizeOnlineRaceFileName(requestedToken)
+    local requestedUGCId = sanitizeUGCId(requestedToken)
+    local directMatch = tryLoadByFileName(requestedToken)
+        or (requestedSlug and tryLoadByFileName(requestedSlug))
+        or (requestedUGCId and tryLoadByFileName(requestedUGCId))
+    if directMatch then
+        return directMatch
     end
 
-    local parsedRace, parseError = parseRaceDefinitionFromJson(rawMissionJson, ('%s race "%s"'):format(label, fileName))
-    if not parsedRace then
-        return nil, parseError or ('The %s race "%s" could not be parsed.'):format(label, fileName)
+    for _, fileName in ipairs(listJsonFilesInFolder(folderName)) do
+        if triedFileNames[RacingSystem.NormalizeRaceName(fileName)] then
+            goto continue
+        end
+        local filePath = folderName == CUSTOM_RACE_FOLDER
+            and buildCustomRaceFilePath(fileName)
+            or buildOnlineRaceFilePath(fileName)
+        local rawMissionJson = LoadResourceFile(RESOURCE_NAME, filePath)
+        if rawMissionJson and rawMissionJson ~= '' then
+            local parsedRace, parseError = parseRaceDefinitionFromJson(
+                rawMissionJson,
+                ('%s race "%s"'):format(label, fileName),
+                fileName
+            )
+            if parsedRace then
+                local parsedName = RacingSystem.Trim(parsedRace.name or '')
+                local normalizedParsedName = RacingSystem.NormalizeRaceName(parsedName)
+                local normalizedFileName = RacingSystem.NormalizeRaceName(fileName)
+                local normalizedUGCId = RacingSystem.NormalizeRaceName(parsedRace.ugcId)
+                local derivedHumanName = extractHumanNameFromFileBase(fileName, parsedRace.ugcId)
+                local normalizedDerivedHumanName = RacingSystem.NormalizeRaceName(derivedHumanName)
+                local parsedLookupKey = normalizeRaceLookupKey(parsedName)
+                local fileLookupKey = normalizeRaceLookupKey(fileName)
+                local ugcLookupKey = normalizeRaceLookupKey(parsedRace.ugcId)
+                local derivedLookupKey = normalizeRaceLookupKey(derivedHumanName)
+
+                if normalizedRequestedName == normalizedParsedName
+                    or normalizedRequestedName == normalizedFileName
+                    or normalizedRequestedName == normalizedDerivedHumanName
+                    or (normalizedUGCId and normalizedRequestedName == normalizedUGCId) then
+                    return {
+                        name = parsedName ~= '' and parsedName or fileName,
+                        fileName = fileName,
+                        ugcId = parsedRace.ugcId,
+                        checkpoints = cloneCheckpoints(parsedRace.checkpoints),
+                        props = cloneOnlineRaceProps(parsedRace.props),
+                        modelHides = cloneOnlineRaceModelHides(parsedRace.modelHides),
+                        raceMetadata = cloneMissionValue(parsedRace.raceMetadata),
+                        missionJson = rawMissionJson,
+                    }
+                end
+
+                if normalizedRequestedLookupKey and (
+                    normalizedRequestedLookupKey == parsedLookupKey
+                    or normalizedRequestedLookupKey == fileLookupKey
+                    or normalizedRequestedLookupKey == derivedLookupKey
+                    or (ugcLookupKey and normalizedRequestedLookupKey == ugcLookupKey)
+                ) then
+                    return {
+                        name = parsedName ~= '' and parsedName or fileName,
+                        fileName = fileName,
+                        ugcId = parsedRace.ugcId,
+                        checkpoints = cloneCheckpoints(parsedRace.checkpoints),
+                        props = cloneOnlineRaceProps(parsedRace.props),
+                        modelHides = cloneOnlineRaceModelHides(parsedRace.modelHides),
+                        raceMetadata = cloneMissionValue(parsedRace.raceMetadata),
+                        missionJson = rawMissionJson,
+                    }
+                end
+            else
+                logLevelOne(parseError or ('Could not parse %s race "%s".'):format(label, fileName))
+            end
+        end
+        ::continue::
     end
 
-    return {
-        name = fileName,
-        checkpoints = cloneCheckpoints(parsedRace.checkpoints),
-        props = cloneOnlineRaceProps(parsedRace.props),
-        modelHides = cloneOnlineRaceModelHides(parsedRace.modelHides),
-        raceMetadata = cloneMissionValue(parsedRace.raceMetadata),
-        missionJson = rawMissionJson,
-    }
+    return nil, ('No %s race named "%s" was found.'):format(label, tostring(raceName))
 end
 
 local function loadCustomRace(raceName)
@@ -1679,9 +1929,16 @@ local function deleteRaceDefinition(raceName)
     end
 
     local separator = resourcePath:find('\\', 1, true) and '\\' or '/'
+    local targetFileName = normalizedName
+    if sourceType == 'custom' and customRace and customRace.fileName then
+        targetFileName = tostring(customRace.fileName)
+    elseif sourceType == 'online' and onlineRace and onlineRace.fileName then
+        targetFileName = tostring(onlineRace.fileName)
+    end
+
     local relativePath = sourceType == 'custom'
-        and buildCustomRaceFilePath(normalizedName)
-        or buildOnlineRaceFilePath(normalizedName)
+        and buildCustomRaceFilePath(targetFileName)
+        or buildOnlineRaceFilePath(targetFileName)
     local absolutePath = resourcePath .. separator .. relativePath:gsub('/', separator)
 
     local removeOk, removeError = os.remove(absolutePath)
@@ -1721,18 +1978,19 @@ local function saveRaceDefinition(ownerSource, raceName, checkpoints)
         local existingOnlinePath = buildOnlineRaceFilePath(fileName)
         existingMissionJson = LoadResourceFile(RESOURCE_NAME, existingOnlinePath)
     end
-    local missionJson = buildMissionJsonFromCheckpoints(sanitizedCheckpoints, existingMissionJson)
+    local missionJson = buildMissionJsonFromCheckpoints(sanitizedCheckpoints, existingMissionJson, sanitizedName)
     local saveOk = SaveResourceFile(RESOURCE_NAME, filePath, missionJson, -1)
     if not saveOk then
         logError(("The server could not save '%s'."):format(filePath))
         return nil, ('Could not save %s.'):format(filePath)
     end
 
-    registerKnownRaceDefinition(fileName, 'custom')
+    registerKnownRaceDefinition(sanitizedName, 'custom')
 
     return {
         id = nil,
-        name = fileName,
+        name = sanitizedName,
+        fileName = fileName,
         owner = tonumber(ownerSource) or 0,
         state = RacingSystem.States.idle,
         createdAt = os.time(),
@@ -2227,7 +2485,16 @@ RegisterNetEvent('racingsystem:validateGTAORaceUGCId', function(ugcId)
 
     registerKnownRaceDefinition(importedRace.raceName, 'online')
 
-    local hostedInstance, hostError = invokeRaceInstance(src, importedRace.raceName, 2)
+    local hostedInstance, hostError = invokeRaceInstance(src, importedRace.raceName, 1)
+    if not hostedInstance and importedRace.ugcId then
+        local fallbackInstance, fallbackError = invokeRaceInstance(src, importedRace.ugcId, 1)
+        if fallbackInstance then
+            hostedInstance = fallbackInstance
+            hostError = nil
+        else
+            hostError = fallbackError or hostError
+        end
+    end
     local hosted = hostedInstance ~= nil
     if hosted then
         auditLog("importAndAutoHostGTAORace", src, ("imported UGC '%s' and hosted '%s' (instance %s, %s lap(s))"):format(
@@ -2249,7 +2516,7 @@ RegisterNetEvent('racingsystem:validateGTAORaceUGCId', function(ugcId)
         propCount = tonumber(importedRace.propCount) or tonumber(validation.propCount) or 0,
         modelHideCount = tonumber(importedRace.modelHideCount) or tonumber(validation.modelHideCount) or 0,
         autoHosted = hosted,
-        autoHostedLaps = hosted and (tonumber(hostedInstance.laps) or 2) or 2,
+        autoHostedLaps = hosted and (tonumber(hostedInstance.laps) or 1) or 1,
         autoHostError = hosted and nil or (hostError or 'Could not auto-host race instance.'),
     })
 end)
