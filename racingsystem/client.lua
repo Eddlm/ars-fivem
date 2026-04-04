@@ -925,7 +925,7 @@ local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, 
     local markerRed = tonumber((markerColor or {}).r) or 80
     local markerGreen = tonumber((markerColor or {}).g) or 255
     local markerBlue = tonumber((markerColor or {}).b) or 255
-    local markerAlpha = 0
+    local markerAlpha = 255
     DrawMarker(
         RacingSystem.Config.markerTypeId,
         markerDraw.x,
@@ -997,7 +997,7 @@ local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, 
     local edgeRadius = tonumber(checkpoint.radius) or 8.0
     local chevronZ = currentZ + 2.35
     local chevronSize = 0.9 * math.max(2.55, math.min(4.05, edgeRadius * 0.33))
-    local darkBlue = { r = 20, g = 70, b = 170, a = 220 }
+    local darkBlue = { r = 20, g = 70, b = 170, a = 0 }
     local spinSpeed = tonumber(spinDegreesPerSecond) or 0.0
     local spinZ = 0.0
     if spinSpeed ~= 0.0 then
@@ -1092,7 +1092,7 @@ local function drawIdleStartChevron(checkpoint)
         35,
         90,
         220,
-        190,
+        230,
         false,
         true,
         2,
