@@ -1,4 +1,4 @@
-# NOT READY FOR USE YET. WAIT TILL 3TH APRIL.
+# NOT READY FOR USE YET. WAIT TILL 5TH APRIL.
 Safe to be git-cloned into `resources/whatever-you-wanna-call-it`. Main version releases still available.
 
 # In brief:
