@@ -95,6 +95,7 @@ local raceRuntimeState = {
     futureCheckpointBlips = {},
     futureBlipCheckpointIndex = nil,
     futureBlipInstanceId = nil,
+    chevronEdgeCache = nil,
 }
 local raceCountdownLocalEndByInstanceId = {}
 local raceCountdownReportedZeroByInstanceId = {}
@@ -199,6 +200,27 @@ local METERS_PER_SECOND_TO_MILES_PER_HOUR = 2.236936
 local MILES_PER_HOUR_TO_METERS_PER_SECOND = 0.44704
 local CHECKPOINT_SOFT_POWER_PENALTY_MULTIPLIER = 0.05
 local joinTeleportInProgress = false
+
+local function getClientExtraPrintLevel()
+    local rawLevel = 0
+    if type(GetConvarInt) == 'function' then
+        rawLevel = math.floor(tonumber(GetConvarInt('rSystemExtraPrints', 0)) or 0)
+    else
+        local raw = type(GetConvar) == 'function' and GetConvar('rSystemExtraPrints', '0') or '0'
+        rawLevel = math.floor(tonumber(raw) or 0)
+    end
+
+    if rawLevel == 2 then
+        return 2
+    end
+    return 0
+end
+
+local function logClientVerbose(message)
+    if getClientExtraPrintLevel() == 2 then
+        print(('[racingsystem:client] %s'):format(tostring(message or '')))
+    end
+end
 
 local function clearPowerPenaltyVehicleOverride()
     local penaltyVehicle = raceRuntimeState.powerPenaltyVehicle
@@ -319,10 +341,18 @@ do
 end
 
 RegisterNetEvent('racingsystem:notify', function(payload)
+    local message = ''
+    local isError = false
     if type(payload) == 'table' then
+        message = tostring(payload.message or '')
+        isError = payload.isError == true
+    else
+        message = tostring(payload or '')
+    end
+    if message == '' then
         return
     end
-
+    RacingSystemUtil.NotifyPlayer(message, isError)
 end)
 
 local function requestRaceStateSnapshot()
@@ -915,7 +945,123 @@ local function getHorizontalDistance(origin, checkpoint)
     return math.sqrt((dx * dx) + (dy * dy))
 end
 
-local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, isStart, isFinish, markerColor, chevronColor, hideChevron, spinDegreesPerSecond)
+local function computeCheckpointChevronEdge(checkpoint, prevCheckpoint, nextCheckpoint)
+    if type(checkpoint) ~= 'table' then
+        return nil
+    end
+
+    local currentX = tonumber(checkpoint.x) or 0.0
+    local currentY = tonumber(checkpoint.y) or 0.0
+    local prevX = tonumber(prevCheckpoint and prevCheckpoint.x) or currentX
+    local prevY = tonumber(prevCheckpoint and prevCheckpoint.y) or currentY
+    local nextX = tonumber(nextCheckpoint and nextCheckpoint.x) or currentX
+    local nextY = tonumber(nextCheckpoint and nextCheckpoint.y) or currentY
+    local lineX = nextX - prevX
+    local lineY = nextY - prevY
+    local lineLengthSquared = (lineX * lineX) + (lineY * lineY)
+    local radius = tonumber(checkpoint.radius) or 8.0
+    if lineLengthSquared <= 0.001 then
+        return {
+            x = currentX + radius,
+            y = currentY,
+        }
+    end
+
+    local toCurrentX = currentX - prevX
+    local toCurrentY = currentY - prevY
+    local t = ((toCurrentX * lineX) + (toCurrentY * lineY)) / lineLengthSquared
+    t = math.max(0.0, math.min(1.0, t))
+
+    local closestX = prevX + (lineX * t)
+    local closestY = prevY + (lineY * t)
+    local dirX = closestX - currentX
+    local dirY = closestY - currentY
+    local dirLength = math.sqrt((dirX * dirX) + (dirY * dirY))
+    if dirLength <= 0.001 then
+        dirX = nextX - currentX
+        dirY = nextY - currentY
+        dirLength = math.sqrt((dirX * dirX) + (dirY * dirY))
+    end
+    if dirLength <= 0.001 then
+        return {
+            x = currentX + radius,
+            y = currentY,
+        }
+    end
+
+    return {
+        x = currentX + ((dirX / dirLength) * radius),
+        y = currentY + ((dirY / dirLength) * radius),
+    }
+end
+
+local function clearCheckpointChevronEdgeCache()
+    raceRuntimeState.chevronEdgeCache = nil
+end
+
+local function getCheckpointChevronEdgeCache(instance)
+    if type(instance) ~= 'table' then
+        return { primary = {}, secondary = {} }
+    end
+
+    local instanceId = tonumber(instance.id)
+    local checkpoints = type(instance.checkpoints) == 'table' and instance.checkpoints or {}
+    local totalCheckpoints = #checkpoints
+    local existing = raceRuntimeState.chevronEdgeCache
+    if type(existing) == 'table'
+        and tonumber(existing.instanceId) == instanceId
+        and tonumber(existing.totalCheckpoints) == totalCheckpoints then
+        return existing
+    end
+
+    local cache = {
+        instanceId = instanceId,
+        totalCheckpoints = totalCheckpoints,
+        primary = {},
+        secondary = {},
+    }
+
+    if totalCheckpoints <= 0 then
+        raceRuntimeState.chevronEdgeCache = cache
+        return cache
+    end
+
+    for index = 1, totalCheckpoints do
+        local prevIndex = index - 1
+        if prevIndex < 1 then
+            prevIndex = totalCheckpoints
+        end
+        local nextIndex = index + 1
+        if nextIndex > totalCheckpoints then
+            nextIndex = 1
+        end
+
+        local currentVariant = getCheckpointVariantEntry(instance, index)
+        local prevVariant = getCheckpointVariantEntry(instance, prevIndex)
+        local nextVariant = getCheckpointVariantEntry(instance, nextIndex)
+
+        local currentPrimary = currentVariant and currentVariant.primary or checkpoints[index]
+        local prevPrimary = prevVariant and prevVariant.primary or checkpoints[prevIndex]
+        local nextPrimary = nextVariant and nextVariant.primary or checkpoints[nextIndex]
+        cache.primary[index] = computeCheckpointChevronEdge(currentPrimary, prevPrimary, nextPrimary)
+
+        local currentSecondary = currentVariant and currentVariant.secondary or nil
+        if type(currentSecondary) == 'table' then
+            local prevSecondary = prevVariant and prevVariant.secondary or nil
+            local nextSecondary = nextVariant and nextVariant.secondary or nil
+            cache.secondary[index] = computeCheckpointChevronEdge(
+                currentSecondary,
+                prevSecondary or prevPrimary,
+                nextSecondary or nextPrimary
+            )
+        end
+    end
+
+    raceRuntimeState.chevronEdgeCache = cache
+    return cache
+end
+
+local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, isStart, isFinish, markerColor, chevronColor, hideChevron, spinDegreesPerSecond, chevronEdge)
     if type(checkpoint) ~= 'table' then
         return
     end
@@ -925,7 +1071,7 @@ local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, 
     local markerRed = tonumber((markerColor or {}).r) or 80
     local markerGreen = tonumber((markerColor or {}).g) or 255
     local markerBlue = tonumber((markerColor or {}).b) or 255
-    local markerAlpha = 255
+    local markerAlpha = 128
     DrawMarker(
         RacingSystem.Config.markerTypeId,
         markerDraw.x,
@@ -964,80 +1110,63 @@ local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, 
     local prevY = tonumber(prevCheckpoint and prevCheckpoint.y) or currentY
     local nextX = tonumber(nextCheckpoint.x) or currentX
     local nextY = tonumber(nextCheckpoint.y) or currentY
-    local dx = nextX - currentX
-    local dy = nextY - currentY
-    local magnitude = math.sqrt((dx * dx) + (dy * dy))
-    if magnitude <= 0.001 then
-        return
+    local lineX = nextX - prevX
+    local lineY = nextY - prevY
+    local lineLengthSquared = (lineX * lineX) + (lineY * lineY)
+    local aimX, aimY
+    if lineLengthSquared > 0.001 then
+        local lineLength = math.sqrt(lineLengthSquared)
+        aimX = lineX / lineLength
+        aimY = lineY / lineLength
+    else
+        local fallbackX = nextX - currentX
+        local fallbackY = nextY - currentY
+        local fallbackLength = math.sqrt((fallbackX * fallbackX) + (fallbackY * fallbackY))
+        if fallbackLength <= 0.001 then
+            return
+        end
+        aimX = fallbackX / fallbackLength
+        aimY = fallbackY / fallbackLength
+        lineX = aimX
+        lineY = aimY
+        lineLengthSquared = 1.0
     end
-
-    local unitX = dx / magnitude
-    local unitY = dy / magnitude
-    local inX = currentX - prevX
-    local inY = currentY - prevY
-    local outX = nextX - currentX
-    local outY = nextY - currentY
-    local turnCross = (inX * outY) - (inY * outX)
-    local turnDot = (inX * outX) + (inY * outY)
-    local turnAngleAbsDeg = math.abs(math.deg(math.atan2(turnCross, turnDot)))
-
-    -- Left turn -> outside is left. Right turn -> outside is right.
-    local outsideSign = 1.0
-    if turnCross < -0.01 then
-        outsideSign = -1.0
-    elseif turnCross > 0.01 then
-        outsideSign = 1.0
-    end
-    local inMagnitude = math.sqrt((inX * inX) + (inY * inY))
-    local inUnitX = inMagnitude > 0.001 and (inX / inMagnitude) or unitX
-    local inUnitY = inMagnitude > 0.001 and (inY / inMagnitude) or unitY
-    local outUnitX = unitX
-    local outUnitY = unitY
 
     local edgeRadius = tonumber(checkpoint.radius) or 8.0
     local chevronZ = currentZ + 2.35
     local chevronSize = 0.9 * math.max(2.55, math.min(4.05, edgeRadius * 0.33))
-    local darkBlue = { r = 20, g = 70, b = 170, a = 0 }
-    local spinSpeed = tonumber(spinDegreesPerSecond) or 0.0
-    local spinZ = 0.0
-    if spinSpeed ~= 0.0 then
-        spinZ = (((GetGameTimer() or 0) / 1000.0) * spinSpeed) % 360.0
+    local darkBlue = { r = 20, g = 70, b = 170, a = 204 }
+    local edge = type(chevronEdge) == 'table' and chevronEdge or computeCheckpointChevronEdge(checkpoint, prevCheckpoint, nextCheckpoint)
+    if type(edge) ~= 'table' then
+        return
     end
-
-    local shouldDrawBothEdges = turnAngleAbsDeg < 30.0
-    local edgeSigns = shouldDrawBothEdges and { -1.0, 1.0 } or { outsideSign }
-    for _, edgeSign in ipairs(edgeSigns) do
-        local inNormalX = (-inUnitY) * edgeSign
-        local inNormalY = (inUnitX) * edgeSign
-        local outNormalX = (-outUnitY) * edgeSign
-        local outNormalY = (outUnitX) * edgeSign
-
-        local bisectorX = inNormalX + outNormalX
-        local bisectorY = inNormalY + outNormalY
-        local bisectorMagnitude = math.sqrt((bisectorX * bisectorX) + (bisectorY * bisectorY))
-        if bisectorMagnitude <= 0.001 then
-            bisectorX = outNormalX
-            bisectorY = outNormalY
-            bisectorMagnitude = math.sqrt((bisectorX * bisectorX) + (bisectorY * bisectorY))
+    local edgeX = tonumber(edge.x) or currentX
+    local edgeY = tonumber(edge.y) or currentY
+    local function drawRouteChevronAt(targetX, targetY)
+        local toMidpointDirX = targetX - currentX
+        local toMidpointDirY = targetY - currentY
+        local toMidpointDirLength = math.sqrt((toMidpointDirX * toMidpointDirX) + (toMidpointDirY * toMidpointDirY))
+        local drawAimX = aimX
+        local drawAimY = aimY
+        if toMidpointDirLength > 0.001 then
+            local baseAimX = toMidpointDirX / toMidpointDirLength
+            local baseAimY = toMidpointDirY / toMidpointDirLength
+            -- Positive 90-degree offset in 2D: (x, y) -> (-y, x)
+            drawAimX = -baseAimY
+            drawAimY = baseAimX
         end
-        if bisectorMagnitude > 0.001 then
-            bisectorX = bisectorX / bisectorMagnitude
-            bisectorY = bisectorY / bisectorMagnitude
-        end
-
-        local edgeX = currentX + (bisectorX * edgeRadius)
-        local edgeY = currentY + (bisectorY * edgeRadius)
         DrawMarker(
             22,
-            edgeX,
-            edgeY,
+            targetX,
+            targetY,
             chevronZ,
-            unitX,
-            unitY,
+            drawAimX,
+            drawAimY,
             0.0,
-            90.0,
-            90.0,
-            spinZ,
+            -- Keep X just below 90; exact 90 flattens/resets this marker.
+            89.0,
+            0.0,
+            -90.0,
             chevronSize,
             chevronSize,
             chevronSize,
@@ -1054,6 +1183,11 @@ local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, 
             false
         )
     end
+
+    drawRouteChevronAt(edgeX, edgeY)
+    local oppositeEdgeX = (2.0 * currentX) - edgeX
+    local oppositeEdgeY = (2.0 * currentY) - edgeY
+    drawRouteChevronAt(oppositeEdgeX, oppositeEdgeY)
 
     return
 end
@@ -1140,7 +1274,9 @@ local function buildFutureCheckpointIndices(totalCheckpoints, targetIndex, count
     local maxCount = math.min(requestedCount, total)
     local indices = {}
 
-    for step = 1, maxCount do
+    -- Include the current target checkpoint first so passing it removes that blip
+    -- (instead of appearing to remove the next checkpoint).
+    for step = 0, (maxCount - 1) do
         local futureIndex = currentIndex + step
         if futureIndex > total then
             futureIndex = ((futureIndex - 1) % total) + 1
@@ -1186,7 +1322,7 @@ local function updateFutureCheckpointBlips(instance, totalCheckpoints, targetInd
                 SetBlipSprite(blip, 1)
                 SetBlipDisplay(blip, 4)
                 SetBlipScale(blip, 0.75)
-                SetBlipColour(blip, 11)
+                SetBlipColour(blip, 3)
                 SetBlipAsShortRange(blip, false)
                 blipsByIndex[index] = blip
             end
@@ -1231,7 +1367,7 @@ local function updateStartLineBlip(startCheckpoint)
         SetBlipSprite(blip, 38)
         SetBlipDisplay(blip, 4)
         SetBlipScale(blip, 0.9)
-        SetBlipColour(blip, 11)
+        SetBlipColour(blip, 0)
         SetBlipAsShortRange(blip, false)
         BeginTextCommandSetBlipName('STRING')
         AddTextComponentSubstringPlayerName('Race Start')
@@ -1564,13 +1700,13 @@ local function canViewerKillInstance(instance)
 end
 
 local function getSelectedInvokeDefinition()
-    local selectedIndex = raceInvokeDefinitionItem and raceInvokeDefinitionItem:Index() or 1
-    return raceMenuDefinitionOptions[selectedIndex]
+    local selectedIndex = raceInvokeDefinitionItem and math.floor(tonumber(raceInvokeDefinitionItem:Index()) or 1) or 1
+    return raceMenuDefinitionOptions[selectedIndex] or raceMenuDefinitionOptions[selectedIndex + 1]
 end
 
 local function getSelectedInvokeLapCount()
-    local selectedIndex = raceInvokeLapItem and raceInvokeLapItem:Index() or 1
-    local lapValue = tonumber(raceMenuLapOptions[selectedIndex]) or 1
+    local selectedIndex = raceInvokeLapItem and math.floor(tonumber(raceInvokeLapItem:Index()) or 1) or 1
+    local lapValue = tonumber(raceMenuLapOptions[selectedIndex]) or tonumber(raceMenuLapOptions[selectedIndex + 1]) or 1
     return math.max(1, lapValue)
 end
 
@@ -1787,7 +1923,7 @@ local function refreshRaceMenu()
     local joinedInstance = getJoinedRaceInstance()
     local ownedInstance = getOwnedRaceInstance()
     local menuMode = getRaceMenuMode(joinedInstance)
-    local selectedDefinitionIndex = raceInvokeDefinitionItem and raceInvokeDefinitionItem:Index() or 1
+    local selectedDefinitionIndex = raceInvokeDefinitionItem and math.floor(tonumber(raceInvokeDefinitionItem:Index()) or 1) or 1
 
     raceMenuDefinitionOptions = {}
     local definitionLabels = {}
@@ -1839,7 +1975,7 @@ local function refreshRaceMenu()
         end
     end
 
-    local editorSelectedIndex = raceEditorSelectedItem and raceEditorSelectedItem:Index() or 1
+    local editorSelectedIndex = raceEditorSelectedItem and math.floor(tonumber(raceEditorSelectedItem:Index()) or 1) or 1
     local editorLabels = {}
     raceMenuEditorOptions = {}
     for _, definition in ipairs(definitions) do
@@ -1871,7 +2007,8 @@ local function refreshRaceMenu()
     end
 
     local viewerPermissions = getViewerPermissions()
-    local selectedEditorDefinition = raceMenuEditorOptions[raceEditorSelectedItem:Index()]
+    local selectedEditorIndex = raceEditorSelectedItem and math.floor(tonumber(raceEditorSelectedItem:Index()) or 1) or 1
+    local selectedEditorDefinition = raceMenuEditorOptions[selectedEditorIndex] or raceMenuEditorOptions[selectedEditorIndex + 1]
     local selectedEditorName = editorState.selectedName ~= '' and editorState.selectedName
         or (selectedEditorDefinition and selectedEditorDefinition.name)
         or 'new race'
@@ -1954,13 +2091,13 @@ local function refreshRaceMenu()
         joinLabels[1] = 'No joinable race instances'
     end
 
-    local selectedJoinIndex = raceJoinAvailableListItem and raceJoinAvailableListItem:Index() or 1
+    local selectedJoinIndex = raceJoinAvailableListItem and math.floor(tonumber(raceJoinAvailableListItem:Index()) or 1) or 1
     raceJoinAvailableListItem.Items = joinLabels
     raceJoinAvailableListItem:Index(math.min(selectedJoinIndex, #joinLabels))
     raceJoinAvailableListItem:Enabled(#raceMenuJoinOptions > 0)
     raceJoinAvailableListItem:Description("")
 
-    local selectedJoinInstance = raceMenuJoinOptions[raceJoinAvailableListItem:Index()]
+    local selectedJoinInstance = raceMenuJoinOptions[selectedJoinIndex] or raceMenuJoinOptions[selectedJoinIndex + 1]
     local alreadyJoinedSelected = selectedJoinInstance ~= nil and isSameRaceInstance(selectedJoinInstance, joinedInstance)
     if selectedJoinInstance then
         raceJoinActionItem:Enabled(not alreadyJoinedSelected)
@@ -2109,23 +2246,33 @@ local function initializeRaceMenu()
     raceMyRaceMenu:BindMenuToItem(raceHostRaceMenu, raceHostRaceMenuItem)
     raceManageMenu:BindMenuToItem(raceKillMenu, raceKillMenuItem)
 
+    local function switchToMenuIfNeeded(menu, targetMenu)
+        if not menu or not targetMenu then
+            return
+        end
+        if type(targetMenu.Visible) == 'function' and targetMenu:Visible() then
+            return
+        end
+        menu:SwitchTo(targetMenu, 1, true)
+    end
+
     raceMyRaceMenuItem.Activated = function(menu)
-        menu:SwitchTo(raceMyRaceMenu, 1, true)
+        switchToMenuIfNeeded(menu, raceMyRaceMenu)
     end
     raceBrowseMenuItem.Activated = function(menu)
-        menu:SwitchTo(raceJoinMenu, 1, true)
+        switchToMenuIfNeeded(menu, raceJoinMenu)
     end
     raceManageMenuItem.Activated = function(menu)
-        menu:SwitchTo(raceManageMenu, 1, true)
+        switchToMenuIfNeeded(menu, raceManageMenu)
     end
     raceEditorMenuItem.Activated = function(menu)
-        menu:SwitchTo(raceEditorMenu, 1, true)
+        switchToMenuIfNeeded(menu, raceEditorMenu)
     end
     raceHostRaceMenuItem.Activated = function(menu)
-        menu:SwitchTo(raceHostRaceMenu, 1, true)
+        switchToMenuIfNeeded(menu, raceHostRaceMenu)
     end
     raceKillMenuItem.Activated = function(menu)
-        menu:SwitchTo(raceKillMenu, 1, true)
+        switchToMenuIfNeeded(menu, raceKillMenu)
     end
 
     raceMainMenu.OnMenuClose = function()
@@ -2186,7 +2333,8 @@ local function initializeRaceMenu()
             return
         end
 
-        local selectedDefinition = raceMenuEditorOptions[index]
+        local selectedEditorIndex = raceEditorSelectedItem and math.floor(tonumber(raceEditorSelectedItem:Index()) or 1) or 1
+        local selectedDefinition = raceMenuEditorOptions[selectedEditorIndex] or raceMenuEditorOptions[selectedEditorIndex + 1]
         if selectedDefinition then
             editorState.selectedName = tostring(selectedDefinition.name or '')
             raceMenuDeleteConfirmName = nil
@@ -2199,7 +2347,8 @@ local function initializeRaceMenu()
             return
         end
 
-        local currentDefinition = raceMenuEditorOptions[raceEditorSelectedItem:Index()]
+        local selectedEditorIndex = raceEditorSelectedItem and math.floor(tonumber(raceEditorSelectedItem:Index()) or 1) or 1
+        local currentDefinition = raceMenuEditorOptions[selectedEditorIndex] or raceMenuEditorOptions[selectedEditorIndex + 1]
         local typedRaceName = promptRaceNameInput('Edit race name', editorState.selectedName ~= '' and editorState.selectedName or (currentDefinition and currentDefinition.name or ''), 64)
         if not typedRaceName or typedRaceName == '' then
             return
@@ -2235,10 +2384,23 @@ local function initializeRaceMenu()
 
         local definition = getSelectedInvokeDefinition()
         if not definition then
+            logClientVerbose('Host selected race aborted: no definition selected.')
             return
         end
 
-        TriggerServerEvent('racingsystem:invokeRace', definition.name, getSelectedInvokeLapCount())
+        logClientVerbose(("Host selected race payload name='%s' lookupName='%s' sourceType='%s' raceId='%s' laps=%s"):format(
+            tostring(definition.name or ''),
+            tostring(definition.lookupName or ''),
+            tostring(definition.sourceType or ''),
+            tostring(definition.raceId or ''),
+            tostring(getSelectedInvokeLapCount())
+        ))
+        TriggerServerEvent('racingsystem:invokeRace', {
+            name = definition.name,
+            lookupName = definition.lookupName,
+            sourceType = definition.sourceType,
+            raceId = definition.raceId,
+        }, getSelectedInvokeLapCount())
         raceHostRaceMenu:GoBack()
     end
 
@@ -2247,7 +2409,8 @@ local function initializeRaceMenu()
             return
         end
 
-        local instance = raceMenuJoinOptions[index]
+        local selectedJoinIndex = raceJoinAvailableListItem and math.floor(tonumber(raceJoinAvailableListItem:Index()) or 1) or 1
+        local instance = raceMenuJoinOptions[selectedJoinIndex] or raceMenuJoinOptions[selectedJoinIndex + 1]
         local alreadyJoined = instance ~= nil and isSameRaceInstance(instance, getJoinedRaceInstance())
         if instance then
             raceJoinActionItem:Enabled(not alreadyJoined)
@@ -2273,8 +2436,9 @@ local function initializeRaceMenu()
             return
         end
 
-        local selectedIndex = raceJoinAvailableListItem and raceJoinAvailableListItem:Index() or 1
+        local selectedIndex = raceJoinAvailableListItem and math.floor(tonumber(raceJoinAvailableListItem:Index()) or 1) or 1
         local instance = raceMenuJoinOptions[selectedIndex]
+            or raceMenuJoinOptions[selectedIndex + 1]
         if not instance then
             return
         end
@@ -2298,7 +2462,8 @@ local function initializeRaceMenu()
 
     raceEditorMenu.OnItemSelect = function(_, item, index)
         if item == raceEditorOpenItem then
-            local selectedDefinition = raceMenuEditorOptions[raceEditorSelectedItem:Index()]
+            local selectedEditorIndex = raceEditorSelectedItem and math.floor(tonumber(raceEditorSelectedItem:Index()) or 1) or 1
+            local selectedDefinition = raceMenuEditorOptions[selectedEditorIndex] or raceMenuEditorOptions[selectedEditorIndex + 1]
             local raceName = editorState.selectedName ~= '' and editorState.selectedName or (selectedDefinition and selectedDefinition.name or '')
             local trimmedRaceName = RacingSystem.Trim(raceName)
             if trimmedRaceName == '' then
@@ -2312,7 +2477,8 @@ local function initializeRaceMenu()
             addCheckpointAtPlayer()
             refreshRaceMenu()
         elseif item == raceEditorSaveItem then
-            local selectedDefinition = raceMenuEditorOptions[raceEditorSelectedItem:Index()]
+            local selectedEditorIndex = raceEditorSelectedItem and math.floor(tonumber(raceEditorSelectedItem:Index()) or 1) or 1
+            local selectedDefinition = raceMenuEditorOptions[selectedEditorIndex] or raceMenuEditorOptions[selectedEditorIndex + 1]
             local raceName = editorState.selectedName ~= '' and editorState.selectedName or (selectedDefinition and selectedDefinition.name or '')
             local trimmedRaceName = RacingSystem.Trim(raceName)
             if trimmedRaceName == '' then
@@ -2328,7 +2494,8 @@ local function initializeRaceMenu()
                 return
             end
 
-            local selectedDefinition = raceMenuEditorOptions[raceEditorSelectedItem:Index()]
+            local selectedEditorIndex = raceEditorSelectedItem and math.floor(tonumber(raceEditorSelectedItem:Index()) or 1) or 1
+            local selectedDefinition = raceMenuEditorOptions[selectedEditorIndex] or raceMenuEditorOptions[selectedEditorIndex + 1]
             if not selectedDefinition then
                 return
             end
@@ -2539,6 +2706,27 @@ RegisterNetEvent('racingsystem:stateSnapshot', function(snapshot)
     end
 
     latestSnapshot = snapshot
+    if getClientExtraPrintLevel() == 2 then
+        local definitions = type(snapshot.definitions) == 'table' and snapshot.definitions or {}
+        local samples = {}
+        for _, definition in ipairs(definitions) do
+            if tostring(definition.sourceType or '') == 'online' then
+                samples[#samples + 1] = ("%s|lookup=%s|id=%s"):format(
+                    tostring(definition.name or ''),
+                    tostring(definition.lookupName or ''),
+                    tostring(definition.raceId or 'nil')
+                )
+                if #samples >= 5 then
+                    break
+                end
+            end
+        end
+        logClientVerbose(("Snapshot definitions=%s instances=%s sampleOnline=[%s]"):format(
+            tostring(#definitions),
+            tostring(#(type(snapshot.instances) == 'table' and snapshot.instances or {})),
+            (#samples > 0 and table.concat(samples, '; ') or 'none')
+        ))
+    end
 
     local activeCountdowns = {}
     local snapshotInstances = type(snapshot.instances) == 'table' and snapshot.instances or {}
@@ -3090,6 +3278,7 @@ CreateThread(function()
             raceRuntimeState.lastPassedCheckpoint = nil
             raceRuntimeState.startLineCheckpoint = nil
             raceRuntimeState.joinHintInstanceId = nil
+            clearCheckpointChevronEdgeCache()
             raceRuntimeState.accelerationPenaltyUntil = 0
             clearPowerPenaltyVehicleOverride()
             clearFutureCheckpointBlips()
@@ -3141,6 +3330,7 @@ CreateThread(function()
             local entrantProgress = getEffectiveEntrantProgress(joinedInstance, entrant)
             local checkpoints = type(joinedInstance.checkpoints) == 'table' and joinedInstance.checkpoints or {}
             local totalCheckpoints = #checkpoints
+            local chevronEdgeCache = getCheckpointChevronEdgeCache(joinedInstance)
             local targetIndex = 1
             local startLineCheckpoint = resolveStartLineCheckpoint(checkpoints, totalCheckpoints, nil)
             updateStartLineBlip(startLineCheckpoint)
@@ -3292,7 +3482,8 @@ CreateThread(function()
                         { r = 255, g = 225, b = 80, a = 180 },
                         { r = 255, g = 235, b = 80, a = 220 },
                         true,
-                        90.0
+                        90.0,
+                        chevronEdgeCache.primary[targetIndex]
                     )
 
                     if type(secondaryTargetCheckpoint) == 'table' then
@@ -3305,7 +3496,8 @@ CreateThread(function()
                             { r = 255, g = 145, b = 35, a = 170 },
                             { r = 255, g = 170, b = 75, a = 220 },
                             true,
-                            0.0
+                            0.0,
+                            chevronEdgeCache.secondary[targetIndex]
                         )
                     end
 
@@ -3355,7 +3547,8 @@ CreateThread(function()
                                         previewMarkerColors[previewStep] or previewMarkerColors[#previewMarkerColors],
                                         previewChevronColors[previewStep] or previewChevronColors[#previewChevronColors],
                                         true,
-                                        0.0
+                                        0.0,
+                                        chevronEdgeCache.primary[previewIndex]
                                     )
                                 end
                             end
