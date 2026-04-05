@@ -1,11 +1,13 @@
 local RESOURCE_NAME = GetCurrentResourceName()
 local DEBUG_CONVAR = 'cCamExtraPrints'
 
+-- Trims whitespace from the beginning and end of a string
 local function trim(value)
     local text = tostring(value or '')
     return (text:match('^%s*(.-)%s*$') or '')
 end
 
+-- Reads a convar value with a fallback, trimming whitespace
 local function readConvar(name, fallback)
     local value = trim(GetConvar(name, tostring(fallback or '')))
     if value == '' then
@@ -14,6 +16,7 @@ local function readConvar(name, fallback)
     return value
 end
 
+-- Returns configuration for the update checker (repo, branch, path, token, timeout)
 local function getCheckerConfig()
     return {
         repo = readConvar('customcam_update_repo', 'Eddlm/ars-fivem'),
@@ -24,6 +27,7 @@ local function getCheckerConfig()
     }
 end
 
+-- Determines if update check logging should be enabled based on debug convar
 local function shouldLogUpdateCheck()
     if type(GetConvarInt) == 'function' then
         return math.floor(tonumber(GetConvarInt(DEBUG_CONVAR, 0)) or 0) == 2
@@ -32,6 +36,7 @@ local function shouldLogUpdateCheck()
     return math.floor(tonumber(raw) or 0) == 2
 end
 
+-- Builds HTTP headers for GitHub API requests, including auth if token is present
 local function buildHttpHeaders(config)
     local headers = {
         ['User-Agent'] = 'customcam-update-notifier',
@@ -43,6 +48,7 @@ local function buildHttpHeaders(config)
     return headers
 end
 
+-- Performs an HTTP GET request with timeout handling
 local function httpRequest(url, headers, timeoutMs)
     local response = {
         done = false,
@@ -74,6 +80,7 @@ local function httpRequest(url, headers, timeoutMs)
     return response
 end
 
+-- Extracts version string from fxmanifest.lua content (looks for version = 'x.y.z' or version = "x.y.z")
 local function parseVersionFromManifestText(content)
     if type(content) ~= 'string' or content == '' then
         return nil
@@ -89,6 +96,7 @@ local function parseVersionFromManifestText(content)
     return version
 end
 
+-- Gets the local version from resource metadata or fxmanifest.lua
 local function getLocalVersion()
     local localMetadataVersion = trim(GetResourceMetadata(RESOURCE_NAME, 'version', 0) or '')
     if localMetadataVersion ~= '' then
@@ -98,6 +106,7 @@ local function getLocalVersion()
     return parseVersionFromManifestText(manifest)
 end
 
+-- Fetches the remote version from GitHub raw fxmanifest.lua
 local function getRemoteVersion(config, headers)
     local rawUrl = ('https://raw.githubusercontent.com/%s/%s/%s/fxmanifest.lua'):format(
         config.repo,
@@ -113,6 +122,7 @@ local function getRemoteVersion(config, headers)
     return parseVersionFromManifestText(response.body)
 end
 
+-- Parses a version string into numeric segments (e.g., '1.2.3' -> {1, 2, 3})
 local function parseVersionSegments(version)
     local cleaned = trim(version)
     if cleaned == '' then
@@ -132,6 +142,7 @@ local function parseVersionSegments(version)
     return segments
 end
 
+-- Compares two version strings to determine if remote is newer than local
 local function isRemoteVersionNewer(localVersion, remoteVersion)
     local localSegments = parseVersionSegments(localVersion)
     local remoteSegments = parseVersionSegments(remoteVersion)
@@ -153,6 +164,7 @@ local function isRemoteVersionNewer(localVersion, remoteVersion)
     return false
 end
 
+-- Performs the actual update check: gets local and remote versions, logs if debug enabled, prints update available message
 local function performUpdateCheck()
     local config = getCheckerConfig()
     local headers = buildHttpHeaders(config)
@@ -178,6 +190,7 @@ local function performUpdateCheck()
     return true
 end
 
+-- Registers the /ccamupdatecheck command to manually trigger an update check
 RegisterCommand('ccamupdatecheck', function(source)
     local numericSource = tonumber(source) or 0
     if numericSource == 0 then
@@ -185,13 +198,14 @@ RegisterCommand('ccamupdatecheck', function(source)
     end
 end, false)
 
+-- Automatically performs an update check after a random delay when the resource starts
 AddEventHandler('onResourceStart', function(resourceName)
     if resourceName ~= RESOURCE_NAME then
         return
     end
 
     CreateThread(function()
-        local delayMs = math.random(3 * 60 * 1000, 6 * 60 * 1000)
+        local delayMs = math.random(1 * 60 * 1000, 3 * 60 * 1000)
         Wait(delayMs)
         performUpdateCheck()
     end)
