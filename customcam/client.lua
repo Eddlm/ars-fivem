@@ -68,9 +68,14 @@ local toggleHoldState = {
     heldSince = nil,
     hasTriggered = false
 }
-local controlHintShown = false
+local controlHintState = 0
 local controlHintReadyAt = nil
 local controlHintRandomSeeded = false
+local CONTROL_HINT_INITIAL_DELAY_MS = 30000
+local controlInputTokenById = {
+    [0] = '~INPUT_NEXT_CAMERA~',
+    [79] = '~INPUT_VEH_LOOK_BEHIND~',
+}
 
 local function getRandomControlHintDelayMs()
     if not controlHintRandomSeeded then
@@ -79,7 +84,7 @@ local function getRandomControlHintDelayMs()
         controlHintRandomSeeded = true
     end
 
-    return math.random(60000, 240000)
+    return math.random(30000, 60000)
 end
 
 local function getToggleControlId()
@@ -117,10 +122,26 @@ local function validateConfig()
     end
 end
 
-local function showControlHint(message)
+local function showControlHint(message, durationMs)
     BeginTextCommandDisplayHelp("STRING")
     AddTextComponentSubstringPlayerName(tostring(message))
-    EndTextCommandDisplayHelp(0, false, false, 2200)
+    EndTextCommandDisplayHelp(0, false, false, math.max(0, math.floor(tonumber(durationMs) or 10000)))
+end
+
+local function getControlHintToken(controlId, fallbackToken)
+    local mapped = controlInputTokenById[tonumber(controlId) or -1]
+    if mapped and mapped ~= '' then
+        return mapped
+    end
+
+    if type(GetControlInstructionalButton) == 'function' then
+        local dynamic = GetControlInstructionalButton(2, tonumber(controlId) or 0, true)
+        if type(dynamic) == 'string' and dynamic ~= '' then
+            return dynamic
+        end
+    end
+
+    return tostring(fallbackToken or '~INPUT_FRONTEND_ACCEPT~')
 end
 
 local function showInactiveControlHints()
@@ -128,13 +149,13 @@ local function showInactiveControlHints()
         return
     end
 
-    if controlHintShown then
+    if controlHintState >= 1 then
         return
     end
 
     local now = GetGameTimer()
     if not controlHintReadyAt then
-        controlHintReadyAt = now + getRandomControlHintDelayMs()
+        controlHintReadyAt = now + CONTROL_HINT_INITIAL_DELAY_MS
     end
 
     if now < controlHintReadyAt then
@@ -143,11 +164,24 @@ local function showInactiveControlHints()
 
     local ped = PlayerPedId()
     if not IsPedInAnyVehicle(ped, false) then
+        controlHintReadyAt = now + getRandomControlHintDelayMs()
         return
     end
 
-    controlHintShown = true
-    showControlHint("Hold camera toggle to enable custom cam. Press look-back to reverse view while active.")
+    local vehicle = GetVehiclePedIsIn(ped, false)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+        controlHintReadyAt = now + getRandomControlHintDelayMs()
+        return
+    end
+
+    if GetPedInVehicleSeat(vehicle, -1) ~= ped then
+        controlHintReadyAt = now + getRandomControlHintDelayMs()
+        return
+    end
+
+    controlHintState = 1
+    local toggleToken = getControlHintToken(getToggleControlId(), '~INPUT_NEXT_CAMERA~')
+    showControlHint(('Hold %s to enable ~b~Custom Driving Camera~w~.'):format(toggleToken))
 end
 
 -- Shared math helpers keep the camera motion code readable.
@@ -1291,6 +1325,14 @@ local function updateToggleHoldState()
         cleanupCamera()
     else
         startFollowCam()
+        if state.active and controlHintState < 2 then
+            if controlHintState < 1 then
+                controlHintState = 1
+            end
+            controlHintState = 2
+            local toggleToken = getControlHintToken(getToggleControlId(), '~INPUT_NEXT_CAMERA~')
+            showControlHint(('Hold %s again to disable custom cam.'):format(toggleToken), 8000)
+        end
     end
 
     return true
