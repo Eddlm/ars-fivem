@@ -5,9 +5,9 @@ local definitions = PerformanceTuning.Definitions or {}
 local runtimeConfig = definitions.runtimeConfig or {}
 local config = PerformanceTuning.Config or {}
 local INTERNAL_SLIDER_RANGES = {
-    antirollBars = { min = 0.0, max = 1.0, step = 0.025 },
-    brakeBiasFront = { min = 0.3, max = 0.7, step = 0.01 },
-    gripBiasFront = { min = 0.3, max = 0.7, step = 0.01 },
+    antirollBars = { min = 0.0, max = 2.0, step = 0.1 },
+    brakeBiasFront = { min = 0.3, max = 0.7, step = 0.05 },
+     gripBiasFront = { min = 0.4, max = 0.6, step = 0.005 },
     antirollBiasFront = { min = 0.0, max = 1.0, step = 0.025 },
     suspensionBiasFront = { min = 0.3, max = 0.7, step = 0.01 },
 }

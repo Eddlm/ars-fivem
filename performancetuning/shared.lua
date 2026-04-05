@@ -79,14 +79,14 @@ Config.packDefinitions = {
         { id = 'race', label = 'Hard', enabled = true, description = 'Brings the suspension up to a firmer track-focused force and rebound baseline.', minimums = { fSuspensionForce = 4.0, fSuspensionReboundDamp = 3.5 } },
         { id = 'rally', label = 'Soft', enabled = true, description = 'Uses a softer off-road-biased damping setup for extra compliance.', values = { fSuspensionForce = 2.0, fSuspensionCompDamp = 3.0 } },
     },
-    transmission = {
-        { id = 'stock', label = 'Stock', enabled = true, description = 'Keeps the original gearing and shift behavior.' },
-        { id = 'tuned', label = 'Fluid change', enabled = true, description = 'Slightly improves shift speed without changing gearing.', gearCountOffset = 0, clutchRateOffset = 2.0 },
-        { id = 'street', label = 'Clutch disc swap', enabled = true, description = 'Noticeably sharpens shifts for street driving.', gearCountOffset = 0, clutchRateOffset = 4.0 },
-        { id = 'pro', label = 'Pressure plate swap', enabled = true, description = 'Further increases clutch response and shift speed.', gearCountOffset = 0, clutchRateOffset = 6.0 },
-        { id = 'race', label = 'Gearbox swap', enabled = true, description = 'Adds a gear and delivers aggressive shift response.', gearCountOffset = 1, clutchRateOffset = 8.0 },
-        { id = 'race_gearbox', label = 'Race gearbox', enabled = true, description = 'Maximum gearing and the quickest shift response in this set.', gearCountOffset = 2, clutchRateOffset = 10.0 },
-    },
+        transmission = {
+            { id = 'stock', label = 'Stock', enabled = true, description = 'Keeps the original gearing and shift behavior.' },
+            { id = 'tuned', label = 'Fluid Change', enabled = true, description = 'Slightly improves shift speed without changing gearing.', gearCountOffset = 0, clutchRateOffset = 2.0 },
+            { id = 'street', label = 'Clutch Disc Swap', enabled = true, description = 'Noticeably sharpens shifts for street driving.', gearCountOffset = 0, clutchRateOffset = 4.0 },
+            { id = 'pro', label = 'Pressure Plate Swap', enabled = true, description = 'Further increases clutch response and shift speed.', gearCountOffset = 0, clutchRateOffset = 6.0 },
+            { id = 'race', label = 'Gearbox Swap', enabled = true, description = 'Adds a gear and delivers aggressive shift response.', gearCountOffset = 1, clutchRateOffset = 8.0 },
+            { id = 'race_gearbox', label = 'Race Gearbox', enabled = true, description = 'Maximum gearing and the quickest shift response in this set.', gearCountOffset = 2, clutchRateOffset = 10.0 },
+        },
     engine = {
         { id = 'stock', label = 'Stock', enabled = true, description = 'Keeps the original engine power and top speed balance.' },
         { id = 'stage_1', label = 'Stage 1', enabled = true, description = 'Small power increase for a mild street upgrade.' },

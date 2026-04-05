@@ -360,8 +360,8 @@ local function setBrakeBiasSliderState(value)
     if item == nil then
         return
     end
-    local resolvedValue = scaleformUI.clampBrakeBiasFrontValue(value)
-    item:Description(('Current: %s'):format(scaleformUI.getBrakeBiasFrontLabel(resolvedValue)))
+     local resolvedValue = scaleformUI.clampBrakeBiasFrontValue(value)
+     item:Description(('Bias %.1f/%.1f'):format(resolvedValue * 100, (1.0 - resolvedValue) * 100))
     item:Index(scaleformUI.getBrakeBiasSliderIndex(resolvedValue) - 1)
 end
 
@@ -371,8 +371,8 @@ local function setGripBiasSliderState(value)
     if item == nil then
         return
     end
-    local resolvedValue = scaleformUI.clampGripBiasFrontValue(value)
-    item:Description(('Current: %s'):format(scaleformUI.getGripBiasFrontLabel(resolvedValue)))
+     local resolvedValue = scaleformUI.clampGripBiasFrontValue(value)
+     item:Description(('Bias %.1f/%.1f'):format(resolvedValue * 100, (1.0 - resolvedValue) * 100))
     item:Index(scaleformUI.getGripBiasSliderIndex(resolvedValue) - 1)
 end
 
@@ -382,8 +382,8 @@ local function setAntirollBiasSliderState(value)
     if item == nil then
         return
     end
-    local resolvedValue = scaleformUI.clampAntirollBiasFrontValue(value)
-    item:Description(('Current: %s'):format(scaleformUI.getAntirollBiasFrontLabel(resolvedValue)))
+     local resolvedValue = scaleformUI.clampAntirollBiasFrontValue(value)
+     item:Description(('Bias %.1f/%.1f'):format(resolvedValue * 100, (1.0 - resolvedValue) * 100))
     item:Index(scaleformUI.getAntirollBiasSliderIndex(resolvedValue) - 1)
 end
 
@@ -412,8 +412,8 @@ local function setSuspensionBiasSliderState(value)
     if item == nil then
         return
     end
-    local resolvedValue = scaleformUI.clampSuspensionBiasFrontValue(value)
-    item:Description(('Current: %s'):format(scaleformUI.getSuspensionBiasFrontLabel(resolvedValue)))
+     local resolvedValue = scaleformUI.clampSuspensionBiasFrontValue(value)
+     item:Description(('Bias %.1f/%.1f'):format(resolvedValue * 100, (1.0 - resolvedValue) * 100))
     item:Index(scaleformUI.getSuspensionBiasSliderIndex(resolvedValue) - 1)
 end
 
