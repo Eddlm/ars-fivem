@@ -1,12 +1,12 @@
 CustomPhysicsNitrous = CustomPhysicsNitrous or {}
 local Config = (CustomPhysics or {}).Config or {}
-local NitrousConfig = type(Config.nitrous) == "table" and Config.nitrous or {}
 
 local Nitrous = {
     ptfxAsset = 'veh_xs_vehicle_mods',
-    defaultOverrideLevel = tonumber(NitrousConfig.defaultOverrideLevel) or 1.0,
-    defaultHudFill = tonumber(NitrousConfig.defaultHudFill) or 100.0,
-    controlId = math.max(0, math.floor(tonumber(NitrousConfig.controlId) or 73)),
+    defaultOverrideLevel = tonumber((type(Config.nitrous) == "table" and Config.nitrous.defaultOverrideLevel) or 1.0) or 1.0,
+    defaultHudFill = tonumber((type(Config.nitrous) == "table" and Config.nitrous.defaultHudFill) or 100.0) or 100.0,
+    controlId = math.max(0, math.floor(tonumber((type(Config.nitrous) == "table" and Config.nitrous.controlId) or 73) or 73)),
+    debugStatusIntervalMs = math.max(250, math.floor(tonumber((type(Config.nitrous) == "table" and Config.nitrous.debugStatusIntervalMs) or 1000) or 1000)),
 }
 
 local activeNitrousShot = {
@@ -95,7 +95,7 @@ function CustomPhysicsNitrous.update(vehicle, now)
     DisableControlAction(1, Nitrous.controlId, true)
     DisableControlAction(2, Nitrous.controlId, true)
 
-    local intervalMs = math.max(250, math.floor(tonumber(NitrousConfig.debugStatusIntervalMs) or 1000))
+    local intervalMs = Nitrous.debugStatusIntervalMs
     if (now - (activeNitrousShot.lastStatusNotifyAt or 0)) >= intervalMs then
         activeNitrousShot.lastStatusNotifyAt = now
     end

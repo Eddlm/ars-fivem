@@ -8,7 +8,7 @@ game 'gta5'
 name 'vehiclemanager'
 author 'eddlm'
 description 'Standalone vehicle manager menu built on ScaleformUI_Lua with PerformanceTuning integration.'
-version '0.0.1'
+version '0.0.2'
 
 lua54 'yes'
 

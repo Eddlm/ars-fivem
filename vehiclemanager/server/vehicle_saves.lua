@@ -1,7 +1,5 @@
-local Config = VehicleManager.Config or {}
-local SaveConfig = Config.save or {}
 local saveDirectory = "savedvehicles"
-local ownerIdentifierPrefixes = SaveConfig.ownerIdentifierPrefixes or {
+local ownerIdentifierPrefixes = (((VehicleManager or {}).Config or {}).save or {}).ownerIdentifierPrefixes or {
     "license:",
     "license2:",
     "fivem:",

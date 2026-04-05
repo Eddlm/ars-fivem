@@ -14,9 +14,17 @@ local RESOURCE_NAME = 'racingsystem'
 local CUSTOM_RACE_FOLDER = 'CustomRaces'
 local ONLINE_RACE_FOLDER = 'OnlineRaces'
 local checkpointAnomalyLogByKey = {}
+local lifecycleAnomalyLogByKey = {}
 local UGC_FETCH_RETRY_COOLDOWN_MS = 700
 local nextAllowedUGCFetchAt = 0
 local GTAO_CHECKPOINT_RADIUS_SCALE = 1.5
+local nextEntrantToken = 1
+local nextSnapshotVersion = 0
+local reliabilityCounters = {
+    rejectedJoinRunning = 0,
+    emptyInstanceAutoDestroyed = 0,
+    illegalLifecycleRequests = 0,
+}
 
 local function getExtraPrintLevel()
     local rawLevel = 0
@@ -65,6 +73,99 @@ local function shouldLogCheckpointAnomaly(source, instanceId)
     end
 
     checkpointAnomalyLogByKey[key] = now
+    return true
+end
+
+local function shouldLogLifecycleAnomaly(eventName, source, instanceId)
+    local key = ('%s:%s:%s'):format(tostring(eventName or 'unknown'), tonumber(source) or 0, tonumber(instanceId) or -1)
+    local now = GetGameTimer()
+    local lastLoggedAt = tonumber(lifecycleAnomalyLogByKey[key]) or -100000
+    if now - lastLoggedAt < 2000 then
+        return false
+    end
+
+    lifecycleAnomalyLogByKey[key] = now
+    return true
+end
+
+local function logLifecycleEvent(eventName, instance, entrant, source, oldState, newState, reason)
+    logLevelOne(("[lifecycle] event=%s instanceId=%s entrantId=%s source=%s from=%s to=%s reason=%s"):format(
+        tostring(eventName or 'unknown'),
+        tostring(type(instance) == 'table' and instance.id or 'nil'),
+        tostring(type(entrant) == 'table' and entrant.entrantId or 'nil'),
+        tostring(tonumber(source) or 0),
+        tostring(oldState or 'nil'),
+        tostring(newState or 'nil'),
+        tostring(reason or 'none')
+    ))
+end
+
+local function buildEntrantId(source)
+    local token = nextEntrantToken
+    nextEntrantToken = nextEntrantToken + 1
+    return ('%s-%s-%s'):format(
+        tostring(tonumber(source) or 0),
+        tostring(math.floor(tonumber(os.time()) or 0)),
+        tostring(token)
+    )
+end
+
+local function isLifecycleTransitionAllowed(fromState, toState)
+    if fromState == toState then
+        return true
+    end
+
+    local stateRules = {
+        [RacingSystem.States.idle] = {
+            [RacingSystem.States.staging] = true,
+            terminated = true,
+        },
+        [RacingSystem.States.staging] = {
+            [RacingSystem.States.running] = true,
+            [RacingSystem.States.idle] = true,
+            terminated = true,
+        },
+        [RacingSystem.States.running] = {
+            [RacingSystem.States.finished] = true,
+            [RacingSystem.States.idle] = true,
+            terminated = true,
+        },
+        [RacingSystem.States.finished] = {
+            [RacingSystem.States.staging] = true,
+            [RacingSystem.States.idle] = true,
+            terminated = true,
+        },
+    }
+
+    local allowedTargets = stateRules[fromState]
+    if type(allowedTargets) ~= 'table' then
+        return false
+    end
+
+    return allowedTargets[toState] == true
+end
+
+local function setRaceInstanceState(instance, nextState, eventName, source, entrant, reason)
+    if type(instance) ~= 'table' then
+        return false, 'Missing race instance.'
+    end
+
+    local currentState = tostring(instance.state or RacingSystem.States.idle)
+    local targetState = tostring(nextState or currentState)
+    if currentState == targetState then
+        return true
+    end
+
+    if not isLifecycleTransitionAllowed(currentState, targetState) then
+        reliabilityCounters.illegalLifecycleRequests = reliabilityCounters.illegalLifecycleRequests + 1
+        if shouldLogLifecycleAnomaly(eventName, source, instance.id) then
+            logLifecycleEvent(eventName, instance, entrant, source, currentState, targetState, reason or 'illegal_transition')
+        end
+        return false, ('Illegal lifecycle transition (%s -> %s).'):format(currentState, targetState)
+    end
+
+    instance.state = targetState
+    logLifecycleEvent(eventName, instance, entrant, source, currentState, targetState, reason or 'state_transition')
     return true
 end
 
@@ -321,11 +422,16 @@ local function cloneKnownRaceDefinition(definition)
     if sourceType ~= 'custom' and sourceType ~= 'online' then
         sourceType = 'custom'
     end
+    local raceId = RacingSystem.Trim(definition.raceId or ''):gsub('[^%w_-]', '')
+    if raceId == '' then
+        raceId = nil
+    end
 
     return {
         lookupName = normalizedName,
         name = displayName,
         sourceType = sourceType,
+        raceId = raceId,
         updatedAt = tonumber(definition.updatedAt) or os.time(),
     }
 end
@@ -395,7 +501,7 @@ local function loadRaceIndex()
     log(('Loaded %s definition(s) from %s.'):format(loadedCount, RACE_INDEX_FILE))
 end
 
-local function registerKnownRaceDefinition(raceName, sourceType)
+local function registerKnownRaceDefinition(raceName, sourceType, raceId)
     local displayName = RacingSystem.Trim(raceName)
     local normalizedName = RacingSystem.NormalizeRaceName(displayName)
     if not normalizedName then
@@ -406,11 +512,16 @@ local function registerKnownRaceDefinition(raceName, sourceType)
     if normalizedSourceType ~= 'custom' and normalizedSourceType ~= 'online' then
         normalizedSourceType = 'custom'
     end
+    local normalizedRaceId = RacingSystem.Trim(raceId or ''):gsub('[^%w_-]', '')
+    if normalizedRaceId == '' then
+        normalizedRaceId = nil
+    end
 
     knownRaceDefinitionsByName[normalizedName] = {
         lookupName = normalizedName,
         name = displayName,
         sourceType = normalizedSourceType,
+        raceId = normalizedRaceId,
         updatedAt = os.time(),
     }
 
@@ -487,6 +598,7 @@ local function cloneEntrant(entrant)
     end
 
     return {
+        entrantId = tostring(entrant.entrantId or ''),
         source = tonumber(entrant.source) or 0,
         name = entrant.name,
         joinedAt = tonumber(entrant.joinedAt) or 0,
@@ -522,10 +634,15 @@ local function getRaceStartCheckpoint(instance)
     return 1
 end
 
-local function getLapTriggerCheckpoint(totalCheckpoints, totalLaps)
+local function getLapTriggerCheckpoint(instance, totalCheckpoints, totalLaps)
     local checkpointCount = math.max(0, tonumber(totalCheckpoints) or 0)
     if checkpointCount <= 1 then
         return 1
+    end
+
+    local laps = math.max(1, tonumber(totalLaps) or 1)
+    if laps == 1 then
+        return getRaceStartCheckpoint(instance)
     end
 
     return checkpointCount
@@ -535,6 +652,7 @@ local function buildEntrant(source, instance)
     local numericSource = tonumber(source) or 0
 
     return {
+        entrantId = buildEntrantId(numericSource),
         source = numericSource,
         name = GetPlayerName(numericSource) or ('Player %s'):format(numericSource),
         joinedAt = os.time(),
@@ -576,6 +694,9 @@ local function buildOrderedEntrants(instance)
     local ordered = {}
 
     for _, entrant in ipairs(type(instance.entrants) == 'table' and instance.entrants or {}) do
+        if tostring(entrant.entrantId or '') == '' then
+            entrant.entrantId = buildEntrantId(tonumber(entrant.source) or 0)
+        end
         local clonedEntrant = cloneEntrant(entrant)
         if clonedEntrant then
             ordered[#ordered + 1] = clonedEntrant
@@ -642,6 +763,7 @@ local function buildRaceInstanceSnapshot(instance)
         definitionName = instance.definitionName,
         sourceType = instance.sourceType,
         sourceName = instance.sourceName,
+        trafficMode = tostring(instance.trafficMode or 'none'),
         laps = tonumber(instance.laps) or 1,
         owner = instance.owner,
         state = instance.state,
@@ -688,6 +810,7 @@ local function buildFullSnapshot(viewerSource)
     local ownerKillEnabled = true
 
     return {
+        snapshotVersion = tonumber(nextSnapshotVersion) or 0,
         races = {},
         definitions = definitions,
         instances = instances,
@@ -706,11 +829,16 @@ local function buildFullSnapshot(viewerSource)
 end
 
 local function sendSnapshot(target)
+    nextSnapshotVersion = nextSnapshotVersion + 1
     local snapshot = buildFullSnapshot(target)
-    log(('Sending snapshot to %s | definitions=%s instances=%s'):format(
+    log(('Sending snapshot to %s | version=%s definitions=%s instances=%s rejectedJoinRunning=%s emptyDestroyed=%s illegalLifecycle=%s'):format(
         tostring(target),
+        tostring(snapshot.snapshotVersion or 0),
         #(type(snapshot.definitions) == 'table' and snapshot.definitions or {}),
-        #(type(snapshot.instances) == 'table' and snapshot.instances or {})
+        #(type(snapshot.instances) == 'table' and snapshot.instances or {}),
+        tostring(reliabilityCounters.rejectedJoinRunning or 0),
+        tostring(reliabilityCounters.emptyInstanceAutoDestroyed or 0),
+        tostring(reliabilityCounters.illegalLifecycleRequests or 0)
     ))
     TriggerClientEvent('racingsystem:stateSnapshot', target, snapshot)
 end
@@ -825,28 +953,55 @@ end
 
 local function removeEntrantFromRaceInstance(instance, source)
     if type(instance) ~= 'table' then
-        return false
+        return nil
     end
 
     local numericSource = tonumber(source) or 0
 
     for index, entrant in ipairs(instance.entrants or {}) do
         if tonumber(entrant.source) == numericSource then
-            table.remove(instance.entrants, index)
-            return true
+            local removedEntrant = table.remove(instance.entrants, index)
+            return removedEntrant
         end
+    end
+
+    return nil
+end
+
+local function cleanupInstanceAfterEntrantRemoval(instance, source, removedEntrant, reason)
+    if type(instance) ~= 'table' then
+        return false
+    end
+
+    if #(instance.entrants or {}) <= 0 then
+        local previousState = instance.state
+        if isLifecycleTransitionAllowed(previousState, 'terminated') then
+            logLifecycleEvent('terminateRace', instance, removedEntrant, source, previousState, 'terminated', reason or 'empty_after_removal')
+        end
+        removeRaceInstanceNameIndex(instance)
+        raceInstancesById[instance.id] = nil
+        reliabilityCounters.emptyInstanceAutoDestroyed = reliabilityCounters.emptyInstanceAutoDestroyed + 1
+        return true
     end
 
     return false
 end
 
-local function removeEntrantFromAllRaceInstances(source)
+local function removeEntrantFromAllRaceInstances(source, reason)
     local removedAny = false
-
-    for _, instance in pairs(raceInstancesById) do
-        if removeEntrantFromRaceInstance(instance, source) then
-            removedAny = true
+    while true do
+        local instance = findRaceInstanceByEntrant(source)
+        if not instance then
+            break
         end
+
+        local removedEntrant = removeEntrantFromRaceInstance(instance, source)
+        if not removedEntrant then
+            break
+        end
+
+        removedAny = true
+        cleanupInstanceAfterEntrantRemoval(instance, source, removedEntrant, reason or 'source_removed')
     end
 
     return removedAny
@@ -1190,10 +1345,18 @@ local function syncKnownRaceDefinitionsFromFiles()
                 local existingDefinition = syncedDefinitionsByName[normalizedName]
                 local resolvedDisplayName = RacingSystem.Trim(parsedRaceName or fileName)
                 if sourceType == 'custom' or existingDefinition == nil then
+                    local normalizedRaceId = nil
+                    if sourceType == 'online' then
+                        normalizedRaceId = RacingSystem.Trim((parsedRace and parsedRace.ugcId) or fileName):gsub('[^%w_-]', '')
+                        if normalizedRaceId == '' then
+                            normalizedRaceId = nil
+                        end
+                    end
                     syncedDefinitionsByName[normalizedName] = {
                         lookupName = normalizedName,
                         name = resolvedDisplayName ~= '' and resolvedDisplayName or normalizedName,
                         sourceType = sourceType,
+                        raceId = normalizedRaceId,
                         updatedAt = os.time(),
                     }
                 end
@@ -1220,7 +1383,8 @@ local function syncKnownRaceDefinitionsFromFiles()
         local existingDefinition = knownRaceDefinitionsByName[normalizedName]
         if existingDefinition == nil
             or tostring(existingDefinition.sourceType) ~= tostring(definition.sourceType)
-            or RacingSystem.Trim(existingDefinition.name) ~= RacingSystem.Trim(definition.name) then
+            or RacingSystem.Trim(existingDefinition.name) ~= RacingSystem.Trim(definition.name)
+            or RacingSystem.Trim(existingDefinition.raceId or '') ~= RacingSystem.Trim(definition.raceId or '') then
             changed = true
             break
         end
@@ -1751,6 +1915,13 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
     if not normalizedRequestedName then
         return nil, ('A valid %s race name is required.'):format(label)
     end
+    logVerbose(("[resolve:%s] request='%s' normalized='%s' lookupKey='%s' folder='%s'"):format(
+        tostring(label),
+        tostring(raceName),
+        tostring(normalizedRequestedName),
+        tostring(normalizedRequestedLookupKey),
+        tostring(folderName)
+    ))
 
     local triedFileNames = {}
     local function tryLoadByFileName(fileName)
@@ -1759,12 +1930,22 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
             return nil
         end
         triedFileNames[normalizedFileToken] = true
+        logVerbose(("[resolve:%s] try file token '%s' (normalized '%s')"):format(
+            tostring(label),
+            tostring(fileName),
+            tostring(normalizedFileToken)
+        ))
 
         local filePath = folderName == CUSTOM_RACE_FOLDER
             and buildCustomRaceFilePath(fileName)
             or buildOnlineRaceFilePath(fileName)
         local rawMissionJson = LoadResourceFile(RESOURCE_NAME, filePath)
         if not rawMissionJson or rawMissionJson == '' then
+            logVerbose(("[resolve:%s] token '%s' not found at '%s'"):format(
+                tostring(label),
+                tostring(fileName),
+                tostring(filePath)
+            ))
             return nil
         end
 
@@ -1775,10 +1956,22 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
         )
         if not parsedRace then
             logLevelOne(parseError or ('Could not parse %s race "%s".'):format(label, fileName))
+            logVerbose(("[resolve:%s] token '%s' parse failed: %s"):format(
+                tostring(label),
+                tostring(fileName),
+                tostring(parseError or 'unknown parse error')
+            ))
             return nil
         end
 
         local parsedName = RacingSystem.Trim(parsedRace.name or '')
+        logVerbose(("[resolve:%s] token '%s' resolved name='%s' ugcId='%s' checkpoints=%s"):format(
+            tostring(label),
+            tostring(fileName),
+            tostring(parsedName ~= '' and parsedName or fileName),
+            tostring(parsedRace.ugcId or 'nil'),
+            tostring(#(parsedRace.checkpoints or {}))
+        ))
         return {
             name = parsedName ~= '' and parsedName or fileName,
             fileName = fileName,
@@ -1799,6 +1992,12 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
         or (requestedSlug and tryLoadByFileName(requestedSlug))
         or (requestedUGCId and tryLoadByFileName(requestedUGCId))
     if directMatch then
+        logVerbose(("[resolve:%s] direct token match success -> file='%s' name='%s' ugcId='%s'"):format(
+            tostring(label),
+            tostring(directMatch.fileName or 'unknown'),
+            tostring(directMatch.name or 'unknown'),
+            tostring(directMatch.ugcId or 'nil')
+        ))
         return directMatch
     end
 
@@ -1832,6 +2031,14 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
                     or normalizedRequestedName == normalizedFileName
                     or normalizedRequestedName == normalizedDerivedHumanName
                     or (normalizedUGCId and normalizedRequestedName == normalizedUGCId) then
+                    logVerbose(("[resolve:%s] scan name/file match request='%s' file='%s' parsed='%s' derived='%s' ugcId='%s'"):format(
+                        tostring(label),
+                        tostring(normalizedRequestedName),
+                        tostring(fileName),
+                        tostring(normalizedParsedName),
+                        tostring(normalizedDerivedHumanName),
+                        tostring(normalizedUGCId or 'nil')
+                    ))
                     return {
                         name = parsedName ~= '' and parsedName or fileName,
                         fileName = fileName,
@@ -1850,6 +2057,15 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
                     or normalizedRequestedLookupKey == derivedLookupKey
                     or (ugcLookupKey and normalizedRequestedLookupKey == ugcLookupKey)
                 ) then
+                    logVerbose(("[resolve:%s] scan lookupKey match request='%s' file='%s' parsedKey='%s' fileKey='%s' derivedKey='%s' ugcKey='%s'"):format(
+                        tostring(label),
+                        tostring(normalizedRequestedLookupKey),
+                        tostring(fileName),
+                        tostring(parsedLookupKey),
+                        tostring(fileLookupKey),
+                        tostring(derivedLookupKey),
+                        tostring(ugcLookupKey or 'nil')
+                    ))
                     return {
                         name = parsedName ~= '' and parsedName or fileName,
                         fileName = fileName,
@@ -1868,6 +2084,11 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
         ::continue::
     end
 
+    logVerbose(("[resolve:%s] no match for request='%s' in folder '%s'"):format(
+        tostring(label),
+        tostring(raceName),
+        tostring(folderName)
+    ))
     return nil, ('No %s race named "%s" was found.'):format(label, tostring(raceName))
 end
 
@@ -1888,7 +2109,7 @@ local function registerRaceDefinitionIfValid(raceName)
 
     local onlineRace = loadBundledOnlineRace(raceName)
     if onlineRace then
-        local definition = registerKnownRaceDefinition(onlineRace.name, 'online')
+        local definition = registerKnownRaceDefinition(onlineRace.name, 'online', onlineRace.ugcId or onlineRace.fileName)
         return definition, nil
     end
 
@@ -2023,8 +2244,86 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         end
     end
 
-    local customRace = loadCustomRace(raceName)
-    local onlineRace = loadBundledOnlineRace(raceName)
+    local invokeRequestName = raceName
+    local invokeLookupName = nil
+    local invokeSourceType = nil
+    local invokeRaceId = nil
+    local invokeTrafficMode = 'none'
+    if type(raceName) == 'table' then
+        local requestPayload = raceName
+        invokeRequestName = RacingSystem.Trim(requestPayload.name or requestPayload.lookupName or '')
+        invokeLookupName = RacingSystem.NormalizeRaceName(requestPayload.lookupName)
+        invokeRaceId = RacingSystem.Trim(requestPayload.raceId or ''):gsub('[^%w_-]', '')
+        if invokeRaceId == '' then
+            invokeRaceId = nil
+        end
+        local normalizedSourceType = tostring(requestPayload.sourceType or ''):lower()
+        if normalizedSourceType == 'custom' or normalizedSourceType == 'online' then
+            invokeSourceType = normalizedSourceType
+        end
+        local normalizedTrafficMode = tostring(requestPayload.trafficMode or 'none'):lower()
+        if normalizedTrafficMode == 'low' or normalizedTrafficMode == 'high' or normalizedTrafficMode == 'full' then
+            invokeTrafficMode = normalizedTrafficMode
+        end
+    end
+    logVerbose(("[invoke] owner=%s rawType=%s request='%s' lookup='%s' sourceType='%s' raceId='%s' laps=%s traffic=%s"):format(
+        tostring(ownerSource),
+        tostring(type(raceName)),
+        tostring(invokeRequestName),
+        tostring(invokeLookupName),
+        tostring(invokeSourceType or 'nil'),
+        tostring(invokeRaceId or 'nil'),
+        tostring(lapCount),
+        tostring(invokeTrafficMode)
+    ))
+
+    if RacingSystem.Trim(invokeRequestName) == '' then
+        return nil, 'That saved race does not exist.'
+    end
+
+    local customRace = nil
+    local onlineRace = nil
+    if invokeSourceType == 'online' then
+        if invokeRaceId then
+            onlineRace = loadBundledOnlineRace(invokeRaceId)
+        end
+        if not onlineRace then
+            onlineRace = loadBundledOnlineRace(invokeRequestName)
+        end
+        if not onlineRace and invokeLookupName then
+            onlineRace = loadBundledOnlineRace(invokeLookupName)
+        end
+        if not onlineRace then
+            customRace = loadCustomRace(invokeRequestName)
+        end
+    elseif invokeSourceType == 'custom' then
+        customRace = loadCustomRace(invokeRequestName)
+        if not customRace and invokeLookupName then
+            customRace = loadCustomRace(invokeLookupName)
+        end
+        if not customRace then
+            if invokeRaceId then
+                onlineRace = loadBundledOnlineRace(invokeRaceId)
+            end
+            if not onlineRace then
+                onlineRace = loadBundledOnlineRace(invokeRequestName)
+            end
+        end
+    else
+        customRace = loadCustomRace(invokeRequestName)
+        if invokeRaceId then
+            onlineRace = loadBundledOnlineRace(invokeRaceId)
+        end
+        if not onlineRace then
+            onlineRace = loadBundledOnlineRace(invokeRequestName)
+        end
+    end
+    logVerbose(("[invoke] resolution result custom=%s online=%s (request='%s', raceId='%s')"):format(
+        tostring(customRace ~= nil),
+        tostring(onlineRace ~= nil),
+        tostring(invokeRequestName),
+        tostring(invokeRaceId or 'nil')
+    ))
     local instanceName
     local definitionId = nil
     local definitionName = nil
@@ -2056,7 +2355,7 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         raceMetadata = cloneMissionValue(onlineRace.raceMetadata)
         sourceType = 'online'
         sourceName = onlineRace.name
-        registerKnownRaceDefinition(onlineRace.name, 'online')
+        registerKnownRaceDefinition(onlineRace.name, 'online', onlineRace.ugcId or onlineRace.fileName)
     else
         return nil, 'That saved race does not exist.'
     end
@@ -2075,6 +2374,7 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         definitionName = definitionName,
         sourceType = sourceType,
         sourceName = sourceName,
+        trafficMode = invokeTrafficMode,
         laps = laps,
         owner = tonumber(ownerSource) or 0,
         state = RacingSystem.States.idle,
@@ -2107,6 +2407,10 @@ local function killRaceInstanceByName(instanceName)
         return nil, 'That race instance does not exist.'
     end
 
+    local previousState = instance.state
+    if isLifecycleTransitionAllowed(previousState, 'terminated') then
+        logLifecycleEvent('killRace', instance, nil, 0, previousState, 'terminated', 'killed_by_command')
+    end
     removeRaceInstanceNameIndex(instance)
     raceInstancesById[instance.id] = nil
     return instance
@@ -2122,13 +2426,29 @@ local function joinRaceInstanceByName(source, instanceName)
         return nil, 'That race instance has no checkpoints.'
     end
 
+    if instance.state == RacingSystem.States.running then
+        reliabilityCounters.rejectedJoinRunning = reliabilityCounters.rejectedJoinRunning + 1
+        if shouldLogLifecycleAnomaly('joinRace', source, instance.id) then
+            logLifecycleEvent('joinRace', instance, nil, source, instance.state, instance.state, 'late_join_rejected_running')
+        end
+        return nil, 'Cannot join a race that is already running.'
+    end
+
+    if instance.state ~= RacingSystem.States.idle and instance.state ~= RacingSystem.States.staging then
+        if shouldLogLifecycleAnomaly('joinRace', source, instance.id) then
+            logLifecycleEvent('joinRace', instance, nil, source, instance.state, instance.state, 'join_rejected_invalid_state')
+        end
+        return nil, 'That race cannot be joined right now.'
+    end
+
     local existingInstance = findRaceInstanceByEntrant(source)
     if existingInstance and existingInstance.id == instance.id then
         return instance, nil
     end
 
     if existingInstance then
-        removeEntrantFromRaceInstance(existingInstance, source)
+        local removedEntrant = removeEntrantFromRaceInstance(existingInstance, source)
+        cleanupInstanceAfterEntrantRemoval(existingInstance, source, removedEntrant, 'join_transfer')
     end
 
     instance.entrants = instance.entrants or {}
@@ -2142,14 +2462,8 @@ local function leaveCurrentRaceInstance(source)
         return nil, 'You are not currently joined to a race instance.'
     end
 
-    removeEntrantFromRaceInstance(instance, source)
-
-    if #(instance.entrants or {}) == 0 and instance.state ~= RacingSystem.States.idle then
-        instance.state = RacingSystem.States.idle
-        instance.startAt = nil
-        instance.startedAt = nil
-        instance.finishedAt = nil
-    end
+    local removedEntrant = removeEntrantFromRaceInstance(instance, source)
+    cleanupInstanceAfterEntrantRemoval(instance, source, removedEntrant, 'leave_race')
 
     return instance, nil
 end
@@ -2160,7 +2474,13 @@ local function startRaceInstanceForSource(source)
         return nil, 'You are not currently joined to a race instance.'
     end
 
+    local now = GetGameTimer()
     if instance.state == RacingSystem.States.staging then
+        local lastStartRequestedAt = tonumber(instance.lastStartRequestedAt) or 0
+        local lastStartRequestedBy = tonumber(instance.lastStartRequestedBy) or 0
+        if lastStartRequestedBy == tonumber(source) and now - lastStartRequestedAt <= 1000 then
+            return instance, nil
+        end
         return nil, 'That race is already counting down.'
     end
 
@@ -2168,12 +2488,31 @@ local function startRaceInstanceForSource(source)
         return nil, 'That race is already running.'
     end
 
+    if instance.state ~= RacingSystem.States.idle and instance.state ~= RacingSystem.States.finished then
+        if shouldLogLifecycleAnomaly('startRace', source, instance.id) then
+            logLifecycleEvent('startRace', instance, nil, source, instance.state, instance.state, 'start_rejected_invalid_state')
+        end
+        return nil, 'That race cannot be started right now.'
+    end
+
     if #(instance.entrants or {}) == 0 then
         return nil, 'No racers are joined to that instance.'
     end
 
     resetRaceInstanceProgress(instance)
-    instance.state = RacingSystem.States.staging
+    local transitionOk, transitionError = setRaceInstanceState(
+        instance,
+        RacingSystem.States.staging,
+        'startRace',
+        source,
+        nil,
+        'countdown_started'
+    )
+    if not transitionOk then
+        return nil, transitionError
+    end
+    instance.lastStartRequestedAt = now
+    instance.lastStartRequestedBy = tonumber(source) or 0
     instance.finishedAt = nil
     local countdownMs = tonumber(RacingSystem.Config.countdownMs) or 5000
     instance.startAt = GetGameTimer() + countdownMs
@@ -2201,8 +2540,25 @@ local function finishRaceInstanceForSource(source)
         return nil, 'That race is already finished.'
     end
 
+    if instance.state ~= RacingSystem.States.running and instance.state ~= RacingSystem.States.staging then
+        if shouldLogLifecycleAnomaly('finishRace', source, instance.id) then
+            logLifecycleEvent('finishRace', instance, nil, source, instance.state, instance.state, 'finish_rejected_invalid_state')
+        end
+        return nil, 'That race is not running.'
+    end
+
     local now = GetGameTimer()
-    instance.state = RacingSystem.States.finished
+    local transitionOk, transitionError = setRaceInstanceState(
+        instance,
+        RacingSystem.States.finished,
+        'finishRace',
+        source,
+        nil,
+        'manual_finish'
+    )
+    if not transitionOk then
+        return nil, transitionError
+    end
     instance.finishedAt = now
     instance.startAt = nil
 
@@ -2219,6 +2575,7 @@ local function broadcastLapCompleted(instance, entrant, lapNumber, lapTimeMs, to
         if entrantSource > 0 then
             TriggerClientEvent('racingsystem:lapCompleted', entrantSource, {
                 instanceId = instance.id,
+                entrantId = tostring(entrant.entrantId or ''),
                 playerSource = tonumber(entrant.source) or 0,
                 playerName = tostring(entrant.name or ('Player %s'):format(tostring(entrant.source or '?'))),
                 lapNumber = tonumber(lapNumber) or 1,
@@ -2290,7 +2647,7 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
 
     local totalLaps = math.max(1, tonumber(instance.laps) or 1)
     local currentLap = math.max(1, tonumber(entrant.currentLap) or 1)
-    local lapTriggerCheckpoint = getLapTriggerCheckpoint(totalCheckpoints, totalLaps)
+    local lapTriggerCheckpoint = getLapTriggerCheckpoint(instance, totalCheckpoints, totalLaps)
     if reportedCheckpoint == lapTriggerCheckpoint then
         local currentLapTimeMs = tonumber(type(lapTimingPayload) == 'table' and lapTimingPayload.lapTimeMs) or nil
         local currentTotalTimeMs = tonumber(type(lapTimingPayload) == 'table' and lapTimingPayload.totalTimeMs) or nil
@@ -2363,9 +2720,22 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
     end
 
     if allFinished then
-        instance.state = RacingSystem.States.finished
-        instance.finishedAt = now
-        instance.startAt = nil
+        local transitionOk = setRaceInstanceState(
+            instance,
+            RacingSystem.States.finished,
+            'autoFinishRace',
+            source,
+            entrant,
+            'all_entrants_finished'
+        )
+        if transitionOk then
+            instance.finishedAt = now
+            instance.startAt = nil
+        else
+            if shouldLogLifecycleAnomaly('autoFinishRace', source, instance.id) then
+                logLifecycleEvent('autoFinishRace', instance, entrant, source, instance.state, RacingSystem.States.finished, 'failed_transition')
+            end
+        end
     end
 
     logCheckpointPassContext(instance, entrant, reportedCheckpoint, totalCheckpoints, currentLap, totalLaps, passContext)
@@ -2390,7 +2760,11 @@ RegisterNetEvent('racingsystem:requestEditorRace', function(raceName)
     end
 
     if definition then
-        registerKnownRaceDefinition(definition.name, customDefinition and 'custom' or 'online')
+        registerKnownRaceDefinition(
+            definition.name,
+            customDefinition and 'custom' or 'online',
+            customDefinition and nil or (definition.ugcId or definition.fileName)
+        )
         broadcastSnapshot()
     end
 
@@ -2483,7 +2857,7 @@ RegisterNetEvent('racingsystem:validateGTAORaceUGCId', function(ugcId)
         return
     end
 
-    registerKnownRaceDefinition(importedRace.raceName, 'online')
+    registerKnownRaceDefinition(importedRace.raceName, 'online', importedRace.ugcId)
 
     local hostedInstance, hostError = invokeRaceInstance(src, importedRace.raceName, 1)
     if not hostedInstance and importedRace.ugcId then
@@ -2556,6 +2930,22 @@ end)
 
 RegisterNetEvent('racingsystem:invokeRace', function(raceName, lapCount)
     local src = source
+    if type(raceName) == 'table' then
+        logVerbose(("[invoke:event] %s payload name='%s' lookupName='%s' sourceType='%s' raceId='%s' laps=%s"):format(
+            resolvePlayerLogLabel(src),
+            tostring(raceName.name or ''),
+            tostring(raceName.lookupName or ''),
+            tostring(raceName.sourceType or ''),
+            tostring(raceName.raceId or ''),
+            tostring(lapCount)
+        ))
+    else
+        logVerbose(("[invoke:event] %s payload scalar raceName='%s' laps=%s"):format(
+            resolvePlayerLogLabel(src),
+            tostring(raceName),
+            tostring(lapCount)
+        ))
+    end
     local instance, invokeError = invokeRaceInstance(src, raceName, lapCount)
 
     if not instance then
@@ -2732,7 +3122,7 @@ RegisterNetEvent('racingsystem:killRace', function(raceName)
 end)
 
 AddEventHandler('playerDropped', function()
-    if removeEntrantFromAllRaceInstances(source) then
+    if removeEntrantFromAllRaceInstances(source, 'player_dropped') then
         auditLog("playerDroppedRaceCleanup", source, "disconnected and was removed from one or more active race instances")
         broadcastSnapshot()
     end
@@ -2752,18 +3142,37 @@ CreateThread(function()
 
         for _, instance in pairs(raceInstancesById) do
             if instance.state == RacingSystem.States.staging and tonumber(instance.startAt) and now >= tonumber(instance.startAt) then
-                instance.state = RacingSystem.States.running
-                instance.startedAt = now
-                instance.startAt = nil
-                for _, entrant in ipairs(instance.entrants or {}) do
-                    entrant.lapStartedAt = now
+                local transitionOk = setRaceInstanceState(
+                    instance,
+                    RacingSystem.States.running,
+                    'countdownElapsed',
+                    0,
+                    nil,
+                    'countdown_elapsed'
+                )
+                if transitionOk then
+                    instance.startedAt = now
+                    instance.startAt = nil
+                    for _, entrant in ipairs(instance.entrants or {}) do
+                        entrant.lapStartedAt = now
+                    end
+                    logVerbose(("Race '%s' (instance %s) moved from staging to running with %s entrants."):format(
+                        tostring(instance.name or 'unknown'),
+                        tostring(instance.id),
+                        tostring(#(instance.entrants or {}))
+                    ))
+                    changedAnyState = true
+                elseif shouldLogLifecycleAnomaly('countdownElapsed', 0, instance.id) then
+                    logLifecycleEvent(
+                        'countdownElapsed',
+                        instance,
+                        nil,
+                        0,
+                        instance.state,
+                        RacingSystem.States.running,
+                        'transition_rejected'
+                    )
                 end
-                logVerbose(("Race '%s' (instance %s) moved from staging to running with %s entrants."):format(
-                    tostring(instance.name or 'unknown'),
-                    tostring(instance.id),
-                    tostring(#(instance.entrants or {}))
-                ))
-                changedAnyState = true
             end
         end
 

@@ -1,10 +1,5 @@
 CustomPhysicsWheelies = CustomPhysicsWheelies or {}
 
-local Handling = {
-    class = 'CHandlingData',
-    driveBiasFrontField = 'fDriveBiasFront',
-}
-
 local WheelieStage = {
     off = 0,
     prepared = 1,
@@ -243,7 +238,7 @@ function CustomPhysicsWheelies.update(vehicle)
     local pitchRate = -math.deg(GetEntityRotationVelocity(vehicle).y)
     local wheelPower = getClampedDrivenWheelPower(wheelSnapshot)
     local wheelPowerNorm = CustomPhysicsUtil.clamp(wheelPower / 0.9, 0.0, 1.0)
-    local driveBiasFront = GetVehicleHandlingFloat(vehicle, Handling.class, Handling.driveBiasFrontField)
+    local driveBiasFront = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fDriveBiasFront')
     local rearBiasMultiplier = CustomPhysicsUtil.clamp(1.0 - driveBiasFront, 0.0, 1.0)
     local targetPitchDeg = wheelPowerNorm * 40.0
     local proportionalGain = 0.5

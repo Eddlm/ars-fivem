@@ -7,7 +7,7 @@ game 'gta5'
 
 author 'Eddlm'
 description 'Client-side drivetrain and slide physics helpers'
-version '0.0.1'
+version '0.0.2'
 
 lua54 'yes'
 

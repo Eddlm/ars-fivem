@@ -45,10 +45,6 @@ local Suspension = {
     speedGuardEndMultiplier = 0.2,
 }
 
-local RevLimiter = {
-    accelDisableDurationMs = 10,
-}
-
 local Overspeed = {
     minimumPowerMultiplier = 0.5,
     fallRatePerSecond = 0.2,
@@ -482,7 +478,7 @@ local function updateRpmLimiter(vehicle, now)
     local validGear = currentGear >= 1 and (highGear <= 1 or currentGear < highGear)
 
     if moving and validGear and currentRpm >= 1.0 then
-        state.accelDisabledAt = now + RevLimiter.accelDisableDurationMs
+        state.accelDisabledAt = now + 10
     end
 
     if now < state.accelDisabledAt then

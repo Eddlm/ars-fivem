@@ -1,9 +1,7 @@
 -- Exposes the remaining client-side orchestration glue after module extraction.
 local Definitions = PerformanceTuning.Definitions or {}
-local StateBagKeys = Definitions.stateBagKeys
 local HandlingFields = Definitions.handlingFields
 local RuntimeConfig = PerformanceTuning.RuntimeConfig or Definitions.runtimeConfig
-local TIRE_COMPOUND_PACKS = (((PerformanceTuning.Config or {}).packDefinitions) or {}).tires
 
 local RuntimeState = {
     originalHandlingByVehicle = {},
@@ -22,8 +20,7 @@ local RuntimeState = {
     localTuneAuthoredUntilByNetId = {},
     steeringLockOverrideAppliedByVehicleKey = {},
 }
-local ensureTuningState
-local syncVehicleHandlingState
+local ensureTuningState, syncVehicleHandlingState, buildPerformanceIndex
 
 local function trim(value)
     return (tostring(value or ''):match('^%s*(.-)%s*$'))
@@ -36,8 +33,6 @@ end
 local function isFiniteNumber(value)
     return type(value) == 'number' and value == value and value ~= math.huge and value ~= -math.huge
 end
-
-local buildPerformanceIndex
 
 local function resetPerformanceIndexDisplayState()
     return PerformanceTuning.PerformancePanel.resetDisplayState()
@@ -371,7 +366,8 @@ local function buildNativeListState(context)
     end
 
     if context == 'tires' and bucket and bucket.tireCompoundPack and bucket.tireCompoundPack ~= 'stock' then
-        for _, pack in ipairs(TIRE_COMPOUND_PACKS) do
+        local tireCompoundPacks = ((((PerformanceTuning.Config or {}).packDefinitions) or {}).tires) or {}
+        for _, pack in ipairs(tireCompoundPacks) do
             if pack.id == bucket.tireCompoundPack then
                 local baseTireMax = bucket.baseTires and bucket.baseTires[HandlingFields.tires.max]
                 if isUnavailableTirePack(pack, baseTireMax) then
@@ -413,7 +409,7 @@ local function applyCurrentVehicleStateBagTuningForMenu()
         return false
     end
 
-    local state = Entity(vehicle).state[StateBagKeys.tune]
+    local state = Entity(vehicle).state[(Definitions.stateBagKeys or {}).tune]
     if type(state) ~= 'table' then
         return true
     end

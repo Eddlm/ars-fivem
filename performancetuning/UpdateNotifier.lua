@@ -1,5 +1,4 @@
 local RESOURCE_NAME = GetCurrentResourceName()
-local DEBUG_CONVAR = 'pTuningExtraPrints'
 
 local function trim(value)
     local text = tostring(value or '')
@@ -25,10 +24,11 @@ local function getCheckerConfig()
 end
 
 local function shouldLogUpdateCheck()
+    local debugConvar = 'pTuningExtraPrints'
     if type(GetConvarInt) == 'function' then
-        return math.floor(tonumber(GetConvarInt(DEBUG_CONVAR, 0)) or 0) == 2
+        return math.floor(tonumber(GetConvarInt(debugConvar, 0)) or 0) == 2
     end
-    local raw = type(GetConvar) == 'function' and GetConvar(DEBUG_CONVAR, '0') or '0'
+    local raw = type(GetConvar) == 'function' and GetConvar(debugConvar, '0') or '0'
     return math.floor(tonumber(raw) or 0) == 2
 end
 

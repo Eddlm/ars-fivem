@@ -4,3 +4,5 @@
 .DS_Store
 Thumbs.db
 vehiclemanager/savedvehicles/*.json
+AGENTS.md
+**/AGENTS.md

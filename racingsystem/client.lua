@@ -1630,8 +1630,8 @@ clearPredictedRaceProgress = function(instanceId)
     end
 
     if instanceId == nil or tonumber(predicted.instanceId) == tonumber(instanceId) then
-        raceRuntimeState.predictedProgress = nil
-    end
+    raceRuntimeState.predictedProgress = nil
+end
 end
 
 local function getEffectiveEntrantProgress(instance, entrant)
@@ -2313,9 +2313,13 @@ local function refreshRaceMenu()
     raceMyRaceMenuItem:Description('Host a race and control your current race actions.')
     raceMyRaceMenuItem:Enabled(true)
 
-    raceImportGTAOItem:Enabled(true)
+    raceImportGTAOItem:Enabled(canHostInCurrentMode)
     raceImportGTAOItem:RightLabel('URL')
-    raceImportGTAOItem:Description('Paste a GTAO race URL to import it via loader and auto-host it as a 1-lap online race.')
+    if canHostInCurrentMode then
+        raceImportGTAOItem:Description('Paste a GTAO race URL to import it via loader and auto-host it as a 1-lap online race.')
+    else
+        raceImportGTAOItem:Description(menuMode == 'in_race' and 'Leave your current race before importing a GTAO race URL.' or 'Exit editor mode before importing a GTAO race URL.')
+    end
 
     local editorAllowed = menuMode ~= 'in_race'
     raceEditorMenuItem:Enabled(editorAllowed)
@@ -2400,6 +2404,7 @@ local function initializeRaceMenu()
     raceHostRaceMenu:AddItem(raceInvokeLapItem)
     raceHostRaceMenu:AddItem(raceInvokeTrafficItem)
     raceHostRaceMenu:AddItem(raceInvokePiItem)
+    raceHostRaceMenu:AddItem(raceImportGTAOItem)
     raceHostRaceMenu:AddItem(raceInvokeActionItem)
 
     raceJoinMenu:AddItem(raceBrowseStatusItem)
@@ -2577,6 +2582,11 @@ local function initializeRaceMenu()
     end
 
     raceHostRaceMenu.OnItemSelect = function(_, item, index)
+        if item == raceImportGTAOItem then
+            openGTAORaceUrlPrompt()
+            return
+        end
+
         if item ~= raceInvokeActionItem then
             return
         end
