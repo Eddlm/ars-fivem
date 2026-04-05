@@ -788,11 +788,6 @@ local function canJoinMidRace(instance)
         return false, 'Race is not currently running.'
     end
 
-    local lastPlaceEntrant = getLastPlaceEntrant(instance)
-    if not lastPlaceEntrant then
-        return false, 'Cannot join: need at least one active racer to inherit progress from.'
-    end
-
     local leaderProgress = getLeaderProgress(instance)
     local totalDistance = calculateTotalRaceDistance(instance)
     if totalDistance <= 0 then
@@ -806,12 +801,11 @@ local function canJoinMidRace(instance)
     end
     local progressThreshold = totalDistance * (limitPercent / 100)
 
-    if leaderProgress >= progressThreshold then
+    if leaderProgress <= progressThreshold then
         return true, nil
     else
         local percentComplete = (leaderProgress / totalDistance) * 100
-        local neededPercent = limitPercent
-        return false, ('Race is only %.1f%% complete. Leader must reach %.1f%% to allow mid-race joins.'):format(percentComplete, neededPercent)
+        return false, ('Cannot join: leader has passed the %.1f%% late-join cutoff (currently at %.1f%%).'):format(limitPercent, percentComplete)
     end
 end
 

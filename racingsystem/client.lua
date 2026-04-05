@@ -2107,7 +2107,7 @@ local function refreshRaceMenu()
     end
     if raceInvokeLateJoinItem then
         raceInvokeLateJoinItem:Enabled(true)
-        raceInvokeLateJoinItem:Description('Allow players to join the race after it starts if the leader has reached this progress threshold.')
+        raceInvokeLateJoinItem:Description('Players can join mid-race until the leader reaches this progress threshold.')
     end
 
     if raceMenuPendingSelectName then
