@@ -749,6 +749,88 @@ local function buildOrderedEntrants(instance)
     return ordered
 end
 
+local function getLeaderProgress(instance)
+    if type(instance) ~= 'table' then
+        return 0
+    end
+    local ordered = buildOrderedEntrants(instance)
+    if #ordered == 0 then
+        return 0
+    end
+    return tonumber(ordered[1].checkpointsPassed) or 0
+end
+
+local function getLastPlaceEntrant(instance)
+    if type(instance) ~= 'table' then
+        return nil
+    end
+    local ordered = buildOrderedEntrants(instance)
+    if #ordered <= 1 then
+        return nil
+    end
+    return ordered[#ordered]
+end
+
+local function calculateTotalRaceDistance(instance)
+    if type(instance) ~= 'table' then
+        return 0
+    end
+    local checkpointCount = math.max(0, #(instance.checkpoints or {}))
+    local lapCount = math.max(1, tonumber(instance.laps) or 3)
+    return checkpointCount * lapCount
+end
+
+local function canJoinMidRace(instance)
+    if type(instance) ~= 'table' then
+        return false, 'Invalid race instance.'
+    end
+    if instance.state ~= RacingSystem.States.running then
+        return false, 'Race is not currently running.'
+    end
+
+    local lastPlaceEntrant = getLastPlaceEntrant(instance)
+    if not lastPlaceEntrant then
+        return false, 'Cannot join: need at least one active racer to inherit progress from.'
+    end
+
+    local leaderProgress = getLeaderProgress(instance)
+    local totalDistance = calculateTotalRaceDistance(instance)
+    if totalDistance <= 0 then
+        return false, 'Race has no checkpoints.'
+    end
+
+    -- Use instance-specific late join limit if set, otherwise fall back to global config
+    local limitPercent = tonumber(instance.lateJoinProgressLimitPercent)
+    if not limitPercent or limitPercent < 0 or limitPercent > 100 then
+        limitPercent = math.max(0, math.min(100, tonumber(RacingSystem.Config.lateJoinProgressLimitPercent) or 50))
+    end
+    local progressThreshold = totalDistance * (limitPercent / 100)
+
+    if leaderProgress >= progressThreshold then
+        return true, nil
+    else
+        local percentComplete = (leaderProgress / totalDistance) * 100
+        local neededPercent = limitPercent
+        return false, ('Race is only %.1f%% complete. Leader must reach %.1f%% to allow mid-race joins.'):format(percentComplete, neededPercent)
+    end
+end
+
+local function inheritLastPlaceProgress(newEntrant, lastPlaceEntrant)
+    if type(newEntrant) ~= 'table' or type(lastPlaceEntrant) ~= 'table' then
+        return newEntrant
+    end
+
+    newEntrant.currentCheckpoint = tonumber(lastPlaceEntrant.currentCheckpoint) or 1
+    newEntrant.currentLap = tonumber(lastPlaceEntrant.currentLap) or 1
+    newEntrant.checkpointsPassed = tonumber(lastPlaceEntrant.checkpointsPassed) or 0
+    newEntrant.lapStartedAt = tonumber(lastPlaceEntrant.lapStartedAt) or 0
+    newEntrant.lastCheckpointAt = GetGameTimer()
+    newEntrant.lapTimes = cloneNumberArray(lastPlaceEntrant.lapTimes)
+
+    return newEntrant
+end
+
+
 local function buildRaceInstanceSnapshot(instance)
     if type(instance) ~= 'table' then
         return nil
@@ -907,6 +989,42 @@ local function sendTeleportToLastCheckpoint(target, instance)
         x = tonumber(lastCheckpoint.x) or 0.0,
         y = tonumber(lastCheckpoint.y) or 0.0,
         z = (tonumber(lastCheckpoint.z) or 0.0) + 1.0,
+        heading = heading,
+    })
+end
+
+local function sendTeleportToCheckpoint(target, instance, checkpointIndex)
+    if tonumber(target) == nil or tonumber(target) <= 0 or type(instance) ~= 'table' then
+        return
+    end
+
+    local checkpoints = type(instance.checkpoints) == 'table' and instance.checkpoints or {}
+    local checkpointIdx = math.max(1, math.min(#checkpoints, math.floor(tonumber(checkpointIndex) or 1)))
+    local checkpoint = checkpoints[checkpointIdx]
+    if type(checkpoint) ~= 'table' then
+        return
+    end
+
+    local heading = 0.0
+    local nextCheckpointIdx = checkpointIdx + 1
+    if nextCheckpointIdx > #checkpoints then
+        nextCheckpointIdx = 1
+    end
+    local nextCheckpoint = checkpoints[nextCheckpointIdx]
+    if type(nextCheckpoint) == 'table' and nextCheckpoint ~= checkpoint then
+        local deltaX = (tonumber(nextCheckpoint.x) or 0.0) - (tonumber(checkpoint.x) or 0.0)
+        local deltaY = (tonumber(nextCheckpoint.y) or 0.0) - (tonumber(checkpoint.y) or 0.0)
+        heading = math.deg(math.atan(deltaY, deltaX)) - 90.0
+        if heading < 0.0 then
+            heading = heading + 360.0
+        end
+    end
+
+    TriggerClientEvent('racingsystem:teleportToCheckpoint', target, {
+        instanceId = instance.id,
+        x = tonumber(checkpoint.x) or 0.0,
+        y = tonumber(checkpoint.y) or 0.0,
+        z = (tonumber(checkpoint.z) or 0.0) + 1.0,
         heading = heading,
     })
 end
@@ -2249,6 +2367,7 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
     local invokeSourceType = nil
     local invokeRaceId = nil
     local invokeTrafficMode = 'none'
+    local invokeLateJoinPercent = nil
     if type(raceName) == 'table' then
         local requestPayload = raceName
         invokeRequestName = RacingSystem.Trim(requestPayload.name or requestPayload.lookupName or '')
@@ -2264,6 +2383,10 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         local normalizedTrafficMode = tostring(requestPayload.trafficMode or 'none'):lower()
         if normalizedTrafficMode == 'low' or normalizedTrafficMode == 'high' or normalizedTrafficMode == 'full' then
             invokeTrafficMode = normalizedTrafficMode
+        end
+        local lateJoinPercent = tonumber(requestPayload.lateJoinProgressLimitPercent)
+        if lateJoinPercent and lateJoinPercent >= 0 and lateJoinPercent <= 100 then
+            invokeLateJoinPercent = lateJoinPercent
         end
     end
     logVerbose(("[invoke] owner=%s rawType=%s request='%s' lookup='%s' sourceType='%s' raceId='%s' laps=%s traffic=%s"):format(
@@ -2375,6 +2498,7 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         sourceType = sourceType,
         sourceName = sourceName,
         trafficMode = invokeTrafficMode,
+        lateJoinProgressLimitPercent = invokeLateJoinPercent,
         laps = laps,
         owner = tonumber(ownerSource) or 0,
         state = RacingSystem.States.idle,
@@ -2427,14 +2551,16 @@ local function joinRaceInstanceByName(source, instanceName)
     end
 
     if instance.state == RacingSystem.States.running then
-        reliabilityCounters.rejectedJoinRunning = reliabilityCounters.rejectedJoinRunning + 1
-        if shouldLogLifecycleAnomaly('joinRace', source, instance.id) then
-            logLifecycleEvent('joinRace', instance, nil, source, instance.state, instance.state, 'late_join_rejected_running')
+        local canJoin, joinError = canJoinMidRace(instance)
+        if not canJoin then
+            reliabilityCounters.rejectedJoinRunning = reliabilityCounters.rejectedJoinRunning + 1
+            if shouldLogLifecycleAnomaly('joinRace', source, instance.id) then
+                logLifecycleEvent('joinRace', instance, nil, source, instance.state, instance.state, 'late_join_rejected_running')
+            end
+            return nil, joinError or 'Cannot join a race that is already running.'
         end
-        return nil, 'Cannot join a race that is already running.'
-    end
-
-    if instance.state ~= RacingSystem.States.idle and instance.state ~= RacingSystem.States.staging then
+        -- Mid-race join is allowed, continue to join flow below
+    elseif instance.state ~= RacingSystem.States.idle and instance.state ~= RacingSystem.States.staging then
         if shouldLogLifecycleAnomaly('joinRace', source, instance.id) then
             logLifecycleEvent('joinRace', instance, nil, source, instance.state, instance.state, 'join_rejected_invalid_state')
         end
@@ -2452,7 +2578,17 @@ local function joinRaceInstanceByName(source, instanceName)
     end
 
     instance.entrants = instance.entrants or {}
-    instance.entrants[#instance.entrants + 1] = buildEntrant(source, instance)
+    local newEntrant = buildEntrant(source, instance)
+
+    -- Handle mid-race join: inherit last-place racer's progress
+    if instance.state == RacingSystem.States.running then
+        local lastPlaceEntrant = getLastPlaceEntrant(instance)
+        if lastPlaceEntrant then
+            newEntrant = inheritLastPlaceProgress(newEntrant, lastPlaceEntrant)
+        end
+    end
+
+    instance.entrants[#instance.entrants + 1] = newEntrant
     return instance, nil
 end
 
@@ -2990,7 +3126,16 @@ RegisterNetEvent('racingsystem:joinRace', function(raceName)
     ))
     broadcastSnapshot()
     sendInstanceAssets(src, instance)
-    sendTeleportToLastCheckpoint(src, instance)
+
+    -- For mid-race joins, teleport to the current checkpoint; otherwise use default start teleport
+    if instance.state == RacingSystem.States.running then
+        local joiningEntrant = instance.entrants[#instance.entrants]
+        if joiningEntrant then
+            sendTeleportToCheckpoint(src, instance, joiningEntrant.currentCheckpoint)
+        end
+    else
+        sendTeleportToLastCheckpoint(src, instance)
+    end
 end)
 
 RegisterNetEvent('racingsystem:startRace', function()

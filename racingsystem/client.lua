@@ -155,6 +155,7 @@ local raceInvokeDefinitionItem
 local raceInvokeLapItem
 local raceInvokeTrafficItem
 local raceInvokePiItem
+local raceInvokeLateJoinItem
 local raceInvokeActionItem
 local raceJoinAvailableListItem
 local raceJoinActionItem
@@ -174,6 +175,7 @@ local raceMenuEndOptions = {}
 local raceMenuLapOptions = {}
 local raceMenuTrafficOptions = { 'None', 'Low', 'High', 'Full' }
 local raceMenuPiOptions = { '400', '800', '1200' }
+local raceMenuLateJoinOptions = { '0%', '25%', '50%', '75%', '100%' }
 local raceMenuEditorOptions = {}
 local raceMenuCheckpointWidthValues = {
     '2.0', '3.0', '4.0', '5.0', '6.0', '7.0', '8.0', '9.0', '10.0', '11.0',
@@ -1852,6 +1854,14 @@ local function getSelectedInvokeTrafficMode()
     return 'none'
 end
 
+local function getSelectedInvokeLateJoinPercent()
+    local selectedIndex = raceInvokeLateJoinItem and math.floor(tonumber(raceInvokeLateJoinItem:Index()) or 1) or 1
+    local selectedLabel = raceMenuLateJoinOptions[selectedIndex] or raceMenuLateJoinOptions[selectedIndex + 1] or '50%'
+    local percentStr = tostring(selectedLabel):gsub('%%', '')
+    local percentValue = tonumber(percentStr) or 50
+    return math.max(0, math.min(100, percentValue))
+end
+
 local function getRaceMenuMode(joinedInstance)
     if editorState.active then
         return 'editing'
@@ -2094,6 +2104,10 @@ local function refreshRaceMenu()
     if raceInvokeTrafficItem then
         raceInvokeTrafficItem:Enabled(true)
         raceInvokeTrafficItem:Description('Traffic density for the hosted race instance.')
+    end
+    if raceInvokeLateJoinItem then
+        raceInvokeLateJoinItem:Enabled(true)
+        raceInvokeLateJoinItem:Description('Allow players to join the race after it starts if the leader has reached this progress threshold.')
     end
 
     if raceMenuPendingSelectName then
@@ -2379,6 +2393,7 @@ local function initializeRaceMenu()
     raceInvokeLapItem = UIMenuListItem.New('Laps', raceMenuLapOptions, 3)
     raceInvokeTrafficItem = UIMenuListItem.New('Traffic', raceMenuTrafficOptions, 1)
     raceInvokePiItem = UIMenuListItem.New('Maximum PI', raceMenuPiOptions, 1)
+    raceInvokeLateJoinItem = UIMenuListItem.New('Late Join %', raceMenuLateJoinOptions, 3)
     raceInvokeActionItem = UIMenuItem.New('Host Selected Race')
     raceJoinAvailableListItem = UIMenuListItem.New('Races', { 'Loading...' }, 1)
     raceJoinActionItem = UIMenuItem.New('Join Selected Race')
@@ -2404,6 +2419,7 @@ local function initializeRaceMenu()
     raceHostRaceMenu:AddItem(raceInvokeLapItem)
     raceHostRaceMenu:AddItem(raceInvokeTrafficItem)
     raceHostRaceMenu:AddItem(raceInvokePiItem)
+    raceHostRaceMenu:AddItem(raceInvokeLateJoinItem)
     raceHostRaceMenu:AddItem(raceImportGTAOItem)
     raceHostRaceMenu:AddItem(raceInvokeActionItem)
 
@@ -2597,13 +2613,14 @@ local function initializeRaceMenu()
             return
         end
 
-        logClientVerbose(("Host selected race payload name='%s' lookupName='%s' sourceType='%s' raceId='%s' laps=%s traffic=%s"):format(
+        logClientVerbose(("Host selected race payload name='%s' lookupName='%s' sourceType='%s' raceId='%s' laps=%s traffic=%s lateJoinPercent=%s"):format(
             tostring(definition.name or ''),
             tostring(definition.lookupName or ''),
             tostring(definition.sourceType or ''),
             tostring(definition.raceId or ''),
             tostring(getSelectedInvokeLapCount()),
-            tostring(getSelectedInvokeTrafficMode())
+            tostring(getSelectedInvokeTrafficMode()),
+            tostring(getSelectedInvokeLateJoinPercent())
         ))
         TriggerServerEvent('racingsystem:invokeRace', {
             name = definition.name,
@@ -2611,6 +2628,7 @@ local function initializeRaceMenu()
             sourceType = definition.sourceType,
             raceId = definition.raceId,
             trafficMode = getSelectedInvokeTrafficMode(),
+            lateJoinProgressLimitPercent = getSelectedInvokeLateJoinPercent(),
         }, getSelectedInvokeLapCount())
         raceHostRaceMenu:GoBack()
     end

@@ -13,6 +13,7 @@ RacingSystem.Config = {
     countdownMs = 5000,
     debugLogging = true,
     adminAce = "racingsystem.admin",
+    lateJoinProgressLimitPercent = 50,
 }
 
 RacingSystem.States = {
