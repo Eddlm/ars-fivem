@@ -9,8 +9,6 @@ I make sure to not lose track of the user/admin experience by regularly asking C
 - Add a debug command to print active camera mode/state and loaded config values. | On it
 - Emit startup warnings when camera config values are out of sensible ranges. | On it
 ## Player experience
-- Add discoverability hints for hold-to-toggle and look-back controls. | On it
-- Make toggle/look-back bindings configurable. | On it
 - Smooth follow/hood handoffs to reduce abrupt camera snaps. | Simplicity (4 of 9)
 
 # For `customphysics`
@@ -19,8 +17,6 @@ I make sure to not lose track of the user/admin experience by regularly asking C
 - Centralize vehicle guard/reset logic in `client.lua` so all subsystems share one consistency path. | Simplicity (6 of 9)
 - Replace tuning magic numbers with config-backed keys and defaults. | On it
 ## Admin experience
-- Add a debug command for live state (`power`, `antiBoost`, `overspeed`, `offroad`, wheelie/nitrous state). | On it
-- Print a startup feature/config summary for quick server verification. | On it
 - Document how behavior changes when `performancetuning` state bags are unavailable. | On it
 ## Player experience
 - Smooth ramp-up/ramp-down of power changes after offroad/overspeed events. | Simplicity (5 of 9)
@@ -33,8 +29,6 @@ I make sure to not lose track of the user/admin experience by regularly asking C
 - Harden runtime config coercion/validation so malformed PI/performance values fail predictably. | Simplicity (6 of 9)
 - Reuse a shared tune-bucket initializer across serialize/resync/apply paths. | Simplicity (5 of 9)
 ## Admin experience
-- Add diagnostics for tracked tuned vehicles and pending resync queues. | On it
-- Improve `ptune`/`ptbarsmode` command feedback with help/current mode output. | On it
 - Add maintenance commands to inspect/clean `stable_laptimes.json` by model. | On it
 ## Player experience
 - Show explicit reasons for disabled pack options. | Simplicity (6 of 9)

@@ -764,7 +764,7 @@ local function buildRaceInstanceSnapshot(instance)
         sourceType = instance.sourceType,
         sourceName = instance.sourceName,
         trafficMode = tostring(instance.trafficMode or 'none'),
-        laps = tonumber(instance.laps) or 1,
+        laps = tonumber(instance.laps) or 3,
         owner = instance.owner,
         state = instance.state,
         createdAt = instance.createdAt,
@@ -1179,7 +1179,7 @@ local function normalizeRaceLookupKey(value)
 end
 
 local function sanitizeLapCount(value)
-    local laps = math.floor(tonumber(value) or 1)
+    local laps = math.floor(tonumber(value) or 3)
     local configuredMin = math.floor(tonumber((RacingSystem.Config or {}).minLapCount) or 1)
     local configuredMax = math.floor(tonumber((RacingSystem.Config or {}).maxLapCount) or 10)
     local minLapCount = math.max(1, configuredMin)
