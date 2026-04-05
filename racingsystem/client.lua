@@ -2390,7 +2390,7 @@ local function initializeRaceMenu()
     raceQuickFinishItem = UIMenuItem.New('Finish Race')
     raceQuickResetItem = UIMenuItem.New('Reset to Last Checkpoint')
     raceInvokeDefinitionItem = UIMenuListItem.New('Race', { 'Loading...' }, 1)
-    raceInvokeLapItem = UIMenuListItem.New('Laps', raceMenuLapOptions, 3)
+    raceInvokeLapItem = UIMenuListItem.New('Laps', raceMenuLapOptions, 2)
     raceInvokeTrafficItem = UIMenuListItem.New('Traffic', raceMenuTrafficOptions, 1)
     raceInvokePiItem = UIMenuListItem.New('Maximum PI', raceMenuPiOptions, 1)
     raceInvokeLateJoinItem = UIMenuListItem.New('Late Join %', raceMenuLateJoinOptions, 3)
@@ -3272,13 +3272,17 @@ local function runSmartCheckpointTeleport(checkpoint, nextCheckpoint)
 end
 
 RegisterNetEvent('racingsystem:teleportToCheckpoint', function(payload)
-    runSmartJoinTeleport(payload)
+    Citizen.CreateThread(function()
+        runSmartJoinTeleport(payload)
+    end)
 end)
 
 RegisterNetEvent('racingsystem:smartCheckpointTeleport', function(payload)
-    local checkpoint = type(payload) == 'table' and payload.checkpoint or nil
-    local nextCheckpoint = type(payload) == 'table' and payload.nextCheckpoint or nil
-    runSmartCheckpointTeleport(checkpoint, nextCheckpoint)
+    Citizen.CreateThread(function()
+        local checkpoint = type(payload) == 'table' and payload.checkpoint or nil
+        local nextCheckpoint = type(payload) == 'table' and payload.nextCheckpoint or nil
+        runSmartCheckpointTeleport(checkpoint, nextCheckpoint)
+    end)
 end)
 
 RegisterNUICallback('racingsystem:gtAoRaceUrlSubmit', function(data, cb)
