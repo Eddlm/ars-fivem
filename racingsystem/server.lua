@@ -2313,6 +2313,42 @@ local function deleteRaceDefinition(raceName)
     }, nil
 end
 
+local function createNewRaceDefinition(ownerSource, raceName)
+    local sanitizedName = RacingSystem.Trim(raceName)
+    if sanitizedName == '' then
+        return nil, 'Race name is required.'
+    end
+
+    local fileName = sanitizeOnlineRaceFileName(sanitizedName)
+    if not fileName then
+        return nil, 'Race name could not be converted into a valid mission filename.'
+    end
+
+    local filePath = buildCustomRaceFilePath(fileName)
+
+    -- Create empty mission JSON structure
+    local missionJson = buildMissionJsonFromCheckpoints({}, nil, sanitizedName)
+    local saveOk = SaveResourceFile(RESOURCE_NAME, filePath, missionJson, -1)
+    if not saveOk then
+        logError(("The server could not create new race '%s'."):format(filePath))
+        return nil, ('Could not create %s.'):format(filePath)
+    end
+
+    registerKnownRaceDefinition(sanitizedName, 'custom')
+    broadcastSnapshot()
+
+    return {
+        id = nil,
+        name = sanitizedName,
+        fileName = fileName,
+        owner = tonumber(ownerSource) or 0,
+        state = RacingSystem.States.idle,
+        createdAt = os.time(),
+        checkpoints = {},
+        entrants = {},
+    }
+end
+
 local function saveRaceDefinition(ownerSource, raceName, checkpoints)
     local sanitizedName = RacingSystem.Trim(raceName)
     if sanitizedName == '' then
@@ -2562,6 +2598,58 @@ local function joinRaceInstanceByName(source, instanceName)
     local instance = findRaceInstanceByName(instanceName)
     if not instance then
         return nil, 'That race instance does not exist. Invoke it first from the race menu.'
+    end
+
+    if #(instance.checkpoints or {}) == 0 then
+        return nil, 'That race instance has no checkpoints.'
+    end
+
+    if instance.state == RacingSystem.States.running then
+        local canJoin, joinError = canJoinMidRace(instance)
+        if not canJoin then
+            reliabilityCounters.rejectedJoinRunning = reliabilityCounters.rejectedJoinRunning + 1
+            if shouldLogLifecycleAnomaly('joinRace', source, instance.id) then
+                logLifecycleEvent('joinRace', instance, nil, source, instance.state, instance.state, 'late_join_rejected_running')
+            end
+            return nil, joinError or 'Cannot join a race that is already running.'
+        end
+        -- Mid-race join is allowed, continue to join flow below
+    elseif instance.state ~= RacingSystem.States.idle and instance.state ~= RacingSystem.States.staging then
+        if shouldLogLifecycleAnomaly('joinRace', source, instance.id) then
+            logLifecycleEvent('joinRace', instance, nil, source, instance.state, instance.state, 'join_rejected_invalid_state')
+        end
+        return nil, 'That race cannot be joined right now.'
+    end
+
+    local existingInstance = findRaceInstanceByEntrant(source)
+    if existingInstance and existingInstance.id == instance.id then
+        return instance, nil
+    end
+
+    if existingInstance then
+        local removedEntrant = removeEntrantFromRaceInstance(existingInstance, source)
+        cleanupInstanceAfterEntrantRemoval(existingInstance, source, removedEntrant, 'join_transfer')
+    end
+
+    instance.entrants = instance.entrants or {}
+    local newEntrant = buildEntrant(source, instance)
+
+    -- Handle mid-race join: inherit last-place racer's progress
+    if instance.state == RacingSystem.States.running then
+        local lastPlaceEntrant = getLastPlaceEntrant(instance)
+        if lastPlaceEntrant then
+            newEntrant = inheritLastPlaceProgress(newEntrant, lastPlaceEntrant)
+        end
+    end
+
+    instance.entrants[#instance.entrants + 1] = newEntrant
+    return instance, nil
+end
+
+local function joinRaceInstanceById(source, instanceId)
+    local instance = raceInstancesById[tonumber(instanceId) or -1]
+    if not instance then
+        return nil, 'That race instance does not exist.'
     end
 
     if #(instance.checkpoints or {}) == 0 then
@@ -2904,22 +2992,46 @@ end)
 
 RegisterNetEvent('racingsystem:requestEditorRace', function(raceName)
     local src = source
-    local customDefinition = loadCustomRace(raceName)
-    local onlineDefinition = nil
-    local definition = customDefinition
+    local definition = nil
 
-    if not definition then
-        onlineDefinition = loadBundledOnlineRace(raceName)
-        definition = onlineDefinition
+    -- Always try to load the full race data from disk first
+    local customDefinition = loadCustomRace(raceName)
+    if customDefinition then
+        definition = customDefinition
+        logVerbose(('[requestEditorRace] Loaded "%s" from CustomRaces'):format(raceName))
     end
 
-    if definition then
-        registerKnownRaceDefinition(
-            definition.name,
-            customDefinition and 'custom' or 'online',
-            customDefinition and nil or (definition.ugcId or definition.fileName)
-        )
-        broadcastSnapshot()
+    if not definition then
+        local onlineDefinition = loadBundledOnlineRace(raceName)
+        if onlineDefinition then
+            definition = onlineDefinition
+            logVerbose(('[requestEditorRace] Loaded "%s" from OnlineRaces'):format(raceName))
+        end
+    end
+
+    if not definition then
+        -- New race: create and save empty file to CustomRaces
+        definition = createNewRaceDefinition(src, raceName)
+        if not definition then
+            logError(('[requestEditorRace] Failed to create new race "%s"'):format(raceName))
+            TriggerClientEvent('racingsystem:editorRaceLoaded', src, {
+                ok = false,
+                requestedName = RacingSystem.Trim(raceName),
+                race = nil,
+            })
+            return
+        end
+        logVerbose(('[requestEditorRace] Created new race "%s"'):format(raceName))
+    else
+        -- Ensure the definition is registered
+        if definition.name then
+            registerKnownRaceDefinition(
+                definition.name,
+                definition.sourceType or 'custom',
+                definition.ugcId or definition.fileName
+            )
+            broadcastSnapshot()
+        end
     end
 
     TriggerClientEvent('racingsystem:editorRaceLoaded', src, {
@@ -3140,6 +3252,39 @@ RegisterNetEvent('racingsystem:joinRace', function(raceName)
     auditLog("joinRace", src, ("joined race '%s' (instance %s). Entrants now: %s"):format(
         tostring(instance.name or raceName),
         tostring(instance.id),
+        tostring(#(instance.entrants or {}))
+    ))
+    broadcastSnapshot()
+    sendInstanceAssets(src, instance)
+
+    -- For mid-race joins, teleport to the current checkpoint; otherwise use default start teleport
+    if instance.state == RacingSystem.States.running then
+        local joiningEntrant = instance.entrants[#instance.entrants]
+        if joiningEntrant then
+            sendTeleportToCheckpoint(src, instance, joiningEntrant.currentCheckpoint)
+        end
+    else
+        sendTeleportToLastCheckpoint(src, instance)
+    end
+end)
+
+RegisterNetEvent('racingsystem:joinRaceInstanceById', function(instanceId)
+    local src = source
+    local instance, joinError = joinRaceInstanceById(src, instanceId)
+
+    if not instance then
+        logLevelOne(("%s could not join race instance %s. Reason: %s."):format(
+            resolvePlayerLogLabel(src),
+            tostring(instanceId),
+            tostring(joinError or 'unknown error')
+        ))
+        notifyPlayer(src, joinError or 'Could not join race.', true)
+        return
+    end
+
+    auditLog("joinRaceInstanceById", src, ("joined race instance %s ('%s'). Entrants now: %s"):format(
+        tostring(instance.id),
+        tostring(instance.name or 'unnamed'),
         tostring(#(instance.entrants or {}))
     ))
     broadcastSnapshot()

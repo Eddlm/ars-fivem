@@ -40,6 +40,7 @@ I make sure to not lose track of the user/admin experience by regularly asking C
 - Consolidate race definition lifecycle helpers (load/save/sync/delete) to remove duplicated naming/path logic. | Simplicity (4 of 9)
 - Unify checkpoint serialization between editor/runtime/mission JSON paths. | Simplicity (5 of 9)
 - Replace no-op logging with configurable debug logging. | On it
+- **ScaleformUI patch candidate:** `UIMenu:GoLeft` and `UIMenu:GoRight` in `ScaleformUI.lua` (lines ~14460 and ~14492) never call `AddTextEntry("UIMenu_Current_Description", self:CurrentItem():Description())`, unlike `GoUp`/`GoDown` which do. This causes the visible description to stay stale (showing the last item that had `:Description()` called on it) when scrolling list items left/right. One-line fix in each function, same pattern as GoUp/GoDown.
 ## Admin experience
 - Gate destructive actions (`kill`, `delete`) behind ACE/role checks. | On it
 - Add audit logging for `invoke`, `save`, `delete`, `kill`, and race-completion lifecycle events. | On it
