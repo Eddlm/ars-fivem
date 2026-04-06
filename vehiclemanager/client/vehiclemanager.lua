@@ -124,6 +124,7 @@ end
 function VMUI.CreateMenu(title, subtitle, x, y, _, _, _, _, _, _, _)
     local menu = UIMenu.New(title, subtitle, x or 0, y or 0, true)
     menu:MenuAlignment(MenuAlignment.LEFT)
+    menu:SetBannerColor(SColor.LightBlue)
     return menu
 end
 
@@ -2519,39 +2520,23 @@ partsSubMenu.SubMenu.OnMenuChanged = function(_, _, _)
     rebuildPartsMenu()
 end
 
-customizeSubMenu.SubMenu.OnIndexChange = function(menu, newindex)
-    local _ = menu
-    local __ = newindex
-end
-
-customizeSubMenu.SubMenu.OnItemSelect = function(_, item, index)
-    local _ = item
-    local __ = index
-end
-
 performanceSettingsMenu.OnListChange = function(_, item, index)
     if item == performancePiDisplayListItem then
         setPerformanceTuningPiDisplayModeIndex(index)
-        refreshPerformanceSettingsMenu()
     elseif item == performanceRevLimiterListItem then
         setPerformanceTuningRevLimiterEnabled(index == 2)
-        refreshPerformanceSettingsMenu()
     elseif item == performanceSteeringLockModeListItem then
         setPerformanceTuningSteeringLockModeIndex(index)
-        refreshPerformanceSettingsMenu()
     end
 end
 
 performanceSettingsMenu.OnListSelect = function(_, item, index)
     if item == performancePiDisplayListItem then
         setPerformanceTuningPiDisplayModeIndex(index)
-        refreshPerformanceSettingsMenu()
     elseif item == performanceRevLimiterListItem then
         setPerformanceTuningRevLimiterEnabled(index == 2)
-        refreshPerformanceSettingsMenu()
     elseif item == performanceSteeringLockModeListItem then
         setPerformanceTuningSteeringLockModeIndex(index)
-        refreshPerformanceSettingsMenu()
     end
 end
 
@@ -2563,17 +2548,6 @@ statsLocalMenu.OnListSelect = function(_, item, index)
     applyModSelection(item, index, statsModEntries)
 end
 
-saveLoadSubMenu.SubMenu.OnItemSelect = function(_, item, index)
-    local _ = item
-    local __ = index
-end
-
-if deleteVehiclesSubMenu and deleteVehiclesSubMenu.SubMenu then
-    deleteVehiclesSubMenu.SubMenu.OnItemSelect = function(_, item, index)
-        local _ = item
-        local __ = index
-    end
-end
 
 vehicleMainMenu.OnMenuChanged = function(_, newmenu, forward)
     if forward and newmenu == saveLoadSubMenu.SubMenu then

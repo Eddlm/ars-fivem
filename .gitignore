@@ -4,5 +4,6 @@
 .DS_Store
 Thumbs.db
 vehiclemanager/savedvehicles/*.json
+racingsystem/race_index.json
 AGENTS.md
 **/AGENTS.md

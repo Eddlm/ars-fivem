@@ -1,0 +1,9 @@
+{
+    "definitions": [
+        {
+            "sourceType": "custom",
+            "lookupName": "figureight",
+            "name": "Figureight"
+        }
+    ]
+}

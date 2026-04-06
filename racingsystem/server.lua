@@ -10,6 +10,7 @@ local loadBundledOnlineRace
 local cloneMissionValue
 local knownRaceDefinitionsByName = {}
 local RACE_INDEX_FILE = 'race_index.json'
+local RACE_INDEX_EXAMPLES_FILE = 'race_index_examples.json'
 local RESOURCE_NAME = 'racingsystem'
 local CUSTOM_RACE_FOLDER = 'CustomRaces'
 local ONLINE_RACE_FOLDER = 'OnlineRaces'
@@ -440,9 +441,11 @@ local function saveRaceIndex()
     local definitions = {}
 
     for _, definition in pairs(knownRaceDefinitionsByName) do
-        local clonedDefinition = cloneKnownRaceDefinition(definition)
-        if clonedDefinition then
-            definitions[#definitions + 1] = clonedDefinition
+        if not definition.isExample then
+            local clonedDefinition = cloneKnownRaceDefinition(definition)
+            if clonedDefinition then
+                definitions[#definitions + 1] = clonedDefinition
+            end
         end
     end
 
@@ -475,9 +478,30 @@ end
 local function loadRaceIndex()
     knownRaceDefinitionsByName = {}
 
+    local rawExamples = LoadResourceFile(RESOURCE_NAME, RACE_INDEX_EXAMPLES_FILE)
+    if rawExamples and rawExamples ~= '' then
+        local decodedExamples = json.decode(rawExamples)
+        local exampleDefinitions = type(decodedExamples) == 'table' and decodedExamples.definitions or nil
+        if type(exampleDefinitions) == 'table' then
+            local exampleCount = 0
+            for _, definition in ipairs(exampleDefinitions) do
+                local clonedDefinition = cloneKnownRaceDefinition(definition)
+                if clonedDefinition then
+                    local normalizedName = RacingSystem.NormalizeRaceName(clonedDefinition.lookupName or clonedDefinition.name)
+                    clonedDefinition.isExample = true
+                    knownRaceDefinitionsByName[normalizedName] = clonedDefinition
+                    exampleCount = exampleCount + 1
+                end
+            end
+            log(('Loaded %s example definition(s) from %s.'):format(exampleCount, RACE_INDEX_EXAMPLES_FILE))
+        else
+            logError(("The server could not read '%s' as a race definition list."):format(RACE_INDEX_EXAMPLES_FILE))
+        end
+    end
+
     local rawIndex = LoadResourceFile(RESOURCE_NAME, RACE_INDEX_FILE)
     if not rawIndex or rawIndex == '' then
-        log(('%s was not found. Starting with an empty race index.'):format(RACE_INDEX_FILE))
+        log(('%s was not found. No user race definitions loaded.'):format(RACE_INDEX_FILE))
         return
     end
 
