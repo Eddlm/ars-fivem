@@ -276,7 +276,7 @@ local extraColorOptions = buildMergedColorOptions(
     chromeColorOptions
 )
 
-local function buildColorLabels(options)
+local function buildPaintColorOptionList(options)
     local labels = {}
     for index = 1, #options do
         labels[index] = options[index].label
@@ -284,12 +284,14 @@ local function buildColorLabels(options)
     return labels
 end
 
+local buildColorLabels = buildPaintColorOptionList
+
 paintCategoryListItem.Items = paintCategoryLabels
-pearlescentColorListItem.Items = buildColorLabels(extraColorOptions)
-interiorColorListItem.Items = buildColorLabels(extraColorOptions)
-dashboardColorListItem.Items = buildColorLabels(extraColorOptions)
-xenonColorListItem.Items = buildColorLabels(xenonColorOptions)
-wheelColorListItem.Items = buildColorLabels(extraColorOptions)
+pearlescentColorListItem.Items = buildPaintColorOptionList(extraColorOptions)
+interiorColorListItem.Items = buildPaintColorOptionList(extraColorOptions)
+dashboardColorListItem.Items = buildPaintColorOptionList(extraColorOptions)
+xenonColorListItem.Items = buildPaintColorOptionList(xenonColorOptions)
+wheelColorListItem.Items = buildPaintColorOptionList(extraColorOptions)
 
 local function buildColorIdLookup(colorOptions)
     local lookup = {}
@@ -371,7 +373,7 @@ end
 
 wheelCategoryListItem.Items = wheelCategoryLabels
 
-local function getPlayerVehicle()
+local function getCurrentVehicle(requireDriver)
     local ped = PlayerPedId()
     if not DoesEntityExist(ped) then
         return nil
@@ -382,10 +384,14 @@ local function getPlayerVehicle()
         return nil
     end
 
+    if requireDriver and GetPedInVehicleSeat(vehicle, -1) ~= ped then
+        return nil
+    end
+
     return vehicle
 end
 
-local function getDisplayLabel(labelKey, fallback)
+local function getLocalizedModName(labelKey, fallback)
     if not labelKey or labelKey == "" then
         return fallback
     end
@@ -398,37 +404,10 @@ local function getDisplayLabel(labelKey, fallback)
     return label
 end
 
-local function getDriverVehicle()
-    local ped = PlayerPedId()
-    local vehicle = getPlayerVehicle()
-    if not vehicle then
-        return nil
-    end
+local getDisplayLabel = getLocalizedModName
+local getLabelOrFallback = getLocalizedModName
+local getSafeDisplayLabel = getLocalizedModName
 
-    if GetPedInVehicleSeat(vehicle, -1) ~= ped then
-        return nil
-    end
-
-    return vehicle
-end
-
-local function getManagedVehicle(requireDriver)
-    if requireDriver then
-        local vehicle = getDriverVehicle()
-        if vehicle then
-            return vehicle
-        end
-
-        return nil
-    end
-
-    local vehicle = getPlayerVehicle()
-    if vehicle then
-        return vehicle
-    end
-
-    return nil
-end
 
 local function registerVehicleRequiredItem(item)
     if item then
@@ -773,7 +752,7 @@ local function rebuildModMenu(subMenu, categories, emptyTitle, emptyDescription,
     end
 
     targetMenu:Clear()
-    local vehicle = getManagedVehicle(false)
+    local vehicle = getCurrentVehicle(false)
     if not vehicle then
         local emptyItem = VMUI.CreateItem(TextConfig.noVehicleLabel or "No vehicle", TextConfig.noVehicleDescription or "Get into a vehicle to see options here.")
         emptyItem:Enabled(false)
@@ -855,7 +834,7 @@ local function rebuildStatsMenu()
 end
 
 local function applyModSelection(item, index, entries)
-    local vehicle = getManagedVehicle(false)
+    local vehicle = getCurrentVehicle(false)
     if not vehicle then
         return
     end
@@ -949,7 +928,7 @@ local function rebuildWheelList(categoryIndex)
     currentWheelOptions = {}
     wheelListItem.Items = {}
 
-    local vehicle = getManagedVehicle(false)
+    local vehicle = getCurrentVehicle(false)
     if not vehicle then
         wheelListItem.Items[1] = TextConfig.noVehicleLabel or "No vehicle"
         wheelListItem:Index(1)
@@ -996,7 +975,7 @@ local function rebuildWheelList(categoryIndex)
 end
 
 local function refreshWheelControls()
-    local vehicle = getManagedVehicle(false)
+    local vehicle = getCurrentVehicle(false)
     if not vehicle then
         wheelCategoryListItem:Index(1)
         rebuildWheelList(1)
@@ -1012,7 +991,7 @@ local function refreshWheelControls()
 end
 
 local function applyWheelSelection(categoryIndex, wheelIndex, useCustomTyres)
-    local vehicle = getManagedVehicle(false)
+    local vehicle = getCurrentVehicle(false)
     local option = currentWheelOptions[wheelIndex]
     if not vehicle or not option then
         return
@@ -1050,7 +1029,7 @@ local function findLiveryIndex(vehicle)
 end
 
 local function refreshVehicleCustomizationLists()
-    local vehicle = getPlayerVehicle()
+    local vehicle = getCurrentVehicle(false)
     local primaryColor = 0
     local secondaryColor = 0
     local primaryPaintType = 0
@@ -1089,8 +1068,8 @@ local function refreshVehicleCustomizationLists()
 end
 
 local function updateVehicleAvailabilityState(forceRefresh)
-    local hasVehicle = getManagedVehicle(false) ~= nil
-    local hasDriverVehicle = getManagedVehicle(true) ~= nil
+    local hasVehicle = getCurrentVehicle(false) ~= nil
+    local hasDriverVehicle = getCurrentVehicle(true) ~= nil
     local stateChanged = hasVehicle ~= availabilityState.hasVehicle or hasDriverVehicle ~= availabilityState.hasDriverVehicle
     if not forceRefresh and not stateChanged then
         return
@@ -1112,7 +1091,7 @@ local function updateVehicleAvailabilityState(forceRefresh)
 end
 
 local function fixCurrentVehicle()
-    local vehicle = getManagedVehicle(true)
+    local vehicle = getCurrentVehicle(true)
     if not vehicle then
         return
     end
@@ -1128,7 +1107,7 @@ local function fixCurrentVehicle()
 end
 
 local function teleportVehicleToNearestRoad()
-    local vehicle = getManagedVehicle(true)
+    local vehicle = getCurrentVehicle(true)
     if not vehicle then
         return
     end
@@ -1146,7 +1125,7 @@ end
 
 local function runUtilityDeleteVehicleSequence()
     local ped = PlayerPedId()
-    local vehicle = getManagedVehicle(true)
+    local vehicle = getCurrentVehicle(true)
     if not vehicle or not DoesEntityExist(vehicle) or not DoesEntityExist(ped) then
         return
     end
@@ -1216,17 +1195,12 @@ local function getVehicleDisplayName(model)
     return displayName
 end
 
-local function getLabelOrFallback(labelKey, fallback)
-    if not labelKey or labelKey == "" then
-        return fallback
+local function iterateVehicleState(vehicle, mapping, stateReader)
+    local output = {}
+    for index, name in pairs(mapping) do
+        output[name] = stateReader(vehicle, index)
     end
-
-    local label = GetLabelText(labelKey)
-    if not label or label == "" or label == "NULL" then
-        return fallback
-    end
-
-    return label
+    return output
 end
 
 local function getCustomColor(getter, isCustom)
@@ -1298,48 +1272,39 @@ local function getVehicleMods(vehicle)
     return mods
 end
 
-local function getVehicleDoorState(vehicle)
-    local names = {
-        [0] = "frontLeftDoor",
-        [1] = "frontRightDoor",
-        [2] = "backLeftDoor",
-        [3] = "backRightDoor",
-        [4] = "hood",
-        [5] = "trunk",
-        [6] = "trunk2",
-    }
-    local doorState = {
-        open = {},
-        broken = {},
-    }
+local DOOR_MAPPING = {
+    [0] = "frontLeftDoor",
+    [1] = "frontRightDoor",
+    [2] = "backLeftDoor",
+    [3] = "backRightDoor",
+    [4] = "hood",
+    [5] = "trunk",
+    [6] = "trunk2",
+}
 
-    for doorIndex, doorName in pairs(names) do
-        doorState.open[doorName] = GetVehicleDoorAngleRatio(vehicle, doorIndex) > 0.01
-        doorState.broken[doorName] = IsVehicleDoorDamaged(vehicle, doorIndex)
-    end
+local TYRE_MAPPING = {
+    [0] = "frontLeft",
+    [1] = "frontRight",
+    [2] = "middleLeft",
+    [3] = "middleRight",
+    [4] = "backLeft",
+    [5] = "backRight",
+    [6] = "extra6",
+    [7] = "extra7",
+    [8] = "extra8",
+}
+
+local function getVehicleDoorState(vehicle)
+    local doorState = {
+        open = iterateVehicleState(vehicle, DOOR_MAPPING, function(v, i) return GetVehicleDoorAngleRatio(v, i) > 0.01 end),
+        broken = iterateVehicleState(vehicle, DOOR_MAPPING, function(v, i) return IsVehicleDoorDamaged(v, i) end)
+    }
 
     return doorState
 end
 
 local function getVehicleTyreState(vehicle)
-    local tyreNames = {
-        [0] = "frontLeft",
-        [1] = "frontRight",
-        [2] = "middleLeft",
-        [3] = "middleRight",
-        [4] = "backLeft",
-        [5] = "backRight",
-        [6] = "extra6",
-        [7] = "extra7",
-        [8] = "extra8",
-    }
-    local tyreState = {}
-
-    for tyreIndex, tyreName in pairs(tyreNames) do
-        tyreState[tyreName] = IsVehicleTyreBurst(vehicle, tyreIndex, false)
-    end
-
-    return tyreState
+    return iterateVehicleState(vehicle, TYRE_MAPPING, function(v, i) return IsVehicleTyreBurst(v, i, false) end)
 end
 
 local function getVehicleProofs(vehicle)
@@ -1357,7 +1322,7 @@ local function getVehicleProofs(vehicle)
     }
 end
 
-local function ensureVehicleNetworked(vehicle, timeoutMs)
+local function waitForVehicleOwnership(vehicle, timeoutMs)
     if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
         return false
     end
@@ -1380,6 +1345,9 @@ local function ensureVehicleNetworked(vehicle, timeoutMs)
 
     return NetworkGetEntityIsNetworked(vehicle)
 end
+
+local ensureVehicleNetworked = waitForVehicleOwnership
+local waitForVehicleNetworkState = waitForVehicleOwnership
 
 local TUNING_SELECTION_SCHEMA = {
     { key = "enginePack", default = "stock", parse = function(value) return type(value) == "string" and value or "stock" end },
@@ -1414,8 +1382,7 @@ local function roundToThreeDecimals(value, fallback)
     return math.ceil((numeric * 1000.0) - 0.5) / 1000.0
 end
 
--- Pre-alpha policy: strict canonical schema only (no legacy key aliases).
-local function normalizeSelectionMap(source)
+local function cleanModSelectionMap(source)
     if type(source) ~= "table" then
         return nil
     end
@@ -1429,7 +1396,7 @@ local function normalizeSelectionMap(source)
 end
 
 local function normalizeTuningSelectionMap(source)
-    local canonical = normalizeSelectionMap(source)
+    local canonical = cleanModSelectionMap(source)
     if type(canonical) ~= "table" then
         return nil
     end
@@ -1450,6 +1417,8 @@ local function normalizeTuningSelectionMap(source)
 
     return normalized
 end
+
+local normalizeSelectionMap = cleanModSelectionMap
 
 local function serializeTuningSelections(tuneState)
     local normalizedSelections = normalizeTuningSelectionMap(tuneState)
@@ -1592,22 +1561,6 @@ local function requestModel(model)
     return true
 end
 
-local function waitForVehicleNetworkState(vehicle, timeoutMs)
-    local timeoutAt = GetGameTimer() + (timeoutMs or 3000)
-
-    while DoesEntityExist(vehicle) and GetGameTimer() < timeoutAt do
-        if NetworkGetEntityIsNetworked(vehicle) then
-            local netId = NetworkGetNetworkIdFromEntity(vehicle)
-            if netId and netId ~= 0 then
-                return true
-            end
-        end
-
-        Wait(0)
-    end
-
-    return false
-end
 
 local function setVehicleModEntry(vehicle, modType, modData)
     if type(modData) ~= "table" then
@@ -2132,7 +2085,7 @@ local function buildVehicleSavePayload(vehicle)
 end
 
 local function saveCurrentVehicle()
-    local vehicle = getManagedVehicle(true)
+    local vehicle = getCurrentVehicle(true)
     if not vehicle then
         return
     end
@@ -2174,7 +2127,7 @@ saveVehicleItem.Activated = function()
 end
 
 local function autosaveManagedVehicleToExistingSave()
-    local vehicle = getManagedVehicle(false)
+    local vehicle = getCurrentVehicle(false)
     if not vehicle then
         return
     end
@@ -2209,7 +2162,7 @@ local function scheduleVehicleMenuCloseAutosave()
 end
 
 local function applyPaintColor(target, categoryIndex, colorIndex)
-    local vehicle = getManagedVehicle(false)
+    local vehicle = getCurrentVehicle(false)
     local category = getPaintCategory(categoryIndex)
     local options = target == "primary" and currentPrimaryColorOptions or currentSecondaryColorOptions
     local option = options[colorIndex]
@@ -2234,7 +2187,7 @@ local function applyPaintColor(target, categoryIndex, colorIndex)
 end
 
 local function applyPearlescentColor(index)
-    local vehicle = getManagedVehicle(false)
+    local vehicle = getCurrentVehicle(false)
     local option = extraColorOptions[index]
     if not vehicle or not option then
         return
@@ -2245,7 +2198,7 @@ local function applyPearlescentColor(index)
 end
 
 local function applyInteriorColor(index)
-    local vehicle = getManagedVehicle(false)
+    local vehicle = getCurrentVehicle(false)
     local option = extraColorOptions[index]
     if not vehicle or not option then
         return
@@ -2255,7 +2208,7 @@ local function applyInteriorColor(index)
 end
 
 local function applyDashboardColor(index)
-    local vehicle = getManagedVehicle(false)
+    local vehicle = getCurrentVehicle(false)
     local option = extraColorOptions[index]
     if not vehicle or not option then
         return
@@ -2281,7 +2234,7 @@ local function pulseHeadlightControl(vehicle)
 end
 
 local function applyXenonColor(index)
-    local vehicle = getManagedVehicle(false)
+    local vehicle = getCurrentVehicle(false)
     local option = xenonColorOptions[index]
     if not vehicle or not option then
         return
@@ -2300,7 +2253,7 @@ local function applyXenonColor(index)
 end
 
 local function applyWheelColor(index)
-    local vehicle = getManagedVehicle(false)
+    local vehicle = getCurrentVehicle(false)
     local option = extraColorOptions[index]
     if not vehicle or not option then
         return
@@ -2311,7 +2264,7 @@ local function applyWheelColor(index)
 end
 
 local function applySelectedLivery(index)
-    local vehicle = getManagedVehicle(false)
+    local vehicle = getCurrentVehicle(false)
     local option = currentLiveryOptions[index]
     if not vehicle or not option or not option.available then
         return
@@ -2605,7 +2558,7 @@ end)
 
 RegisterNetEvent("vehiclemanager:vehicleSnapshotUpdated", function(saveId)
     local _ = saveId
-    notifyPersistentVehicleUpdated(getManagedVehicle(false))
+    notifyPersistentVehicleUpdated(getCurrentVehicle(false))
 end)
 
 RegisterNetEvent("vehiclemanager:vehicleSaved", function(saveId)

@@ -10,13 +10,13 @@ This is the progressive refactoring plan for vehiclemanager resource, addressing
 | # | Task | Priority | Status | Notes |
 |---|---|---|---|---|
 | **Phase 1 - Cleanup & Deduplication** |
-| 1.1 | Rename all unclear method/variable names to consistent naming convention | HIGH | ☐ Not Done |
+| 1.1 | Rename all unclear method/variable names to consistent naming convention | HIGH | ✅ Done | All renames completed
 | 1.2 | Extract all duplicated helper functions to top of file | HIGH | ☐ Not Done |
-| 1.3 | Remove duplicate vehicle getter functions, standardize on one single implementation | HIGH | ☐ Not Done | getPlayerVehicle() / getDriverVehicle() / getManagedVehicle()
-| 1.4 | Create generic state enumerator for doors/tyres/neons/proofs | MEDIUM | ☐ Not Done | 5 identical pattern implementations
-| 1.5 | Merge duplicate map normalization functions | LOW | ☐ Not Done |
-| 1.6 | Extract shared label fallback logic | LOW | ☐ Not Done |
-| 1.7 | Standardize network state waiting loops | MEDIUM | ☐ Not Done |
+| 1.3 | Remove duplicate vehicle getter functions, standardize on one single implementation | HIGH | ✅ Done | getPlayerVehicle() / getDriverVehicle() / getManagedVehicle()
+| 1.4 | Create generic state enumerator for doors/tyres/neons/proofs | MEDIUM | ✅ Done | iterateVehicleState() abstraction, cleaned up door/tyre state functions
+| 1.5 | Merge duplicate map normalization functions | LOW | ✅ Done | normalizeSelectionMap() / normalizeTuningSelectionMap()
+| 1.6 | Extract shared label fallback logic | LOW | ✅ Done |
+| 1.7 | Standardize network state waiting loops | MEDIUM | ✅ Done | ensureVehicleNetworked() + waitForVehicleNetworkState()
 
 | **Phase 2 - Architecture Improvements** |
 |---|---|---|---|---|
