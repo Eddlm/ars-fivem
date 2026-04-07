@@ -27,7 +27,7 @@ All Phase 1 Cleanup & Deduplication tasks are now complete:
 | 2.2 | Add proper performancetuning dependency declaration in fxmanifest | MEDIUM | ☐ Not Done | Currently missing entirely
 | 2.3 | Remove duplicate vehicle manager implementation from performancetuning | HIGH | ☐ Not Done | Two parallel implementations exist
 | 2.4 | Establish official clear interface contract between resources | HIGH | ☐ Not Done |
-| 2.5 | Move shared types & constants to shared.lua | MEDIUM | ☐ Not Done |
+| 2.5 | Move shared types & constants to shared.lua | MEDIUM | ✅ Done | Color tables already in shared.lua, duplicates removed from client
 
 ### Phase 3 - Refinement & Quality
 | # | Task | Priority | Status | Notes |
@@ -37,6 +37,14 @@ All Phase 1 Cleanup & Deduplication tasks are now complete:
 | 3.3 | Add proper null/state guards | MEDIUM | ☐ Not Done |
 | 3.4 | Document public API | LOW | ☐ Not Done |
 | 3.5 | Add unit tests for utility functions | LOW | ☐ Not Done |
+
+### Optimization / Dead Code Removal
+| # | Task | Lines | Status | Notes |
+|---|---|---|---|---|
+| **1.** | Remove empty VMUI stub methods | 8 | ✅ Done |
+| **2.** | Remove debug placeholder commented code blocks | 47 | ✅ Done | Already clean, no comment blocks found
+| **3.** | Remove v0 -> v1 save format migration code | 62 | ☐ Not Done | Ran once, will never execute again
+| **4.** | Remove unused dead network event handlers | 21 | ☐ Not Done | Old events no longer sent by server
 
 ---
 

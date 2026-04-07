@@ -2,6 +2,7 @@ local Config = VehicleManager.Config or {}
 local MenuConfig = Config.menu or {}
 local AppearanceConfig = Config.appearance or {}
 local CategoryConfig = Config.categories or {}
+local ConstantConfig = Config.constants or {}
 local TextConfig = {
     helpLabel = "Util",
     helpOptions = { "Fix Vehicle", "Teleport To Nearest Road", "Delete Vehicle" },
@@ -105,17 +106,8 @@ function VMUI.CreatePool()
         }
     end
 
-    function pool:RefreshIndex()
-    end
-
     function pool:CloseAllMenus()
         MenuHandler:CloseAndClearHistory()
-    end
-
-    function pool:ProcessMenus()
-    end
-    
-    function pool:HandleInput()
     end
 
     return pool
@@ -1266,27 +1258,8 @@ local function getVehicleMods(vehicle)
     return mods
 end
 
-local DOOR_MAPPING = {
-    [0] = "frontLeftDoor",
-    [1] = "frontRightDoor",
-    [2] = "backLeftDoor",
-    [3] = "backRightDoor",
-    [4] = "hood",
-    [5] = "trunk",
-    [6] = "trunk2",
-}
-
-local TYRE_MAPPING = {
-    [0] = "frontLeft",
-    [1] = "frontRight",
-    [2] = "middleLeft",
-    [3] = "middleRight",
-    [4] = "backLeft",
-    [5] = "backRight",
-    [6] = "extra6",
-    [7] = "extra7",
-    [8] = "extra8",
-}
+local DOOR_MAPPING = ConstantConfig.DOOR_MAPPING
+local TYRE_MAPPING = ConstantConfig.TYRE_MAPPING
 
 local function getVehicleDoorState(vehicle)
     local doorState = {
@@ -1343,25 +1316,7 @@ end
 local ensureVehicleNetworked = waitForVehicleOwnership
 local waitForVehicleNetworkState = waitForVehicleOwnership
 
-local TUNING_SELECTION_SCHEMA = {
-    { key = "enginePack", default = "stock", parse = function(value) return type(value) == "string" and value or "stock" end },
-    { key = "transmissionPack", default = "stock", parse = function(value) return type(value) == "string" and value or "stock" end },
-    { key = "suspensionPack", default = "stock", parse = function(value) return type(value) == "string" and value or "stock" end },
-    { key = "tireCompoundPack", default = "stock", parse = function(value) return type(value) == "string" and value or "stock" end },
-    { key = "tireCompoundCategory", default = "stock", parse = function(value) return type(value) == "string" and value or "stock" end },
-    { key = "tireCompoundQuality", default = "mid_end", parse = function(value) return type(value) == "string" and value or "mid_end" end },
-    { key = "brakePack", default = "stock", parse = function(value) return type(value) == "string" and value or "stock" end },
-    { key = "nitrousLevel", default = "stock", parse = function(value) return type(value) == "string" and value or "stock" end },
-    { key = "steeringLockMode", default = "stock", parse = function(value) return type(value) == "string" and value or "stock" end },
-    { key = "revLimiterEnabled", default = false, parse = function(value) return value == true end },
-    { key = "nitrousShotStrength", default = 1.0, parse = function(value) return tonumber(value) or 1.0 end },
-    { key = "antirollForce", default = 0.0, parse = function(value) return tonumber(value) or 0.0 end },
-    { key = "brakeBiasFront", default = 0.5, parse = function(value) return tonumber(value) or 0.5 end },
-    { key = "gripBiasFront", default = 0.5, parse = function(value) return tonumber(value) or 0.5 end },
-    { key = "antirollBiasFront", default = 0.5, parse = function(value) return tonumber(value) or 0.5 end },
-    { key = "suspensionRaise", default = 0.0, parse = function(value) return tonumber(value) or 0.0 end },
-    { key = "suspensionBiasFront", default = 0.5, parse = function(value) return tonumber(value) or 0.5 end },
-}
+local TUNING_SELECTION_SCHEMA = ConstantConfig.TUNING_SELECTION_SCHEMA
 
 local function roundToThreeDecimals(value, fallback)
     local numeric = tonumber(value)

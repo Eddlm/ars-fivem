@@ -9,25 +9,7 @@ local ownerIdentifierPrefixes = (((VehicleManager or {}).Config or {}).save or {
 local function logVm(action, sourceId, message)
     return
 end
-local TUNING_SELECTION_SCHEMA = {
-    { key = "enginePack", parse = function(value) return type(value) == "string" and value or "stock" end },
-    { key = "transmissionPack", parse = function(value) return type(value) == "string" and value or "stock" end },
-    { key = "suspensionPack", parse = function(value) return type(value) == "string" and value or "stock" end },
-    { key = "tireCompoundPack", parse = function(value) return type(value) == "string" and value or "stock" end },
-    { key = "tireCompoundCategory", parse = function(value) return type(value) == "string" and value or "stock" end },
-    { key = "tireCompoundQuality", parse = function(value) return type(value) == "string" and value or "mid_end" end },
-    { key = "brakePack", parse = function(value) return type(value) == "string" and value or "stock" end },
-    { key = "nitrousLevel", parse = function(value) return type(value) == "string" and value or "stock" end },
-    { key = "steeringLockMode", parse = function(value) return type(value) == "string" and value or "stock" end },
-    { key = "revLimiterEnabled", parse = function(value) return value == true end },
-    { key = "nitrousShotStrength", parse = function(value) return tonumber(value) or 1.0 end },
-    { key = "antirollForce", parse = function(value) return tonumber(value) or 0.0 end },
-    { key = "brakeBiasFront", parse = function(value) return tonumber(value) or 0.5 end },
-    { key = "gripBiasFront", parse = function(value) return tonumber(value) or 0.5 end },
-    { key = "antirollBiasFront", parse = function(value) return tonumber(value) or 0.5 end },
-    { key = "suspensionRaise", parse = function(value) return tonumber(value) or 0.0 end },
-    { key = "suspensionBiasFront", parse = function(value) return tonumber(value) or 0.5 end },
-}
+local TUNING_SELECTION_SCHEMA = VehicleManager.Config.constants.TUNING_SELECTION_SCHEMA
 
 local function normalizeSelectionMap(source)
     if type(source) ~= "table" then
