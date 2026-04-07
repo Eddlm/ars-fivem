@@ -110,6 +110,9 @@ function VMUI.CreatePool()
         MenuHandler:CloseAndClearHistory()
     end
 
+    function pool:RefreshIndex()
+    end
+
     return pool
 end
 
