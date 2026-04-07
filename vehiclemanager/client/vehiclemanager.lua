@@ -221,17 +221,10 @@ local TUNE_STATE_BAG_KEY = "performancetuning:tuneState"
 local HANDLING_STATE_BAG_KEY = "performancetuning:handlingState"
 local SAVE_ID_STATE_BAG_KEY = "vehiclemanager:saveId"
 
-local baseGlossColorOptions = AppearanceConfig.baseGlossColorOptions or {}
-local matteColorOptions = AppearanceConfig.matteColorOptions or {}
-local utilColorOptions = AppearanceConfig.utilColorOptions or {}
-local wornColorOptions = AppearanceConfig.wornColorOptions or {}
-local metalColorOptions = AppearanceConfig.metalColorOptions or {}
-local chromeColorOptions = AppearanceConfig.chromeColorOptions or {}
-local xenonColorOptions = AppearanceConfig.xenonColorOptions or {}
 local paintCategories = {}
 for index = 1, #(AppearanceConfig.paintCategories or {}) do
     local category = (AppearanceConfig.paintCategories or {})[index]
-    local resolvedColors = AppearanceConfig[category.colorSet or ""] or baseGlossColorOptions
+    local resolvedColors = AppearanceConfig[category.colorSet or ""] or AppearanceConfig.baseGlossColorOptions
     paintCategories[index] = {
         key = category.key,
         label = category.label,
@@ -268,12 +261,12 @@ local function buildMergedColorOptions(...)
 end
 
 local extraColorOptions = buildMergedColorOptions(
-    baseGlossColorOptions,
-    matteColorOptions,
-    utilColorOptions,
-    wornColorOptions,
-    metalColorOptions,
-    chromeColorOptions
+    AppearanceConfig.baseGlossColorOptions,
+    AppearanceConfig.matteColorOptions,
+    AppearanceConfig.utilColorOptions,
+    AppearanceConfig.wornColorOptions,
+    AppearanceConfig.metalColorOptions,
+    AppearanceConfig.chromeColorOptions
 )
 
 local function buildPaintColorOptionList(options)
@@ -301,10 +294,10 @@ local function buildColorIdLookup(colorOptions)
     return lookup
 end
 
-local utilColorLookup = buildColorIdLookup(utilColorOptions)
-local wornColorLookup = buildColorIdLookup(wornColorOptions)
+local utilColorLookup = buildColorIdLookup(AppearanceConfig.utilColorOptions)
+local wornColorLookup = buildColorIdLookup(AppearanceConfig.wornColorOptions)
 local fullColorLabelById = {}
-for _, colorSet in ipairs({ baseGlossColorOptions, matteColorOptions, utilColorOptions, wornColorOptions, metalColorOptions, chromeColorOptions }) do
+for _, colorSet in ipairs({ AppearanceConfig.baseGlossColorOptions, AppearanceConfig.matteColorOptions, AppearanceConfig.utilColorOptions, AppearanceConfig.wornColorOptions, AppearanceConfig.metalColorOptions, AppearanceConfig.chromeColorOptions }) do
     for index = 1, #colorSet do
         local option = colorSet[index]
         fullColorLabelById[option.colorId] = fullColorLabelById[option.colorId] or option.label
