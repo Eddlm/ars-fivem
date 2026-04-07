@@ -275,7 +275,7 @@ paintCategoryListItem.Items = paintCategoryLabels
 pearlescentColorListItem.Items = buildPaintColorOptionList(extraColorOptions)
 interiorColorListItem.Items = buildPaintColorOptionList(extraColorOptions)
 dashboardColorListItem.Items = buildPaintColorOptionList(extraColorOptions)
-xenonColorListItem.Items = buildPaintColorOptionList(xenonColorOptions)
+xenonColorListItem.Items = buildPaintColorOptionList(AppearanceConfig.xenonColorOptions)
 wheelColorListItem.Items = buildPaintColorOptionList(extraColorOptions)
 
 local function buildColorIdLookup(colorOptions)
