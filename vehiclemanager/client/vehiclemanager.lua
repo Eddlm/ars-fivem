@@ -409,6 +409,7 @@ local getLabelOrFallback = getLocalizedModName
 local getSafeDisplayLabel = getLocalizedModName
 
 
+
 local function registerVehicleRequiredItem(item)
     if item then
         vehicleRequiredItems[#vehicleRequiredItems + 1] = item
