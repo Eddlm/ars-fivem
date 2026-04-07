@@ -1,5 +1,6 @@
 -- Race Control menu — ScaleformUI implementation
--- Loaded after util.lua and before client.lua via fxmanifest.
+-- Static per-state menu architecture
+-- No dynamic item mutation, no runtime adding/removing items
 
 local MENU_TITLE    = 'Race Control'
 local MENU_SUBTITLE = '~b~RACINGSYSTEM'
@@ -30,7 +31,6 @@ raceMenuInitialized       = false
 raceMenuPendingSelectName = nil
 raceMenuPendingEditorName = nil
 raceMenuDeleteConfirmName = nil
-raceMenuDynamicItemsActive = {} -- Track which dynamic items are currently added
 
 -- ─── Helper: determine player's current race state ─────────────────────────────
 
@@ -58,57 +58,94 @@ local function getMenuPlayerState()
     return 'neutral'
 end
 
--- ─── Menu objects ────────────────────────────────────────────────────────────
+-- ─── Shared Menu Items ────────────────────────────────────────────────────────────
 
-local raceMainMenu = UIMenu.New(MENU_TITLE, MENU_SUBTITLE, MENU_X, 0, true)
-raceMainMenu:MenuAlignment(MenuAlignment.LEFT)
-raceMainMenu:SetBannerColor(SColor.LightBlue)
-
--- Reset to Checkpoint (not in menu, kept for future use)
+-- Reset to Checkpoint
 local resetCheckpointMenuItem = UIMenuItem.New(
     'Reset to Checkpoint',
     'Teleport back to your last passed checkpoint.'
 )
 resetCheckpointMenuItem.Activated = function(menu)
     logMenuVerbose('Reset to Checkpoint activated')
-    TriggerServerEvent('racingsystem:resetToCheckpoint')
+    TriggerEvent('racingsystem:resetToLastCheckpoint')
 end
 
--- Start Countdown (not in menu, kept for future use)
+-- Start Countdown
 local startCountdownMenuItem = UIMenuItem.New(
     'Start Countdown',
     'Start countdown for the race you are currently joined to.'
 )
 startCountdownMenuItem.Activated = function(menu)
     logMenuVerbose('Start Countdown activated')
-    TriggerServerEvent('racingsystem:startRace')
+    TriggerEvent('racingsystem:startRace')
 end
 
--- Leave Race (not in menu, kept for future use)
+-- Leave Race
 local leaveRaceMenuItem = UIMenuItem.New(
     'Leave Race',
     'Leave your current race instance.'
 )
 leaveRaceMenuItem.Activated = function(menu)
     logMenuVerbose('Leave Race activated')
-    TriggerServerEvent('racingsystem:leaveRace')
-    -- Menu will refresh via snapshot update when server processes the leave
+    TriggerEvent('racingsystem:leaveRace')
+    menu:Visible(false)
 end
 
--- ─── Host submenu ────────────────────────────────────────────────────────────
+-- ─── 1. NEUTRAL MENU ────────────────────────────────────────────────────────────
+-- State: Not in any race
 
+local neutralMenu = UIMenu.New(MENU_TITLE, MENU_SUBTITLE, MENU_X, 0, true)
+neutralMenu:MenuAlignment(MenuAlignment.LEFT)
+neutralMenu:SetBannerColor(SColor.LightBlue)
+
+-- Host submenu
 local hostItem = UIMenuItem.New(
     'Host',
     'Host a race from saved definitions.'
 )
-raceMainMenu:AddItem(hostItem)
+neutralMenu:AddItem(hostItem)
 
 -- Active Races
 local activeRacesItem = UIMenuItem.New(
     'Active Races',
     'Join a race that is currently running.'
 )
-raceMainMenu:AddItem(activeRacesItem)
+neutralMenu:AddItem(activeRacesItem)
+
+-- Race Editor
+local raceEditorMenuItem = UIMenuItem.New(
+    'Race Editor',
+    'Create and edit race checkpoint layouts.'
+)
+neutralMenu:AddItem(raceEditorMenuItem)
+
+-- ─── 2. STAGING MENU ────────────────────────────────────────────────────────────
+-- State: Staging, Countdown, Finished
+
+local stagingMenu = UIMenu.New(MENU_TITLE, MENU_SUBTITLE, MENU_X, 0, true)
+stagingMenu:MenuAlignment(MenuAlignment.LEFT)
+stagingMenu:SetBannerColor(SColor.Orange)
+
+-- Start Countdown (will be enabled dynamically only for host)
+stagingMenu:AddItem(startCountdownMenuItem)
+
+-- Leave Race
+stagingMenu:AddItem(leaveRaceMenuItem)
+
+-- ─── 3. RACING MENU ────────────────────────────────────────────────────────────
+-- State: Actively racing
+
+local racingMenu = UIMenu.New(MENU_TITLE, MENU_SUBTITLE, MENU_X, 0, true)
+racingMenu:MenuAlignment(MenuAlignment.LEFT)
+racingMenu:SetBannerColor(SColor.Green)
+
+-- Reset to Checkpoint
+racingMenu:AddItem(resetCheckpointMenuItem)
+
+-- Leave Race
+racingMenu:AddItem(leaveRaceMenuItem)
+
+-- ─── Host submenu ────────────────────────────────────────────────────────────
 
 local activeRacesSubmenu = UIMenu.New('Active Races', 'Select a running race to join.', MENU_X, 0, true)
 activeRacesSubmenu:MenuAlignment(MenuAlignment.LEFT)
@@ -161,7 +198,7 @@ joinRaceItem.Activated = function(menu)
     ))
 
     TriggerServerEvent('racingsystem:joinRaceInstanceById', selectedInstance.id)
-    closeRaceMenu()
+    MenuHandler:CloseAndClearHistory()
 end
 
 local hostSubmenu = UIMenu.New('Host', 'Choose a saved race and host it.', MENU_X, 0, true)
@@ -642,13 +679,6 @@ raceEditorMenu.OnCheckboxChange = function(menu, item, checked)
 end
 
 
--- Add Race Editor item to main menu
-local raceEditorMenuItem = UIMenuItem.New(
-    'Race Editor',
-    'Create and edit race checkpoint layouts.'
-)
-raceMainMenu:AddItem(raceEditorMenuItem)
-
 raceEditorMenuItem.Activated = function(menu)
     logMenuVerbose('Race Editor submenu activated')
     menu:SwitchTo(raceEditorMenu, 1, true)
@@ -661,91 +691,32 @@ print('[racingsystem:menu] Menu system loaded. raceMenuInitialized = true')
 -- ─── Public interface (called by client.lua) ─────────────────────────────────
 
 function isRaceMenuVisible()
-    return raceMainMenu:Visible()
+    return neutralMenu:Visible() or stagingMenu:Visible() or racingMenu:Visible()
 end
 
 function openRaceMenu()
     if MenuHandler:IsAnyMenuOpen() then
         MenuHandler:CloseAndClearHistory()
-    else
-        refreshRaceMenu()
-        raceMainMenu:Visible(true)
+        return
     end
-end
 
-function refreshRaceMenu()
-    -- Called whenever menu opens or snapshot updates; dynamically show/hide items based on race state
     local playerState = getMenuPlayerState()
     local instance = type(getJoinedRaceInstance) == 'function' and getJoinedRaceInstance() or nil
     local isHost = instance and instance.owner == GetPlayerServerId(PlayerId())
-    local inRace = playerState == 'staging' or playerState == 'countdown' or playerState == 'racing' or playerState == 'finished'
 
-    logMenuVerbose(('refreshRaceMenu: playerState=%s, inRace=%s, isHost=%s'):format(playerState, inRace, isHost))
+    logMenuVerbose(('openRaceMenu: playerState=%s, isHost=%s'):format(playerState, isHost))
 
-    -- Static items: enable/disable based on state
-    hostItem:Enabled(not inRace)
-    raceEditorMenuItem:Enabled(not inRace)
+    -- Update dynamic states before opening
+    startCountdownMenuItem:Enabled(playerState == 'staging' and isHost)
 
-    -- Track what should be active
-    local shouldHaveStartCountdown = playerState == 'staging' and isHost
-    local shouldHaveLeaveRace = inRace
-    local shouldHaveResetCheckpoint = playerState == 'racing'
-
-    -- Helper: find item index in menu
-    local function findItemIndex(item)
-        for i, menuItem in ipairs(raceMainMenu.Items) do
-            if menuItem == item then
-                return i
-            end
-        end
-        return nil
-    end
-
-    -- Remove items that should no longer be present
-    if not shouldHaveStartCountdown and raceMenuDynamicItemsActive.startCountdown then
-        local idx = findItemIndex(startCountdownMenuItem)
-        if idx then
-            raceMainMenu:RemoveItemAt(idx)
-            logMenuVerbose('Removed Start Countdown')
-        end
-        raceMenuDynamicItemsActive.startCountdown = false
-    end
-
-    if not shouldHaveLeaveRace and raceMenuDynamicItemsActive.leaveRace then
-        local idx = findItemIndex(leaveRaceMenuItem)
-        if idx then
-            raceMainMenu:RemoveItemAt(idx)
-            logMenuVerbose('Removed Leave Race')
-        end
-        raceMenuDynamicItemsActive.leaveRace = false
-    end
-
-    if not shouldHaveResetCheckpoint and raceMenuDynamicItemsActive.resetCheckpoint then
-        local idx = findItemIndex(resetCheckpointMenuItem)
-        if idx then
-            raceMainMenu:RemoveItemAt(idx)
-            logMenuVerbose('Removed Reset to Checkpoint')
-        end
-        raceMenuDynamicItemsActive.resetCheckpoint = false
-    end
-
-    -- Add items that should be present
-    if shouldHaveStartCountdown and not raceMenuDynamicItemsActive.startCountdown then
-        raceMainMenu:AddItem(startCountdownMenuItem)
-        raceMenuDynamicItemsActive.startCountdown = true
-        logMenuVerbose('Added Start Countdown (host in staging)')
-    end
-
-    if shouldHaveLeaveRace and not raceMenuDynamicItemsActive.leaveRace then
-        raceMainMenu:AddItem(leaveRaceMenuItem)
-        raceMenuDynamicItemsActive.leaveRace = true
-        logMenuVerbose('Added Leave Race (in race)')
-    end
-
-    if shouldHaveResetCheckpoint and not raceMenuDynamicItemsActive.resetCheckpoint then
-        raceMainMenu:AddItem(resetCheckpointMenuItem)
-        raceMenuDynamicItemsActive.resetCheckpoint = true
-        logMenuVerbose('Added Reset to Checkpoint (racing)')
+    -- Open the correct menu for current state
+    if playerState == 'neutral' then
+        neutralMenu:Visible(true)
+    elseif playerState == 'racing' then
+        racingMenu:Visible(true)
+    else
+        -- staging, countdown, finished all use staging menu
+        stagingMenu:Visible(true)
     end
 end
 
