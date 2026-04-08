@@ -1,65 +1,34 @@
 RacingSystemUtil = type(RacingSystemUtil) == 'table' and RacingSystemUtil or {}
 
-if type(RacingSystemUtil.NotifyPlayer) ~= 'function' then
-    function RacingSystemUtil.NotifyPlayer(message, isError)
-        local colorPrefix = isError and '~o~' or '~g~'
-        local text = ('%s%s~s~'):format(colorPrefix, tostring(message or ''))
-        BeginTextCommandThefeedPost('STRING')
-        AddTextComponentSubstringPlayerName(text)
-        EndTextCommandThefeedPostTicker(false, false)
+local function registerUtil(name, fn)
+    if type(RacingSystemUtil[name]) ~= 'function' then
+        RacingSystemUtil[name] = fn
     end
 end
 
-if type(RacingSystemUtil.ShowWarningSubtitle) ~= 'function' then
-    function RacingSystemUtil.ShowWarningSubtitle(message, durationMs, colorTag)
-        BeginTextCommandPrint('STRING')
-        local colorPrefix = tostring(colorTag or '~y~')
-        AddTextComponentSubstringPlayerName(('%s%s~s~'):format(colorPrefix, tostring(message or '')))
-        EndTextCommandPrint(math.max(0, math.floor(tonumber(durationMs) or 1000)), true)
-    end
-end
+registerUtil('NotifyPlayer', function(message, isError)
+    local colorPrefix = isError and '~o~' or '~g~'
+    local text = ('%s%s~s~'):format(colorPrefix, tostring(message or ''))
+    BeginTextCommandThefeedPost('STRING')
+    AddTextComponentSubstringPlayerName(text)
+    EndTextCommandThefeedPostTicker(false, false)
+end)
 
-if type(RacingSystemUtil.ShowRaceEventVisual) ~= 'function' then
-    function RacingSystemUtil.ShowRaceEventVisual(title, subtitle, durationMs)
-        return
-    end
-end
+registerUtil('ShowWarningSubtitle', function(message, durationMs, colorTag)
+    BeginTextCommandPrint('STRING')
+    local colorPrefix = tostring(colorTag or '~y~')
+    AddTextComponentSubstringPlayerName(('%s%s~s~'):format(colorPrefix, tostring(message or '')))
+    EndTextCommandPrint(math.max(0, math.floor(tonumber(durationMs) or 1000)), true)
+end)
 
-if type(RacingSystemUtil.DrawRaceEventVisual) ~= 'function' then
-    function RacingSystemUtil.DrawRaceEventVisual()
-        return
-    end
-end
-
-if type(RacingSystemUtil.UpdateCountdownVisual) ~= 'function' then
-    function RacingSystemUtil.UpdateCountdownVisual(instanceId, remainingMs)
-        return
-    end
-end
-
-if type(RacingSystemUtil.ClearCountdownVisual) ~= 'function' then
-    function RacingSystemUtil.ClearCountdownVisual()
-        return
-    end
-end
-
-if type(RacingSystemUtil.UpdateRaceLeaderboardVisual) ~= 'function' then
-    function RacingSystemUtil.UpdateRaceLeaderboardVisual(title, rows)
-        return
-    end
-end
-
-if type(RacingSystemUtil.DrawRaceLeaderboardVisual) ~= 'function' then
-    function RacingSystemUtil.DrawRaceLeaderboardVisual()
-        return
-    end
-end
-
-if type(RacingSystemUtil.ClearRaceLeaderboardVisual) ~= 'function' then
-    function RacingSystemUtil.ClearRaceLeaderboardVisual()
-        return
-    end
-end
+local noop = function() return end
+registerUtil('ShowRaceEventVisual', noop)
+registerUtil('DrawRaceEventVisual', noop)
+registerUtil('UpdateCountdownVisual', noop)
+registerUtil('ClearCountdownVisual', noop)
+registerUtil('UpdateRaceLeaderboardVisual', noop)
+registerUtil('DrawRaceLeaderboardVisual', noop)
+registerUtil('ClearRaceLeaderboardVisual', noop)
 
 -- Global snapshot state — accessed by menu.lua
 latestSnapshot = {
@@ -100,8 +69,8 @@ local raceRuntimeState = {
     penaltyPreviewText = nil,
     penaltyPreviewShownAt = 0,
 }
-local raceCountdownLocalEndByInstanceId = {}
-local raceCountdownReportedZeroByInstanceId = {}
+local countdownEndTimeByInstanceId = {}
+local countdownZeroReportedByInstanceId = {}
 local raceStartCueShownByInstanceId = {}
 local raceTimingState = {
     instanceId = nil,
@@ -109,20 +78,20 @@ local raceTimingState = {
     lapStartedAt = nil,
 }
 local latestSnapshotVersion = 0
-local latestSnapshotAcceptedAt = 0
-local lastSnapshotRequestAt = 0
+local snapshotAcceptedAt = 0
+local snapshotRequestedAt = 0
 local localEntrantIdentity = {
     entrantId = nil,
 }
-local clientReliabilityCounters = {
+local reliabilityCounters = {
     staleSnapshotsIgnored = 0,
 }
-local appliedTrafficMode = nil
+local currentTrafficMode = nil
 local CHECKPOINT_RADIUS_STEP_METERS = 1.0
 local EDITOR_PITCH_UP_CONTROL_ID = 111
 local EDITOR_PITCH_DOWN_CONTROL_ID = 112
 
-local gtaoRaceUrlPromptOpen = false
+local isGTAORacePromptOpen = false
 local clearPredictedRaceProgress
 
 local instanceAssetCache = {}
@@ -133,13 +102,13 @@ local activeInstanceAssets = {
 }
 
 local CHECKPOINT_PASS_ARM_DISTANCE = 30.0
-local CHECKPOINT_PASS_RELEASE_DELTA = 0.75
+local CHECKPOINT_PASS_RELEASE_THRESHOLD = 0.75
 local CHECKPOINT_RECOVERY_PASS_MAX_MPH = 5.0
 local CHECKPOINT_RECOVERY_FORWARD_VELOCITY_RATIO_MAX = 0.66
 local METERS_PER_SECOND_TO_MILES_PER_HOUR = 2.236936
 local MILES_PER_HOUR_TO_METERS_PER_SECOND = 0.44704
 local CHECKPOINT_SOFT_POWER_PENALTY_MULTIPLIER = 0.05
-local joinTeleportInProgress = false
+local isTeleportInProgress = false
 
 local function getClientExtraPrintLevel()
     local rawLevel = 0
@@ -245,38 +214,38 @@ do
             return false
         end
 
-        local var1, var2 = -1, -1
+        local speedTarget, durationTarget = -1, -1
 
         if speedUpObjects[model] then
             if prpsba == 1 then
-                var1, var2 = 15, 0.3
+                speedTarget, durationTarget = 15, 0.3
             elseif prpsba == 2 then
-                var1, var2 = 25, 0.3
+                speedTarget, durationTarget = 25, 0.3
             elseif prpsba == 3 then
-                var1, var2 = 35, 0.5
+                speedTarget, durationTarget = 35, 0.5
             elseif prpsba == 4 then
-                var1, var2 = 45, 0.5
+                speedTarget, durationTarget = 45, 0.5
             elseif prpsba == 5 then
-                var1, var2 = 100, 0.5
+                speedTarget, durationTarget = 100, 0.5
             else
-                var1, var2 = 25, 0.4
+                speedTarget, durationTarget = 25, 0.4
             end
         elseif slowDownObjects[model] then
-            var2 = -1
+            durationTarget = -1
             if prpsba == 1 then
-                var1 = 44
+                speedTarget = 44
             elseif prpsba == 2 then
-                var1 = 30
+                speedTarget = 30
             elseif prpsba == 3 then
-                var1 = 16
+                speedTarget = 16
             else
-                var1 = 30
+                speedTarget = 30
             end
         else
             return false
         end
 
-        return true, var1, var2
+        return true, speedTarget, durationTarget
     end
 end
 
@@ -296,7 +265,7 @@ RegisterNetEvent('racingsystem:notify', function(payload)
 end)
 
 local function requestRaceStateSnapshot()
-    lastSnapshotRequestAt = GetGameTimer()
+    snapshotRequestedAt = GetGameTimer()
     TriggerServerEvent('racingsystem:requestState')
 end
 
@@ -541,7 +510,7 @@ local function getClosestCheckpointIndex()
     return closestIndex, closestDistance
 end
 
-local function ensureEditorActive()
+local function isEditorActive()
     if editorState.active then
         return true
     end
@@ -579,7 +548,7 @@ function endEditorSession()
 end
 
 function addCheckpointAtPlayer()
-    if not ensureEditorActive() then
+    if not isEditorActive() then
         return
     end
 
@@ -599,7 +568,7 @@ function addCheckpointAtPlayer()
 end
 
 local function moveClosestCheckpointToPlayer()
-    if not ensureEditorActive() then
+    if not isEditorActive() then
         return
     end
 
@@ -617,7 +586,7 @@ local function moveClosestCheckpointToPlayer()
 end
 
 local function deleteClosestCheckpoint()
-    if not ensureEditorActive() then
+    if not isEditorActive() then
         return
     end
 
@@ -631,7 +600,7 @@ local function deleteClosestCheckpoint()
 end
 
 local function adjustClosestCheckpointRadius(direction)
-    if not ensureEditorActive() then
+    if not isEditorActive() then
         return
     end
 
@@ -654,7 +623,7 @@ local function adjustClosestCheckpointRadius(direction)
 end
 
 local function toggleGrabClosestCheckpoint()
-    if not ensureEditorActive() then
+    if not isEditorActive() then
         return
     end
 
@@ -682,7 +651,7 @@ local function wasEditorControlJustPressed(controlId)
 end
 
 local function saveEditorRace(optionalName)
-    if not ensureEditorActive() then
+    if not isEditorActive() then
         return
     end
 
@@ -1525,11 +1494,11 @@ end
 local function applyJoinedInstanceTrafficMode()
     local joinedInstance = getJoinedRaceInstance()
     local targetMode = normalizeTrafficMode(joinedInstance and joinedInstance.trafficMode)
-    if appliedTrafficMode == targetMode then
+    if currentTrafficMode == targetMode then
         return
     end
 
-    appliedTrafficMode = targetMode
+    currentTrafficMode = targetMode
     TriggerEvent('traffic_control:setMode', targetMode, 'racingsystem_joined_instance')
 end
 
@@ -1564,8 +1533,8 @@ clearPredictedRaceProgress = function(instanceId)
     end
 
     if instanceId == nil or tonumber(predicted.instanceId) == tonumber(instanceId) then
-    raceRuntimeState.predictedProgress = nil
-end
+        raceRuntimeState.predictedProgress = nil
+    end
 end
 
 local function getEffectiveEntrantProgress(instance, entrant)
@@ -1738,11 +1707,11 @@ local function extractGTAOUGCIdFromInput(value)
 end
 
 local function closeGTAORaceUrlPrompt(forceReset)
-    if not forceReset and not gtaoRaceUrlPromptOpen then
+    if not forceReset and not isGTAORacePromptOpen then
         return
     end
 
-    gtaoRaceUrlPromptOpen = false
+    isGTAORacePromptOpen = false
     SetNuiFocus(false, false)
     SendNUIMessage({
         action = 'racingsystem:toggleGTAORacePrompt',
@@ -1751,11 +1720,11 @@ local function closeGTAORaceUrlPrompt(forceReset)
 end
 
 local function openGTAORaceUrlPrompt()
-    if gtaoRaceUrlPromptOpen then
+    if isGTAORacePromptOpen then
         return
     end
 
-    gtaoRaceUrlPromptOpen = true
+    isGTAORacePromptOpen = true
     SetNuiFocus(true, true)
     SendNUIMessage({
         action = 'racingsystem:toggleGTAORacePrompt',
@@ -1831,14 +1800,14 @@ local function loadInstanceAssets(payload)
                 end
 
                 local speedAdjustment = tonumber(prop.speedAdjustment) or -1
-                local hasSpeedAdjust, speed, duration = GetPropSpeedModificationParameters(model, speedAdjustment)
+                local hasSpeedAdjust, speedTarget, durationTarget = GetPropSpeedModificationParameters(model, speedAdjustment)
                 if hasSpeedAdjust then
-                    if speed > -1 then
-                        SetObjectStuntPropSpeedup(newObject, speed)
+                    if speedTarget > -1 then
+                        SetObjectStuntPropSpeedup(newObject, speedTarget)
                     end
 
-                    if duration > -1 then
-                        SetObjectStuntPropDuration(newObject, duration)
+                    if durationTarget > -1 then
+                        SetObjectStuntPropDuration(newObject, durationTarget)
                     end
                 end
 
@@ -1910,12 +1879,12 @@ RegisterNetEvent('racingsystem:stateSnapshot', function(snapshot)
 
     local incomingVersion = math.floor(tonumber(snapshot.snapshotVersion) or 0)
     if incomingVersion > 0 and incomingVersion <= latestSnapshotVersion then
-        clientReliabilityCounters.staleSnapshotsIgnored = clientReliabilityCounters.staleSnapshotsIgnored + 1
+        reliabilityCounters.staleSnapshotsIgnored = reliabilityCounters.staleSnapshotsIgnored + 1
         if getClientExtraPrintLevel() == 2 then
             logClientVerbose(("Ignored stale snapshot version=%s latest=%s ignored=%s"):format(
                 tostring(incomingVersion),
                 tostring(latestSnapshotVersion),
-                tostring(clientReliabilityCounters.staleSnapshotsIgnored)
+                tostring(reliabilityCounters.staleSnapshotsIgnored)
             ))
         end
         return
@@ -1924,7 +1893,7 @@ RegisterNetEvent('racingsystem:stateSnapshot', function(snapshot)
     if incomingVersion > 0 then
         latestSnapshotVersion = incomingVersion
     end
-    latestSnapshotAcceptedAt = GetGameTimer()
+    snapshotAcceptedAt = GetGameTimer()
     latestSnapshot = snapshot
 
     -- Refresh menu if it's open (for live state updates)
@@ -1958,17 +1927,17 @@ RegisterNetEvent('racingsystem:stateSnapshot', function(snapshot)
     local snapshotInstances = type(snapshot.instances) == 'table' and snapshot.instances or {}
     for _, instance in ipairs(snapshotInstances) do
         local instanceId = tonumber(instance.id)
-        if instanceId and instance.state == RacingSystem.States.staging and raceCountdownLocalEndByInstanceId[instanceId] then
-            activeCountdowns[instanceId] = raceCountdownLocalEndByInstanceId[instanceId]
+        if instanceId and instance.state == RacingSystem.States.staging and countdownEndTimeByInstanceId[instanceId] then
+            activeCountdowns[instanceId] = countdownEndTimeByInstanceId[instanceId]
         end
     end
 
-    raceCountdownLocalEndByInstanceId = activeCountdowns
+    countdownEndTimeByInstanceId = activeCountdowns
     if not getJoinedRaceInstance() then
         localEntrantIdentity.entrantId = nil
     end
 
-    if raceMenuInitialized and isRaceMenuVisible() then
+    if raceMenuInitialized and type(isRaceMenuVisible) == 'function' and isRaceMenuVisible() and type(refreshRaceMenu) == 'function' then
         refreshRaceMenu()
     end
 
@@ -1987,11 +1956,11 @@ RegisterNetEvent('racingsystem:startCountdown', function(payload)
     end
 
     ensureLocalRaceTiming(instanceId)
-    raceCountdownLocalEndByInstanceId[instanceId] = GetGameTimer() + countdownMs
-    raceCountdownReportedZeroByInstanceId[instanceId] = nil
+    countdownEndTimeByInstanceId[instanceId] = GetGameTimer() + countdownMs
+    countdownZeroReportedByInstanceId[instanceId] = nil
     raceStartCueShownByInstanceId[instanceId] = nil
-    raceTimingState.raceStartedAt = raceCountdownLocalEndByInstanceId[instanceId]
-    raceTimingState.lapStartedAt = raceCountdownLocalEndByInstanceId[instanceId]
+    raceTimingState.raceStartedAt = countdownEndTimeByInstanceId[instanceId]
+    raceTimingState.lapStartedAt = countdownEndTimeByInstanceId[instanceId]
 
     -- Refresh menu if visible (state changed from idle to staging)
     if type(isRaceMenuVisible) == 'function' and isRaceMenuVisible() and type(refreshRaceMenu) == 'function' then
@@ -2100,10 +2069,10 @@ local function runSmartJoinTeleport(payload)
         return
     end
 
-    if joinTeleportInProgress then
+    if isTeleportInProgress then
         return
     end
-    joinTeleportInProgress = true
+    isTeleportInProgress = true
 
     local shouldNotifyFallback = false
     local didFadeOut = false
@@ -2191,7 +2160,7 @@ local function runSmartJoinTeleport(payload)
     if not ok then
     end
 
-    joinTeleportInProgress = false
+    isTeleportInProgress = false
 end
 
 local function buildCheckpointTeleportPayload(checkpoint, nextCheckpoint)
@@ -2262,7 +2231,104 @@ RegisterNetEvent('racingsystem:teleportToCheckpoint', function(payload)
     end)
 end)
 
-RegisterNetEvent('racingsystem:smartCheckpointTeleport', function(payload)
+-- Local-only event: triggered by menu via TriggerEvent, never sent from server.
+AddEventHandler('racingsystem:resetToLastCheckpoint', function()
+    local joinedInstance = getJoinedRaceInstance()
+    if not joinedInstance or joinedInstance.state ~= RacingSystem.States.running then
+        RacingSystemUtil.NotifyPlayer('You must be in an active running race.', true)
+        return
+    end
+
+    local entrant = getLocalEntrant(joinedInstance)
+    if not entrant then
+        RacingSystemUtil.NotifyPlayer('You are not registered as a race entrant.', true)
+        return
+    end
+
+    local entrantProgress = getEffectiveEntrantProgress(joinedInstance, entrant)
+    local lastCheckpoint, nextCheckpoint = resolveLastPassedCheckpointTarget(joinedInstance, entrantProgress)
+    if type(lastCheckpoint) ~= 'table' then
+        RacingSystemUtil.NotifyPlayer('No checkpoint available for reset yet.', true)
+        return
+    end
+
+    TriggerEvent('racingsystem:smartCheckpointTeleport', {
+        checkpoint = lastCheckpoint,
+        nextCheckpoint = nextCheckpoint,
+        preserveVelocity = false
+    })
+
+    RacingSystemUtil.NotifyPlayer('Reset to last checkpoint.', false)
+end)
+
+-- Local-only event: triggered by menu via TriggerEvent. Pre-validates locally for UX, then forwards to server.
+AddEventHandler('racingsystem:startRace', function()
+    local joinedInstance = getJoinedRaceInstance()
+    if not joinedInstance then
+        RacingSystemUtil.NotifyPlayer('You are not in any race.', true)
+        return
+    end
+
+    if joinedInstance.state == RacingSystem.States.staging then
+        RacingSystemUtil.NotifyPlayer('Countdown already started.', true)
+        return
+    end
+
+    if joinedInstance.state ~= RacingSystem.States.idle then
+        RacingSystemUtil.NotifyPlayer('Race cannot be started right now.', true)
+        return
+    end
+
+    local entrant = getLocalEntrant(joinedInstance)
+    if not entrant then
+        RacingSystemUtil.NotifyPlayer('You are not registered as a race entrant.', true)
+        return
+    end
+
+    if joinedInstance.owner ~= GetPlayerServerId(PlayerId()) then
+        RacingSystemUtil.NotifyPlayer('Only the race host can start the countdown.', true)
+        return
+    end
+
+    if #(joinedInstance.entrants or {}) == 0 then
+        RacingSystemUtil.NotifyPlayer('No racers are joined to that instance.', true)
+        return
+    end
+
+    TriggerServerEvent('racingsystem:startRace')
+    RacingSystemUtil.NotifyPlayer('Countdown started.', false)
+end)
+
+-- Local-only event: triggered by menu via TriggerEvent. Cleans up client state immediately, then notifies server.
+AddEventHandler('racingsystem:leaveRace', function()
+    local joinedInstance = getJoinedRaceInstance()
+    if not joinedInstance then
+        RacingSystemUtil.NotifyPlayer('You are not in any race.', true)
+        return
+    end
+
+    -- Immediate client side cleanup
+    localEntrantIdentity.entrantId = nil
+    raceRuntimeState.pendingCheckpointPass = nil
+    raceRuntimeState.checkpointPassArm = nil
+    clearPredictedRaceProgress()
+    resetLocalRaceTiming()
+    clearFutureCheckpointBlips()
+    clearStartLineBlip()
+    RacingSystemUtil.ClearCountdownVisual()
+    RacingSystemUtil.ClearRaceLeaderboardVisual()
+    currentTrafficMode = nil
+    TriggerEvent('traffic_control:setMode', 'none', 'racingsystem_left_race')
+
+    -- Async notify server
+    TriggerServerEvent('racingsystem:leaveRace')
+
+    RacingSystemUtil.NotifyPlayer('Left race.', false)
+    MenuHandler:CloseAndClearHistory()
+end)
+
+-- Local-only event: pure client teleport, triggered via TriggerEvent, never sent from server.
+AddEventHandler('racingsystem:smartCheckpointTeleport', function(payload)
     Citizen.CreateThread(function()
         local checkpoint = type(payload) == 'table' and payload.checkpoint or nil
         local nextCheckpoint = type(payload) == 'table' and payload.nextCheckpoint or nil
@@ -2349,7 +2415,6 @@ RegisterNetEvent('racingsystem:editorRaceSaved', function(payload)
     for _, checkpoint in ipairs(editorState.checkpoints) do
         ensureCheckpointMarkerAlignment(checkpoint)
     end
-    requestRaceStateSnapshot()
     refreshEditorMenu(buildMenuState())
 end)
 
@@ -2359,13 +2424,12 @@ RegisterNetEvent('racingsystem:raceDefinitionRegistered', function(payload)
     end
 
     local definition = type(payload.definition) == 'table' and payload.definition or {}
-    raceMenuPendingSelectName = definition.name or raceMenuPendingSelectName
-    raceMenuPendingEditorName = definition.name or raceMenuPendingEditorName
-    requestRaceStateSnapshot()
+    pendingSelectRaceName = definition.name or pendingSelectRaceName
+    pendingEditorRaceName = definition.name or pendingEditorRaceName
 end)
 
 RegisterNetEvent('racingsystem:raceDefinitionDeleted', function(payload)
-    raceMenuDeleteConfirmName = nil
+    deleteConfirmRaceName = nil
 
     if type(payload) ~= 'table' or payload.ok ~= true then
         refreshEditorMenu(buildMenuState())
@@ -2378,8 +2442,6 @@ RegisterNetEvent('racingsystem:raceDefinitionDeleted', function(payload)
     if RacingSystem.NormalizeRaceName(editorState.selectedName) == RacingSystem.NormalizeRaceName(deletedName) then
         editorState.selectedName = ''
     end
-
-    requestRaceStateSnapshot()
 end)
 
 CreateThread(function()
@@ -2589,7 +2651,7 @@ CreateThread(function()
             if entrant then
                 if joinedInstance.state == RacingSystem.States.staging and tonumber(joinedInstance.id) then
                     local joinedInstanceId = tonumber(joinedInstance.id)
-                    local countdownEndsAt = raceCountdownLocalEndByInstanceId[joinedInstanceId]
+                    local countdownEndsAt = countdownEndTimeByInstanceId[joinedInstanceId]
                     local remainingMs = countdownEndsAt and math.max(0, countdownEndsAt - GetGameTimer()) or 0
                     RacingSystemUtil.UpdateCountdownVisual(joinedInstanceId, remainingMs)
 
@@ -2597,8 +2659,8 @@ CreateThread(function()
                         SetVehicleHandbrake(pedVehicle, true)
                     end
 
-                    if countdownEndsAt and remainingMs <= 0 and not raceCountdownReportedZeroByInstanceId[joinedInstanceId] then
-                        raceCountdownReportedZeroByInstanceId[joinedInstanceId] = true
+                    if countdownEndsAt and remainingMs <= 0 and not countdownZeroReportedByInstanceId[joinedInstanceId] then
+                        countdownZeroReportedByInstanceId[joinedInstanceId] = true
                         TriggerServerEvent('racingsystem:countdownReachedZero', joinedInstanceId, GetGameTimer())
                     end
                 elseif joinedInstance.state == RacingSystem.States.running then
@@ -2826,7 +2888,7 @@ CreateThread(function()
                                 local newMinDistance = math.min(previousMinDistance, distance)
                                 checkpointPassArm.minDistanceByVariant[routeVariant] = newMinDistance
 
-                                if distance >= (newMinDistance + CHECKPOINT_PASS_RELEASE_DELTA) then
+                                if distance >= (newMinDistance + CHECKPOINT_PASS_RELEASE_THRESHOLD) then
                                     if bestPassDistance == nil or newMinDistance < bestPassDistance then
                                         bestPassDistance = newMinDistance
                                         bestPassCandidate = candidate
@@ -3029,16 +3091,16 @@ CreateThread(function()
     local requestCooldownMs = 1500
     while true do
         local joinedInstance = getJoinedRaceInstance()
-        local hasActiveCountdown = next(raceCountdownLocalEndByInstanceId) ~= nil
+        local hasActiveCountdown = next(countdownEndTimeByInstanceId) ~= nil
         local shouldReconcile = joinedInstance ~= nil or hasActiveCountdown or (raceMenuInitialized and isRaceMenuVisible())
         if shouldReconcile then
             local now = GetGameTimer()
-            local lastAcceptedAt = tonumber(latestSnapshotAcceptedAt) or 0
-            local lastRequestedAt = tonumber(lastSnapshotRequestAt) or 0
+            local lastAcceptedAt = tonumber(snapshotAcceptedAt) or 0
+            local lastRequestedAt = tonumber(snapshotRequestedAt) or 0
             if (now - lastAcceptedAt) >= staleThresholdMs and (now - lastRequestedAt) >= requestCooldownMs then
                 logClientVerbose(("Requesting snapshot reconciliation (latestVersion=%s ignoredStale=%s)"):format(
                     tostring(latestSnapshotVersion),
-                    tostring(clientReliabilityCounters.staleSnapshotsIgnored)
+                    tostring(reliabilityCounters.staleSnapshotsIgnored)
                 ))
                 requestRaceStateSnapshot()
             end
@@ -3064,7 +3126,7 @@ AddEventHandler('onClientResourceStop', function(resourceName)
 
     closeGTAORaceUrlPrompt(true)
     localEntrantIdentity.entrantId = nil
-    appliedTrafficMode = nil
+    currentTrafficMode = nil
     TriggerEvent('traffic_control:setMode', 'none', 'racingsystem_resource_stop')
     clearPowerPenaltyVehicleOverride()
     clearFutureCheckpointBlips()

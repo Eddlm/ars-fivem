@@ -275,7 +275,7 @@ function TuningPackManager.buildTireCompoundPackOptions(selectedPackId, baseTire
     local options = {}
 
     for index, pack in ipairs(packs) do
-        local enabled = not (type(pack) ~= 'table' or pack.enabled == false)
+        local enabled = type(pack) == 'table' and pack.enabled ~= false
         if enabled and isUnavailableTirePackForGrip(pack, baseTireMax, isFiniteNumber, performance) then
             enabled = false
         end
@@ -702,18 +702,7 @@ local function getEngineUpgradeProgress(selectedPackId)
     return selectedLevel, totalUpgrades
 end
 
-local function roundToThreeDecimals(value, fallback)
-    local numeric = tonumber(value)
-    if numeric == nil then
-        return fallback
-    end
-
-    if numeric >= 0 then
-        return math.floor((numeric * 1000.0) + 0.5) / 1000.0
-    end
-
-    return math.ceil((numeric * 1000.0) - 0.5) / 1000.0
-end
+local roundToThreeDecimals = PerformanceTuning.VehicleManager.roundToThreeDecimals
 
 local function applyComposedDriveForce(vehicle, bucket, options)
     options = options or {}
@@ -786,7 +775,7 @@ local function applyComposedDriveForce(vehicle, bucket, options)
         end
 
         if (powerChanged or topSpeedChanged) and type(internals.requestDragRebalance) == 'function' then
-            internals.requestDragRebalance(vehicle, 0, {
+            internals.requestDragRebalance(vehicle, {
                 skipSync = true,
                 skipRefresh = true,
             })

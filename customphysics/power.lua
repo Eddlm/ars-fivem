@@ -60,7 +60,6 @@ local state = {
     overspeedPowerMultiplier = 1.0,
     offroadTargetMultiplier = 1.0,
     antiBoostMultiplier = 1.0,
-    lastRpm = 0.0,
     lastPlanarSpeed = 0.0,
     lastStabilityVelocity = nil,
     lastStabilitySampleAt = 0,
@@ -546,7 +545,6 @@ function CustomPhysicsPower.reset(vehicle)
     state.overspeedPowerMultiplier = 1.0
     state.offroadTargetMultiplier = 1.0
     state.antiBoostMultiplier = 1.0
-    state.lastRpm = 0.0
     state.lastPlanarSpeed = 0.0
     state.lastStabilityVelocity = nil
     state.lastStabilitySampleAt = 0

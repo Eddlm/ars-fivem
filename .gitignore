@@ -1,9 +1,15 @@
 .vscode/
 .idea/
+.*/
+**/.*/
 *.log
 .DS_Store
 Thumbs.db
 vehiclemanager/savedvehicles/*.json
 racingsystem/race_index.json
-AGENTS.md
-**/AGENTS.md
+
+# Ignore all markdown by default
+**/*.md
+
+# Keep markdown docs inside any Docs folder
+!**/Docs/**/*.md

@@ -6,20 +6,12 @@ local Nitrous = {
     defaultOverrideLevel = tonumber((type(Config.nitrous) == "table" and Config.nitrous.defaultOverrideLevel) or 1.0) or 1.0,
     defaultHudFill = tonumber((type(Config.nitrous) == "table" and Config.nitrous.defaultHudFill) or 100.0) or 100.0,
     controlId = math.max(0, math.floor(tonumber((type(Config.nitrous) == "table" and Config.nitrous.controlId) or 73) or 73)),
-    debugStatusIntervalMs = math.max(250, math.floor(tonumber((type(Config.nitrous) == "table" and Config.nitrous.debugStatusIntervalMs) or 1000) or 1000)),
 }
 
 local activeNitrousShot = {
     vehicle = nil,
     activeUntil = 0,
-    lastStatusNotifyAt = 0,
 }
-
-local function notify(message)
-    BeginTextCommandThefeedPost("STRING")
-    AddTextComponentSubstringPlayerName(tostring(message or ""))
-    EndTextCommandThefeedPostTicker(false, false)
-end
 
 local function requestNitrousPtfxAsset()
     if HasNamedPtfxAssetLoaded(Nitrous.ptfxAsset) then
@@ -44,7 +36,6 @@ function CustomPhysicsNitrous.reset(vehicle)
     stopNitrousOverride(targetVehicle)
     activeNitrousShot.vehicle = nil
     activeNitrousShot.activeUntil = 0
-    activeNitrousShot.lastStatusNotifyAt = 0
 end
 
 function CustomPhysicsNitrous.executeShot(vehicle, instructions)
@@ -72,7 +63,6 @@ function CustomPhysicsNitrous.executeShot(vehicle, instructions)
     SetVehicleHudSpecialAbilityBarActive(vehicle, false)
     activeNitrousShot.vehicle = vehicle
     activeNitrousShot.activeUntil = GetGameTimer() + durationMs
-    activeNitrousShot.lastStatusNotifyAt = 0
     return true
 end
 
@@ -94,11 +84,6 @@ function CustomPhysicsNitrous.update(vehicle, now)
     DisableControlAction(0, Nitrous.controlId, true)
     DisableControlAction(1, Nitrous.controlId, true)
     DisableControlAction(2, Nitrous.controlId, true)
-
-    local intervalMs = Nitrous.debugStatusIntervalMs
-    if (now - (activeNitrousShot.lastStatusNotifyAt or 0)) >= intervalMs then
-        activeNitrousShot.lastStatusNotifyAt = now
-    end
 end
 
 function CustomPhysicsNitrous.getDebugSnapshot()
@@ -115,10 +100,10 @@ function CustomPhysicsNitrous.getDebugSnapshot()
     }
 end
 
-RegisterNetEvent('customphysics:nitrous:executeShot', function(vehicle, instructions)
+AddEventHandler('customphysics:nitrous:executeShot', function(vehicle, instructions)
     CustomPhysicsNitrous.executeShot(vehicle, instructions)
 end)
 
-RegisterNetEvent('customphysics:nitrous:clear', function(vehicle)
+AddEventHandler('customphysics:nitrous:clear', function(vehicle)
     CustomPhysicsNitrous.reset(vehicle)
 end)

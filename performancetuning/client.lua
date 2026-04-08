@@ -127,11 +127,10 @@ syncVehicleHandlingState = function(vehicle)
     return PerformanceTuning.VehicleManager.syncVehicleHandlingState(vehicle)
 end
 
-local function notifyDragRebalanceFinished(dragCoeff)
-    local _ = dragCoeff
+local function notifyDragRebalanceFinished()
 end
 
-local function requestDragRebalance(vehicle, durationMs, options)
+local function requestDragRebalance(vehicle, options)
     if not PerformanceTuning.VehicleManager.isVehicleEntityValid(vehicle) then
         return false
     end
@@ -140,7 +139,6 @@ local function requestDragRebalance(vehicle, durationMs, options)
     local dragField = HandlingFields.engine and HandlingFields.engine.drag or 'fInitialDragCoeff'
     local powerField = HandlingFields.engine and HandlingFields.engine.power or 'fInitialDriveForce'
     local topSpeedField = HandlingFields.engine and HandlingFields.engine.topSpeed or 'fInitialDriveMaxFlatVel'
-    local _ = durationMs
     local currentPower = readHandlingValue(vehicle, 'float', powerField)
     local currentTopSpeedFlatVel = readHandlingValue(vehicle, 'float', topSpeedField)
     if not isFiniteNumber(currentPower) or not isFiniteNumber(currentTopSpeedFlatVel) then
@@ -160,7 +158,7 @@ local function requestDragRebalance(vehicle, durationMs, options)
     if options.skipRefresh ~= true then
         refreshVehicleAfterHandlingChange(vehicle)
     end
-    notifyDragRebalanceFinished(targetDragCoeff)
+    notifyDragRebalanceFinished()
     return true
 end
 

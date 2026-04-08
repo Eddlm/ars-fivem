@@ -17,6 +17,8 @@ local function roundToThreeDecimals(value, fallback)
     return math.ceil((numeric * 1000.0) - 0.5) / 1000.0
 end
 
+VehicleManager.roundToThreeDecimals = roundToThreeDecimals
+
 function VehicleManager.getVehicleCacheKey(vehicle)
     if not vehicle or vehicle == 0 then
         return nil
@@ -163,25 +165,7 @@ function VehicleManager.serializeTuneState(bucket)
     local brakeBiasField = internals.BRAKE_BIAS_FRONT_FIELD
     local suspensionBiasField = internals.SUSPENSION_BIAS_FRONT_FIELD
     local tireBiasField = internals.TIRE_BIAS_FRONT_FIELD
-    local normalizeSteeringLockMode = internals.normalizeSteeringLockMode or function(mode)
-        local normalized = tostring(mode or 'stock'):lower()
-        if normalized == 'balanced' or normalized == 'balance' then
-            return 'balanced'
-        end
-        if normalized == 'aggro' or normalized == 'aggressive' then
-            return 'aggressive'
-        end
-        if normalized == 'very_aggro' or normalized == 'very_aggressive' or normalized == 'extreme_aggressive' then
-            return 'very_aggressive'
-        end
-        if normalized == 'very_smooth' or normalized == 'extreme_smooth' then
-            return 'very_smooth'
-        end
-        if normalized == 'sooth' or normalized == 'smooth' then
-            return 'smooth'
-        end
-        return 'stock'
-    end
+    local normalizeSteeringLockMode = internals.normalizeSteeringLockMode
     return {
         enginePack = bucket.enginePack or 'stock',
         transmissionPack = bucket.transmissionPack or 'stock',

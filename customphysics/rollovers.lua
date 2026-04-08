@@ -109,10 +109,7 @@ function CustomPhysicsRollovers.update(vehicle)
         return
     end
 
-    local frameTime = GetFrameTime()
-    if frameTime <= 0.000001 then
-        frameTime = 1.0 / 60.0
-    end
+    local frameTime = CustomPhysicsUtil.getDeltaSeconds()
 
     local settleProgress = CustomPhysicsUtil.clamp(elapsedMs / ROLLOVER_SETTLE_DURATION_MS, 0.0, 1.0)
     local forceMultiplier = ROLLOVER_INITIAL_FORCE_MULTIPLIER - ((ROLLOVER_INITIAL_FORCE_MULTIPLIER - 1.0) * settleProgress)

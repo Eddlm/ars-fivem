@@ -19,7 +19,7 @@ local lifecycleAnomalyLogByKey = {}
 local UGC_FETCH_RETRY_COOLDOWN_MS = 700
 local nextAllowedUGCFetchAt = 0
 local GTAO_CHECKPOINT_RADIUS_SCALE = 1.5
-local nextEntrantToken = 1
+local nextEntrantIdToken = 1
 local nextSnapshotVersion = 0
 local reliabilityCounters = {
     rejectedJoinRunning = 0,
@@ -61,10 +61,6 @@ local function logVerbose(message)
     end
 end
 
-local function log(message)
-    logVerbose(message)
-end
-
 local function shouldLogCheckpointAnomaly(source, instanceId)
     local key = ('%s:%s'):format(tonumber(source) or 0, tonumber(instanceId) or -1)
     local now = GetGameTimer()
@@ -102,8 +98,8 @@ local function logLifecycleEvent(eventName, instance, entrant, source, oldState,
 end
 
 local function buildEntrantId(source)
-    local token = nextEntrantToken
-    nextEntrantToken = nextEntrantToken + 1
+    local token = nextEntrantIdToken
+    nextEntrantIdToken = nextEntrantIdToken + 1
     return ('%s-%s-%s'):format(
         tostring(tonumber(source) or 0),
         tostring(math.floor(tonumber(os.time()) or 0)),
@@ -471,7 +467,7 @@ local function saveRaceIndex()
         return false
     end
 
-    log(('Saved %s with %s definition(s).'):format(RACE_INDEX_FILE, #definitions))
+    logVerbose(('Saved %s with %s definition(s).'):format(RACE_INDEX_FILE, #definitions))
     return true
 end
 
@@ -493,7 +489,7 @@ local function loadRaceIndex()
                     exampleCount = exampleCount + 1
                 end
             end
-            log(('Loaded %s example definition(s) from %s.'):format(exampleCount, RACE_INDEX_EXAMPLES_FILE))
+            logVerbose(('Loaded %s example definition(s) from %s.'):format(exampleCount, RACE_INDEX_EXAMPLES_FILE))
         else
             logError(("The server could not read '%s' as a race definition list."):format(RACE_INDEX_EXAMPLES_FILE))
         end
@@ -501,7 +497,7 @@ local function loadRaceIndex()
 
     local rawIndex = LoadResourceFile(RESOURCE_NAME, RACE_INDEX_FILE)
     if not rawIndex or rawIndex == '' then
-        log(('%s was not found. No user race definitions loaded.'):format(RACE_INDEX_FILE))
+        logVerbose(('%s was not found. No user race definitions loaded.'):format(RACE_INDEX_FILE))
         return
     end
 
@@ -522,7 +518,7 @@ local function loadRaceIndex()
         end
     end
 
-    log(('Loaded %s definition(s) from %s.'):format(loadedCount, RACE_INDEX_FILE))
+    logVerbose(('Loaded %s definition(s) from %s.'):format(loadedCount, RACE_INDEX_FILE))
 end
 
 local function registerKnownRaceDefinition(raceName, sourceType, raceId)
@@ -931,7 +927,7 @@ end
 local function sendSnapshot(target)
     nextSnapshotVersion = nextSnapshotVersion + 1
     local snapshot = buildFullSnapshot(target)
-    log(('Sending snapshot to %s | version=%s definitions=%s instances=%s rejectedJoinRunning=%s emptyDestroyed=%s illegalLifecycle=%s'):format(
+    logVerbose(('Sending snapshot to %s | version=%s definitions=%s instances=%s rejectedJoinRunning=%s emptyDestroyed=%s illegalLifecycle=%s'):format(
         tostring(target),
         tostring(snapshot.snapshotVersion or 0),
         #(type(snapshot.definitions) == 'table' and snapshot.definitions or {}),
@@ -1450,7 +1446,7 @@ local function listJsonFilesInFolder(folderName)
         return tostring(a):lower() < tostring(b):lower()
     end)
 
-    log(('Listed %s json file(s) in %s: %s'):format(
+    logVerbose(('Listed %s json file(s) in %s: %s'):format(
         #fileNames,
         tostring(folderName),
         (#fileNames > 0 and table.concat(fileNames, ', ') or '(none)')
@@ -1509,7 +1505,7 @@ local function syncKnownRaceDefinitionsFromFiles()
     end
 
     if syncedDefinitionCount == 0 then
-        log('Skipping race-index sync because no race files were discovered from disk.')
+        logVerbose('Skipping race-index sync because no race files were discovered from disk.')
         return false
     end
 
@@ -1542,7 +1538,7 @@ local function syncKnownRaceDefinitionsFromFiles()
     knownRaceDefinitionsByName = syncedDefinitionsByName
     saveRaceIndex()
 
-    log(('Synchronized race index from disk with %s definition(s).'):format(#buildSavedRaceDefinitions()))
+    logVerbose(('Synchronized race index from disk with %s definition(s).'):format(#buildSavedRaceDefinitions()))
     return true
 end
 
@@ -1571,7 +1567,7 @@ buildSavedRaceDefinitions = function()
         )
     end
 
-    log(('Built %s saved race definition(s): %s'):format(
+    logVerbose(('Built %s saved race definition(s): %s'):format(
         #definitions,
         (#definitionLabels > 0 and table.concat(definitionLabels, ', ') or '(none)')
     ))
@@ -3194,7 +3190,8 @@ RegisterNetEvent('racingsystem:deleteRaceDefinition', function(raceName)
     })
 end)
 
-RegisterNetEvent('racingsystem:invokeRace', function(raceName, lapCount)
+RegisterNetEvent('racingsystem:invokeRace', function(payload, lapCount)
+    local raceName = type(payload) == 'table' and (payload.lookupName or payload.name) or payload
     local src = source
     if type(raceName) == 'table' then
         logVerbose(("[invoke:event] %s payload name='%s' lookupName='%s' sourceType='%s' raceId='%s' laps=%s"):format(
@@ -3496,12 +3493,12 @@ loadRaceIndex()
 syncKnownRaceDefinitionsFromFiles()
 runIntegrityScript()
 
-local startupSnapshot = buildFullSnapshot(0)
-log(
-    ('Server system loaded with %s saved races (%s custom, %s online) and %s active instances.'):format(
-        startupSnapshot.definitionCount,
-        startupSnapshot.customRaceCount or 0,
-        startupSnapshot.onlineRaceCount or 0,
-        startupSnapshot.instanceCount
+local startupInfo = buildFullSnapshot(0)
+print(
+    ('[racingsystem] Server system loaded with %s saved races (%s custom, %s online) and %s active instances.'):format(
+        startupInfo.definitionCount,
+        startupInfo.customRaceCount or 0,
+        startupInfo.onlineRaceCount or 0,
+        startupInfo.instanceCount
     )
 )

@@ -95,12 +95,12 @@ local function getVehicleLength(vehicle)
 end
 
 -- Measures vehicle pitch relative to the ground slope instead of world pitch alone.
-local function getSlopeRelativePitchDegrees(vehicle)
+local function getSlopeRelativePitchDegrees(vehicle, vehicleLength)
     if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
         return 0.0
     end
 
-    local sampleOffset = math.max(getVehicleLength(vehicle) * 0.35, 0.75)
+    local sampleOffset = math.max(vehicleLength * 0.35, 0.75)
     local rayStartHeight = 1.5
     local rayDepth = 6.0
 
@@ -221,12 +221,9 @@ function CustomPhysicsWheelies.update(vehicle)
         return
     end
 
-    local frontOffsetScale = CUSTOM_WHEELIE_FRONT_OFFSET_LENGTH_MULTIPLIER
-    local frontOffset = frontOffsetScale * getVehicleLength(vehicle)
-    local frameTime = GetFrameTime()
-    if frameTime <= 0.000001 then
-        frameTime = 1.0 / 60.0
-    end
+    local vehicleLength = getVehicleLength(vehicle)
+    local frontOffset = CUSTOM_WHEELIE_FRONT_OFFSET_LENGTH_MULTIPLIER * vehicleLength
+    local frameTime = CustomPhysicsUtil.getDeltaSeconds()
 
     local wheelSnapshot = CustomPhysicsUtil.buildWheelPowerSnapshot(vehicle)
     if not hasGroundedDrivenWheel(wheelSnapshot, vehicle) then
@@ -234,7 +231,7 @@ function CustomPhysicsWheelies.update(vehicle)
         return
     end
 
-    local pitchDeg = getSlopeRelativePitchDegrees(vehicle)
+    local pitchDeg = getSlopeRelativePitchDegrees(vehicle, vehicleLength)
     local pitchRate = -math.deg(GetEntityRotationVelocity(vehicle).y)
     local wheelPower = getClampedDrivenWheelPower(wheelSnapshot)
     local wheelPowerNorm = CustomPhysicsUtil.clamp(wheelPower / 0.9, 0.0, 1.0)

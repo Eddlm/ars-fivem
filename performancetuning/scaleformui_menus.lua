@@ -922,7 +922,7 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
 
         local vehicle = scaleformUI.getCurrentVehicle()
         if vehicle and PerformanceTuning._internals.requestDragRebalance then
-            PerformanceTuning._internals.requestDragRebalance(vehicle, 10000)
+            PerformanceTuning._internals.requestDragRebalance(vehicle)
         end
         state.menuOpen = false
         state.lastVehicleValidity = nil

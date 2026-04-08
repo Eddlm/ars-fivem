@@ -107,7 +107,6 @@ internals.ENGINE_SWAPS = config.engineSwaps or {}
 internals.TIRE_COMPOUND_PACKS = packDefinitions.tires
 internals.BRAKE_PACKS = packDefinitions.brakes
 internals.NITROUS_PACKS = packDefinitions.nitrous
-internals.NITRO_PACKS = internals.NITROUS_PACKS
 internals.NitrousConfig = runtimeConfig.nitrous
 internals.Performance = resolvedPerformanceConfig.performance
 internals.trim = bindings.trim

@@ -263,6 +263,7 @@ local extraColorOptions = buildMergedColorOptions(
     AppearanceConfig.metalColorOptions,
     AppearanceConfig.chromeColorOptions
 )
+local xenonColorOptions = AppearanceConfig.xenonColorOptions
 
 local function buildPaintColorOptionList(options)
     local labels = {}

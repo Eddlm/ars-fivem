@@ -1393,6 +1393,10 @@ CreateThread(function()
     end
 end)
 
+-- ============================================================================
+-- COMMANDS SECTION
+-- ============================================================================
+
 RegisterCommand((((Config.Debug or {}).command) or "customcamdebug"), function()
     local mode = state.active and "active" or "inactive"
     local camState = state.cam and DoesCamExist(state.cam) and "created" or "none"
@@ -1407,6 +1411,10 @@ RegisterCommand((((Config.Debug or {}).command) or "customcamdebug"), function()
         mirrorEnabled
     ))
 end, false)
+
+-- ============================================================================
+-- RESOURCE LIFECYCLE SECTION
+-- ============================================================================
 
 -- Resource shutdown always cleans up the active scripted camera.
 AddEventHandler('onResourceStop', function(resourceName)

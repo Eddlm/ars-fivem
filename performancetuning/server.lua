@@ -277,8 +277,6 @@ RegisterNetEvent('performancetuning:storeStableLapSample', function(payload)
     end
 
     local sourceId = source
-    local resourceName = GetCurrentResourceName()
-    local fileName = STABLE_LAPTIMES_FILE
     local model = tostring(payload.model or '')
     local modelKey = getModelKey(model)
     if model == '' or modelKey == '' then
@@ -286,15 +284,7 @@ RegisterNetEvent('performancetuning:storeStableLapSample', function(payload)
     end
 
     local currentPi = normalizePiSnapshot(payload.pi)
-    local raw = LoadResourceFile(resourceName, fileName)
-    local document = type(raw) == 'string' and raw ~= '' and json.decode(raw) or nil
-    if type(document) ~= 'table' then
-        document = {
-            version = 2,
-            records = {}
-        }
-    end
-
+    local document = loadStableLapDocument()
     local existingPi = findExistingModelPi(document, modelKey)
     if existingPi then
         if sourceId and sourceId > 0 then
@@ -316,16 +306,12 @@ RegisterNetEvent('performancetuning:storeStableLapSample', function(payload)
         return
     end
 
-    if type(document.records) ~= 'table' then
-        document.records = {}
-    end
-
     document.records[#document.records + 1] = {
         model = model,
         pi = currentPi,
     }
 
-    SaveResourceFile(resourceName, fileName, json.encode(document), -1)
+    saveStableLapDocument(document)
     if sourceId and sourceId > 0 then
         TriggerClientEvent('performancetuning:stableLapStored', sourceId, {
             status = 'saved',
