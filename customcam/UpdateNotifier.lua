@@ -1,5 +1,5 @@
 local RESOURCE_NAME = GetCurrentResourceName()
-local DEBUG_CONVAR = 'cCamExtraPrints'
+local Config = (((CustomCam or {}).Config) or {}).UpdateCheck or (((CustomCam or {}).Config) or {}).updateCheck or {}
 
 -- Trims whitespace from the beginning and end of a string
 local function trim(value)
@@ -8,32 +8,19 @@ local function trim(value)
 end
 
 -- Reads a convar value with a fallback, trimming whitespace
-local function readConvar(name, fallback)
-    local value = trim(GetConvar(name, tostring(fallback or '')))
-    if value == '' then
-        return tostring(fallback or '')
-    end
-    return value
-end
-
--- Returns configuration for the update checker (repo, branch, path, token, timeout)
 local function getCheckerConfig()
     return {
-        repo = readConvar('customcam_update_repo', 'Eddlm/ars-fivem'),
-        branch = readConvar('customcam_update_branch', 'main'),
-        path = readConvar('customcam_update_path', 'customcam'),
-        token = trim(GetConvar('customcam_update_token', '')),
-        timeoutMs = 12000,
+        repo = tostring(Config.repo or 'Eddlm/ars-fivem'),
+        branch = tostring(Config.branch or 'main'),
+        path = tostring(Config.path or 'customcam'),
+        token = trim(Config.token or ''),
+        timeoutMs = math.max(1000, math.floor(tonumber(Config.timeoutMs) or 12000)),
     }
 end
 
 -- Determines if update check logging should be enabled based on debug convar
 local function shouldLogUpdateCheck()
-    if type(GetConvarInt) == 'function' then
-        return math.floor(tonumber(GetConvarInt(DEBUG_CONVAR, 0)) or 0) == 2
-    end
-    local raw = type(GetConvar) == 'function' and GetConvar(DEBUG_CONVAR, '0') or '0'
-    return math.floor(tonumber(raw) or 0) == 2
+    return Config.verbose == true
 end
 
 -- Builds HTTP headers for GitHub API requests, including auth if token is present

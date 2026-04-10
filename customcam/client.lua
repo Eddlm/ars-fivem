@@ -1,50 +1,47 @@
 local Config = (CustomCam or {}).Config or {}
-local DEFAULT_GAMEPLAY_CAM_FOV = 60.0
-local VIRTUAL_MIRROR_HORIZONTAL_FOV_DEGREES = 90.0
-local VIRTUAL_MIRROR_VERTICAL_FOV_DEGREES = 15.0
-local VIRTUAL_MIRROR_TRACKING_HORIZONTAL_PADDING_DEGREES = 90.0
-local VIRTUAL_MIRROR_VEHICLE_POLL_RADIUS_METERS = 200.0
-local VIRTUAL_MIRROR_MAX_TRACKED_VEHICLES = 24
-local VIRTUAL_MIRROR_FRAME_THICKNESS_NORMALIZED = 0.006
-local VIRTUAL_MIRROR_FRAME_COLOR = { r = 20, g = 20, b = 20, a = 230 }
-local VIRTUAL_MIRROR_FILL_COLOR = { r = 65, g = 75, b = 90, a = 120 }
-local VIRTUAL_MIRROR_DOT_SIZE_NORMALIZED = 0.007
-local VIRTUAL_MIRROR_DOT_SIZE_NEAR_MULTIPLIER = 7.5
-local VIRTUAL_MIRROR_DOT_SCALE_EXPONENT = 4.0
-local VIRTUAL_MIRROR_DOT_SEPARATION_FALLOFF_EXPONENT = 22.0
-local VIRTUAL_MIRROR_DOT_WIDTH_SCALE = 0.65
-local VIRTUAL_MIRROR_DOT_CLIP_PADDING_PIXELS = 4.0
-local VIRTUAL_MIRROR_DOT_TEXTURE_DICT = 'mpinventory'
-local VIRTUAL_MIRROR_DOT_TEXTURE_NAME = 'in_world_circle'
-local VIRTUAL_MIRROR_DOT_COLOR = { r = 255, g = 220, b = 80, a = 235 }
-local VIRTUAL_MIRROR_DOT_REAR_COLOR = { r = 255, g = 70, b = 60, a = 235 }
-local FOLLOW_CAM_MINIMUM_BUBBLE_PADDING_METERS = 1.0
-local FOLLOW_CAM_MINIMUM_BUBBLE_ESCAPE_SPEED_METERS_PER_SECOND = 6.0
-local FOLLOW_CAM_SPEED_MATCH_DISTANCE_METERS = 4.0
-local FOLLOW_CAM_ACCELERATION_FACTOR = 10.0
-local FOLLOW_CAM_DAMPING_FACTOR = 2.0
-local FOLLOW_CAM_CATCHUP_FACTOR = 10.0
-local FOLLOW_CAM_ROTATION_ACCELERATION_DEGREES_PER_SECOND_SQUARED = 1800.0
-local FOLLOW_CAM_ROTATION_DAMPING_FACTOR = 8.0
-local FOLLOW_CAM_ROTATION_SMOOTHING_FACTOR = 30.0
-local FOLLOW_CAM_VIEW_MODE_PADDING_METERS = {
-    [0] = 0.25,
-    [1] = 0.5,
-    [2] = 0.75
-}
-local FOLLOW_CAM_FALLBACK_DISTANCE_PADDING_METERS = 0.1
-local FOLLOW_CAM_VELOCITY_LOOK_AHEAD_FACTOR = 0.5
-local FOLLOW_CAM_HOOD_VIEW_MODE_ID = 4
-local FOLLOW_CAM_FLIP_ANGULAR_VELOCITY_X_RADIANS_PER_SECOND = 1.5
-local FOLLOW_CAM_UPRIGHT_THRESHOLD_RATIO = 0.2
-local FOLLOW_CAM_UPRIGHT_RECOVERY_THRESHOLD_RATIO = 0.9
-local FOLLOW_CAM_FOCUS_HEIGHT_METERS = 0.85
-local HOOD_CAM_SCAN_HEIGHT_METERS = 2.5
-local HOOD_CAM_SCAN_STEP_METERS = 0.2
-local HOOD_CAM_SCAN_MAX_AHEAD_METERS = 3.5
-local HOOD_CAM_NORMAL_DOT_THRESHOLD_RATIO = 0.94
-local HOOD_CAM_ROTATION_Y_DEGREES = 0.0
-local HOOD_CAM_ROTATION_Z_DEGREES = 0.0
+local Advanced = Config.Advanced or {}
+local DEFAULT_GAMEPLAY_CAM_FOV = tonumber(Advanced.defaultGameplayCamFov) or 60.0
+local VIRTUAL_MIRROR_HORIZONTAL_FOV_DEGREES = tonumber(Advanced.virtualMirrorHorizontalFovDegrees) or 90.0
+local VIRTUAL_MIRROR_VERTICAL_FOV_DEGREES = tonumber(Advanced.virtualMirrorVerticalFovDegrees) or 15.0
+local VIRTUAL_MIRROR_TRACKING_HORIZONTAL_PADDING_DEGREES = tonumber(Advanced.virtualMirrorTrackingHorizontalPaddingDegrees) or 90.0
+local VIRTUAL_MIRROR_VEHICLE_POLL_RADIUS_METERS = tonumber(Advanced.virtualMirrorVehiclePollRadiusMeters) or 200.0
+local VIRTUAL_MIRROR_MAX_TRACKED_VEHICLES = math.max(1, math.floor(tonumber(Advanced.virtualMirrorMaxTrackedVehicles) or 24))
+local VIRTUAL_MIRROR_FRAME_THICKNESS_NORMALIZED = tonumber(Advanced.virtualMirrorFrameThicknessNormalized) or 0.006
+local VIRTUAL_MIRROR_FRAME_COLOR = Advanced.virtualMirrorFrameColor or { r = 20, g = 20, b = 20, a = 230 }
+local VIRTUAL_MIRROR_FILL_COLOR = Advanced.virtualMirrorFillColor or { r = 65, g = 75, b = 90, a = 120 }
+local VIRTUAL_MIRROR_DOT_SIZE_NORMALIZED = tonumber(Advanced.virtualMirrorDotSizeNormalized) or 0.007
+local VIRTUAL_MIRROR_DOT_SIZE_NEAR_MULTIPLIER = tonumber(Advanced.virtualMirrorDotSizeNearMultiplier) or 7.5
+local VIRTUAL_MIRROR_DOT_SCALE_EXPONENT = tonumber(Advanced.virtualMirrorDotScaleExponent) or 4.0
+local VIRTUAL_MIRROR_DOT_SEPARATION_FALLOFF_EXPONENT = tonumber(Advanced.virtualMirrorDotSeparationFalloffExponent) or 22.0
+local VIRTUAL_MIRROR_DOT_WIDTH_SCALE = tonumber(Advanced.virtualMirrorDotWidthScale) or 0.65
+local VIRTUAL_MIRROR_DOT_CLIP_PADDING_PIXELS = tonumber(Advanced.virtualMirrorDotClipPaddingPixels) or 4.0
+local VIRTUAL_MIRROR_DOT_TEXTURE_DICT = tostring(Advanced.virtualMirrorDotTextureDict or 'mpinventory')
+local VIRTUAL_MIRROR_DOT_TEXTURE_NAME = tostring(Advanced.virtualMirrorDotTextureName or 'in_world_circle')
+local VIRTUAL_MIRROR_DOT_COLOR = Advanced.virtualMirrorDotColor or { r = 255, g = 220, b = 80, a = 235 }
+local VIRTUAL_MIRROR_DOT_REAR_COLOR = Advanced.virtualMirrorDotRearColor or { r = 255, g = 70, b = 60, a = 235 }
+local FOLLOW_CAM_MINIMUM_BUBBLE_PADDING_METERS = tonumber(Advanced.followCamMinimumBubblePaddingMeters) or 1.0
+local FOLLOW_CAM_MINIMUM_BUBBLE_ESCAPE_SPEED_METERS_PER_SECOND = tonumber(Advanced.followCamMinimumBubbleEscapeSpeedMetersPerSecond) or 6.0
+local FOLLOW_CAM_SPEED_MATCH_DISTANCE_METERS = tonumber(Advanced.followCamSpeedMatchDistanceMeters) or 4.0
+local FOLLOW_CAM_ACCELERATION_FACTOR = tonumber(Advanced.followCamAccelerationFactor) or 10.0
+local FOLLOW_CAM_DAMPING_FACTOR = tonumber(Advanced.followCamDampingFactor) or 2.0
+local FOLLOW_CAM_CATCHUP_FACTOR = tonumber(Advanced.followCamCatchupFactor) or 10.0
+local FOLLOW_CAM_ROTATION_ACCELERATION_DEGREES_PER_SECOND_SQUARED = tonumber(Advanced.followCamRotationAccelerationDegreesPerSecondSquared) or 1800.0
+local FOLLOW_CAM_ROTATION_DAMPING_FACTOR = tonumber(Advanced.followCamRotationDampingFactor) or 8.0
+local FOLLOW_CAM_ROTATION_SMOOTHING_FACTOR = tonumber(Advanced.followCamRotationSmoothingFactor) or 30.0
+local FOLLOW_CAM_VIEW_MODE_PADDING_METERS = Advanced.followCamViewModePaddingMeters or { [0] = 0.25, [1] = 0.5, [2] = 0.75 }
+local FOLLOW_CAM_FALLBACK_DISTANCE_PADDING_METERS = tonumber(Advanced.followCamFallbackDistancePaddingMeters) or 0.1
+local FOLLOW_CAM_VELOCITY_LOOK_AHEAD_FACTOR = tonumber(Advanced.followCamVelocityLookAheadFactor) or 0.5
+local FOLLOW_CAM_HOOD_VIEW_MODE_ID = math.floor(tonumber(Advanced.followCamHoodViewModeId) or 4)
+local FOLLOW_CAM_FLIP_ANGULAR_VELOCITY_X_RADIANS_PER_SECOND = tonumber(Advanced.followCamFlipAngularVelocityXRadiansPerSecond) or 1.5
+local FOLLOW_CAM_UPRIGHT_THRESHOLD_RATIO = tonumber(Advanced.followCamUprightThresholdRatio) or 0.2
+local FOLLOW_CAM_UPRIGHT_RECOVERY_THRESHOLD_RATIO = tonumber(Advanced.followCamUprightRecoveryThresholdRatio) or 0.9
+local FOLLOW_CAM_FOCUS_HEIGHT_METERS = tonumber(Advanced.followCamFocusHeightMeters) or 0.85
+local HOOD_CAM_SCAN_HEIGHT_METERS = tonumber(Advanced.hoodCamScanHeightMeters) or 2.5
+local HOOD_CAM_SCAN_STEP_METERS = tonumber(Advanced.hoodCamScanStepMeters) or 0.2
+local HOOD_CAM_SCAN_MAX_AHEAD_METERS = tonumber(Advanced.hoodCamScanMaxAheadMeters) or 3.5
+local HOOD_CAM_NORMAL_DOT_THRESHOLD_RATIO = tonumber(Advanced.hoodCamNormalDotThresholdRatio) or 0.94
+local HOOD_CAM_ROTATION_Y_DEGREES = tonumber(Advanced.hoodCamRotationYDegrees) or 0.0
+local HOOD_CAM_ROTATION_Z_DEGREES = tonumber(Advanced.hoodCamRotationZDegrees) or 0.0
 
 local state = {
     active = false,
@@ -71,7 +68,7 @@ local toggleHoldState = {
 local controlHintState = 0
 local controlHintReadyAt = nil
 local controlHintRandomSeeded = false
-local CONTROL_HINT_INITIAL_DELAY_MS = 30000
+local CONTROL_HINT_INITIAL_DELAY_MS = math.max(0, math.floor(tonumber(Advanced.controlHintInitialDelayMs) or 30000))
 local controlInputTokenById = {
     [0] = '~INPUT_NEXT_CAMERA~',
     [79] = '~INPUT_VEH_LOOK_BEHIND~',
@@ -98,7 +95,7 @@ local function getLookBackControlId()
 end
 
 local function warnConfig(message)
-    print(("[customcam] config warning: %s"):format(tostring(message or "unknown")))
+    local _ = message
 end
 
 local function validateConfig()
@@ -1392,25 +1389,6 @@ CreateThread(function()
         end
     end
 end)
-
--- ============================================================================
--- COMMANDS SECTION
--- ============================================================================
-
-RegisterCommand((((Config.Debug or {}).command) or "customcamdebug"), function()
-    local mode = state.active and "active" or "inactive"
-    local camState = state.cam and DoesCamExist(state.cam) and "created" or "none"
-    local mirrorEnabled = (type(Config.VirtualMirror) == "table" and Config.VirtualMirror.enabled == true) and "on" or "off"
-    print(("[customcam] mode=%s cam=%s lookBack=%s toggleHoldMs=%s toggleControl=%s lookBackControl=%s mirror=%s"):format(
-        mode,
-        camState,
-        tostring(state.lookBackActive == true),
-        tostring(Config.toggleHoldMs or 1000),
-        tostring(getToggleControlId()),
-        tostring(getLookBackControlId()),
-        mirrorEnabled
-    ))
-end, false)
 
 -- ============================================================================
 -- RESOURCE LIFECYCLE SECTION

@@ -1,10 +1,11 @@
 # racingsystem — Structure
 
 ## 1) Runtime topology
-- **Shared model layer:** `shared.lua` defines shared constants/config used by both sides.
+- **Shared configuration layer:** `Config.lua` defines admin-tunable settings used by both sides.
+- **Shared model/helper layer:** `shared.lua` defines shared state/helper functions used by both sides.
 - **Client interaction layer:** `client.lua` + `menu.lua` handle UI, editor flow, local prediction, and player-facing race runtime.
 - **Server authority layer:** `server.lua` owns race definitions, instances, entrant membership, progression validation, and lifecycle decisions.
-- **Server integrity layer:** `integrity.lua` performs validation/sweep responsibilities.
+- **Server integrity layer:** `integrity.lua` defines integrity sweep behavior and is conditionally loaded by `server.lua` (`runIntegrityScript()`), not directly listed in `fxmanifest.lua` server scripts.
 - **Server utility layer:** `UpdateNotifier.lua` provides update-check behavior.
 
 ## 2) Client/server relationship
@@ -17,7 +18,8 @@
 - **Live race HUD + local runtime role:** `client.lua`.
 - **Authoritative race state + file IO role:** `server.lua`.
 - **Validation/integrity policy role:** `integrity.lua`.
-- **Shared enums/config role:** `shared.lua`.
+- **Shared config role:** `Config.lua`.
+- **Shared enums/helpers role:** `shared.lua`.
 - **Update check role:** `UpdateNotifier.lua`.
 
 ## 4) Call tree (high-level)
@@ -44,6 +46,14 @@ Authority boundary: server mutates truth; client mirrors and presents it, with s
 
 ## 7) Lifecycle boundaries
 - **Start:** resource load wires commands/events and starts background loops.
+- **Integrity start path:** during server startup, `server.lua` may `load/pcall` `integrity.lua` once per process gate (`GlobalState['rSystemIntegrityChecked']`) and only when the integrity roll passes.
 - **Runtime transitions:** join/leave/start/finish/checkpoint events transition entrant and race-instance state.
 - **Stop:** client stop handlers clear UI/runtime data; server stop naturally drops in-memory state.
+
+## 8) Logging and Configurability (Current)
+- RaceSystem currently does not use runtime convars for debug verbosity or locale selection (`rSystemExtraPrints`, `locale`, `sv_locale` are not read).
+- Debug helper loggers in `client.lua`, `menu.lua`, and `server.lua` are intentionally silent (no-op) in normal flow.
+- Non-debug operational console output that remains:
+  - update availability notice from `UpdateNotifier.lua`
+  - explicit error output from `server.lua` `logError(...)`
 

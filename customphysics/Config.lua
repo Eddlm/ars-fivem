@@ -29,11 +29,6 @@ rolloversEnabled = true,
         debugStatusIntervalMs = 1000,
     },
 
-    debug = {
-        command = "customphysicsdebug",
-        printStartupSummary = true,
-    },
-
     materialTyreDragByIndex = {
         [0] = -0.15,
         [1] = -0.10,
@@ -80,5 +75,31 @@ rolloversEnabled = true,
         [47] = 0.02,
         [48] = 0.01,
         [49] = 0.02,
+    },
+
+    advanced = {
+        rollovers = {
+            angularXYThresholdDegrees = 180.0,
+            angularZThresholdDegrees = 180.0,
+            checkIntervalMs = 300,
+            forceHeightOffset = 4.0,
+            forceMagnitude = 1.4,
+            settleDurationMs = 500,
+            initialForceMultiplier = 3.0,
+        },
+        wheelies = {
+            armSpeedThresholdMetersPerSecond = 1.0,
+            forceMultiplier = 0.4,
+            frontOffsetLengthMultiplier = 2.0,
+        },
+    },
+
+    updateCheck = {
+        verbose = false,
+        repo = 'Eddlm/ars-fivem',
+        branch = 'main',
+        path = 'customphysics',
+        token = '',
+        timeoutMs = 12000,
     },
 }

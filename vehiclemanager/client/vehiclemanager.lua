@@ -3,6 +3,7 @@ local MenuConfig = Config.menu or {}
 local AppearanceConfig = Config.appearance or {}
 local CategoryConfig = Config.categories or {}
 local ConstantConfig = Config.constants or {}
+local UIConfig = Config.ui or {}
 local TextConfig = {
     helpLabel = "Util",
     helpOptions = { "Fix Vehicle", "Teleport To Nearest Road", "Delete Vehicle" },
@@ -65,15 +66,16 @@ local TextConfig = {
     stockLabel = "Stock",
     unknownColorLabel = "Unknown",
 }
-local MENU_X_POSITION = 20
-local MENU_TITLE = "Vehicle Manager"
-local MENU_SUBTITLE = "Fix, customize and save your vehicle"
-local MENU_KEYBIND_RELEASE_COMMAND = "-vehiclemanager_menu"
-local MENU_KEYBIND_DESCRIPTION = "Open the vehicle manager menu"
-local MENU_AVAILABILITY_REFRESH_MS = 200
-local PERFORMANCE_SETTINGS_PI_OPTIONS = { "No", "Yes" }
-local PERFORMANCE_SETTINGS_REV_LIMITER_OPTIONS = { "Off", "On" }
-local PERFORMANCE_SETTINGS_STEERING_LOCK_MODE_OPTIONS = { "Stock", "Balanced", "Aggro", "Very Aggro", "Very Smooth", "Smooth" }
+local MENU_X_POSITION = tonumber(UIConfig.menuXPosition) or 20
+local MENU_TITLE = tostring(UIConfig.menuTitle or "Vehicle Manager")
+local MENU_SUBTITLE = tostring(UIConfig.menuSubtitle or "Fix, customize and save your vehicle")
+local MENU_KEYBIND_RELEASE_COMMAND = tostring(UIConfig.menuKeybindReleaseCommand or "-vehiclemanager_menu")
+local MENU_KEYBIND_DESCRIPTION = tostring(UIConfig.menuKeybindDescription or "Open the vehicle manager menu")
+local MENU_AVAILABILITY_REFRESH_MS = math.max(0, math.floor(tonumber(UIConfig.menuAvailabilityRefreshMs) or 200))
+local VEHICLE_TUNING_AUTOSAVE_DELAY_MS = 6000
+local PERFORMANCE_SETTINGS_PI_OPTIONS = UIConfig.performanceSettingsPiOptions or { "No", "Yes" }
+local PERFORMANCE_SETTINGS_REV_LIMITER_OPTIONS = UIConfig.performanceSettingsRevLimiterOptions or { "Off", "On" }
+local PERFORMANCE_SETTINGS_STEERING_LOCK_MODE_OPTIONS = UIConfig.performanceSettingsSteeringLockModeOptions or { "Stock", "Balanced", "Aggro", "Very Aggro", "Very Smooth", "Smooth" }
 
 local VMUI = {}
 
@@ -173,7 +175,7 @@ local statsGatewayItem = nil
 local statsLocalMenu = nil
 local statsLocalSubMenu = nil
 local returnToCustomizeAfterPerformanceTuningClose = false
-local pendingVehicleMenuCloseSaveId = 0
+local pendingVehicleTuningAutosaveId = 0
 local paintCategoryListItem = VMUI.CreateListItem(TextConfig.paintCategoryLabel or "Paint Category", { "Classic" }, 1, TextConfig.paintCategoryDescription or "Choose the paint finish for your body colors.")
 local primaryPaintColorListItem = VMUI.CreateListItem(TextConfig.primaryPaintLabel or "Primary", { "Black" }, 1, TextConfig.primaryPaintDescription or "Set the main paint color.")
 local secondaryPaintColorListItem = VMUI.CreateListItem(TextConfig.secondaryPaintLabel or "Secondary", { "Black" }, 1, TextConfig.secondaryPaintDescription or "Set the secondary paint color.")
@@ -212,9 +214,10 @@ local availabilityState = {
     hasDriverVehicle = nil,
 }
 local pendingOverwriteSaveId = nil
-local TUNE_STATE_BAG_KEY = "performancetuning:tuneState"
-local HANDLING_STATE_BAG_KEY = "performancetuning:handlingState"
-local SAVE_ID_STATE_BAG_KEY = "vehiclemanager:saveId"
+local TUNE_STATE_BAG_KEY = tostring(UIConfig.tuneStateBagKey or "performancetuning:tuneState")
+local HANDLING_STATE_BAG_KEY = tostring(UIConfig.handlingStateBagKey or "performancetuning:handlingState")
+local SAVE_ID_STATE_BAG_KEY = tostring(UIConfig.saveIdStateBagKey or "vehiclemanager:saveId")
+local scheduleVehicleTuningAutosave
 
 local paintCategories = {}
 for index = 1, #(AppearanceConfig.paintCategories or {}) do
@@ -849,6 +852,7 @@ local function applyModSelection(item, index, entries)
 
     SetVehicleModKit(vehicle, 0)
     SetVehicleMod(vehicle, targetEntry.modType, option.value, false)
+    scheduleVehicleTuningAutosave()
 end
 
 local function findColorIndex(options, colorId)
@@ -992,6 +996,7 @@ local function applyWheelSelection(categoryIndex, wheelIndex, useCustomTyres)
 
     local wheelModType = getPrimaryWheelModType(vehicle)
     SetVehicleMod(vehicle, wheelModType, option.value, useCustomTyres == true)
+    scheduleVehicleTuningAutosave()
 end
 
 local function findLiveryIndex(vehicle)
@@ -2095,18 +2100,14 @@ local function autosaveManagedVehicleToExistingSave()
     TriggerServerEvent("vehiclemanager:updateSavedVehicleSnapshot", saveId, payload)
 end
 
-local function scheduleVehicleMenuCloseAutosave()
-    pendingVehicleMenuCloseSaveId = pendingVehicleMenuCloseSaveId + 1
-    local saveRequestId = pendingVehicleMenuCloseSaveId
+scheduleVehicleTuningAutosave = function()
+    pendingVehicleTuningAutosaveId = pendingVehicleTuningAutosaveId + 1
+    local saveRequestId = pendingVehicleTuningAutosaveId
 
     CreateThread(function()
-        Wait(1000)
+        Wait(VEHICLE_TUNING_AUTOSAVE_DELAY_MS)
 
-        if saveRequestId ~= pendingVehicleMenuCloseSaveId then
-            return
-        end
-
-        if MenuHandler:IsAnyMenuOpen() then
+        if saveRequestId ~= pendingVehicleTuningAutosaveId then
             return
         end
 
@@ -2137,6 +2138,7 @@ local function applyPaintColor(target, categoryIndex, colorIndex)
     end
 
     SetVehicleExtraColours(vehicle, pearlescentColor, wheelColor)
+    scheduleVehicleTuningAutosave()
 end
 
 local function applyPearlescentColor(index)
@@ -2148,6 +2150,7 @@ local function applyPearlescentColor(index)
 
     local _, wheelColor = GetVehicleExtraColours(vehicle)
     SetVehicleExtraColours(vehicle, option.colorId, wheelColor)
+    scheduleVehicleTuningAutosave()
 end
 
 local function applyInteriorColor(index)
@@ -2158,6 +2161,7 @@ local function applyInteriorColor(index)
     end
 
     SetVehicleInteriorColor(vehicle, option.colorId)
+    scheduleVehicleTuningAutosave()
 end
 
 local function applyDashboardColor(index)
@@ -2168,6 +2172,7 @@ local function applyDashboardColor(index)
     end
 
     SetVehicleDashboardColor(vehicle, option.colorId)
+    scheduleVehicleTuningAutosave()
 end
 
 local function pulseHeadlightControl(vehicle)
@@ -2203,6 +2208,7 @@ local function applyXenonColor(index)
             pulseHeadlightControl(vehicle)
         end
     end
+    scheduleVehicleTuningAutosave()
 end
 
 local function applyWheelColor(index)
@@ -2214,6 +2220,7 @@ local function applyWheelColor(index)
 
     local pearlescentColor, _ = GetVehicleExtraColours(vehicle)
     SetVehicleExtraColours(vehicle, pearlescentColor, option.colorId)
+    scheduleVehicleTuningAutosave()
 end
 
 local function applySelectedLivery(index)
@@ -2230,6 +2237,7 @@ local function applySelectedLivery(index)
     elseif option.mode == "mod" then
         SetVehicleMod(vehicle, 48, option.value, false)
     end
+    scheduleVehicleTuningAutosave()
 end
 
 vehicleMainMenu:AddItem(helpListItem)
@@ -2430,9 +2438,13 @@ performanceSettingsMenu.OnListChange = function(_, item, index)
     if item == performancePiDisplayListItem then
         setPerformanceTuningPiDisplayModeIndex(index)
     elseif item == performanceRevLimiterListItem then
-        setPerformanceTuningRevLimiterEnabled(index == 2)
+        if setPerformanceTuningRevLimiterEnabled(index == 2) then
+            scheduleVehicleTuningAutosave()
+        end
     elseif item == performanceSteeringLockModeListItem then
-        setPerformanceTuningSteeringLockModeIndex(index)
+        if setPerformanceTuningSteeringLockModeIndex(index) then
+            scheduleVehicleTuningAutosave()
+        end
     end
 end
 
@@ -2440,9 +2452,13 @@ performanceSettingsMenu.OnListSelect = function(_, item, index)
     if item == performancePiDisplayListItem then
         setPerformanceTuningPiDisplayModeIndex(index)
     elseif item == performanceRevLimiterListItem then
-        setPerformanceTuningRevLimiterEnabled(index == 2)
+        if setPerformanceTuningRevLimiterEnabled(index == 2) then
+            scheduleVehicleTuningAutosave()
+        end
     elseif item == performanceSteeringLockModeListItem then
-        setPerformanceTuningSteeringLockModeIndex(index)
+        if setPerformanceTuningSteeringLockModeIndex(index) then
+            scheduleVehicleTuningAutosave()
+        end
     end
 end
 
@@ -2467,10 +2483,6 @@ vehicleMainMenu.OnMenuChanged = function(_, newmenu, forward)
     elseif forward and newmenu == statsLocalMenu then
         rebuildStatsMenu()
     end
-end
-
-vehicleMainMenu.OnMenuClose = function()
-    scheduleVehicleMenuCloseAutosave()
 end
 
 RegisterNetEvent("performancetuning:menuClosed", function()

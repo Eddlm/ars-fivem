@@ -1,12 +1,13 @@
 CustomPhysicsRollovers = CustomPhysicsRollovers or {}
+local RolloverConfig = (((CustomPhysics or {}).Config or {}).advanced or {}).rollovers or {}
 
-local ROLLOVER_ANGULAR_XY_THRESHOLD_DEGREES = 180.0
-local ROLLOVER_ANGULAR_Z_THRESHOLD_DEGREES = 180.0
-local ROLLOVER_CHECK_INTERVAL_MS = 300
-local ROLLOVER_FORCE_HEIGHT_OFFSET = 4.0
-local ROLLOVER_FORCE_MAGNITUDE = 1.4
-local ROLLOVER_SETTLE_DURATION_MS = 500
-local ROLLOVER_INITIAL_FORCE_MULTIPLIER = 3.0
+local ROLLOVER_ANGULAR_XY_THRESHOLD_DEGREES = tonumber(RolloverConfig.angularXYThresholdDegrees) or 180.0
+local ROLLOVER_ANGULAR_Z_THRESHOLD_DEGREES = tonumber(RolloverConfig.angularZThresholdDegrees) or 180.0
+local ROLLOVER_CHECK_INTERVAL_MS = math.max(0, math.floor(tonumber(RolloverConfig.checkIntervalMs) or 300))
+local ROLLOVER_FORCE_HEIGHT_OFFSET = tonumber(RolloverConfig.forceHeightOffset) or 4.0
+local ROLLOVER_FORCE_MAGNITUDE = tonumber(RolloverConfig.forceMagnitude) or 1.4
+local ROLLOVER_SETTLE_DURATION_MS = math.max(0, math.floor(tonumber(RolloverConfig.settleDurationMs) or 500))
+local ROLLOVER_INITIAL_FORCE_MULTIPLIER = tonumber(RolloverConfig.initialForceMultiplier) or 3.0
 
 local forceActive = false
 local forceStartedAt = 0

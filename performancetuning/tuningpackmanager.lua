@@ -618,7 +618,8 @@ function TuningPackManager.resolveEngineSwapValues(modelName)
     return values
 end
 
-local TRANSMISSION_POWER_BONUS_PER_UPGRADE = 0.01
+local TuningConfig = ((((PerformanceTuning or {}).Config or {}).advanced or {}).tuning or {})
+local TRANSMISSION_POWER_BONUS_PER_UPGRADE = tonumber(TuningConfig.transmissionPowerBonusPerUpgrade) or 0.01
 
 local function ensureDriveForceOffsets(bucket)
     local offsets = bucket.driveForceOffsets

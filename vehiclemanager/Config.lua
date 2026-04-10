@@ -91,5 +91,27 @@ VehicleManager.Config = {
             { key = "suspensionRaise", default = 0.0, parse = function(value) return tonumber(value) or 0.0 end },
             { key = "suspensionBiasFront", default = 0.5, parse = function(value) return tonumber(value) or 0.5 end },
         }
+    },
+    ui = {
+        menuXPosition = 20,
+        menuTitle = "Vehicle Manager",
+        menuSubtitle = "Fix, customize and save your vehicle",
+        menuKeybindReleaseCommand = "-vehiclemanager_menu",
+        menuKeybindDescription = "Open the vehicle manager menu",
+        menuAvailabilityRefreshMs = 200,
+        performanceSettingsPiOptions = { "No", "Yes" },
+        performanceSettingsRevLimiterOptions = { "Off", "On" },
+        performanceSettingsSteeringLockModeOptions = { "Stock", "Balanced", "Aggro", "Very Aggro", "Very Smooth", "Smooth" },
+        tuneStateBagKey = "performancetuning:tuneState",
+        handlingStateBagKey = "performancetuning:handlingState",
+        saveIdStateBagKey = "vehiclemanager:saveId",
+    },
+    updateCheck = {
+        verbose = false,
+        repo = 'Eddlm/ars-fivem',
+        branch = 'main',
+        path = 'vehiclemanager',
+        token = '',
+        timeoutMs = 12000,
     }
 }

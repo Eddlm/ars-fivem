@@ -1,35 +1,23 @@
 local RESOURCE_NAME = GetCurrentResourceName()
+local Config = (((RacingSystem or {}).Config) or {}).updateCheck or (((RacingSystem or {}).Config) or {}).UpdateCheck or {}
 
 local function trim(value)
     local text = tostring(value or '')
     return (text:match('^%s*(.-)%s*$') or '')
 end
 
-local function readConvar(name, fallback)
-    local value = trim(GetConvar(name, tostring(fallback or '')))
-    if value == '' then
-        return tostring(fallback or '')
-    end
-    return value
-end
-
 local function getCheckerConfig()
     return {
-        repo = readConvar('racingsystem_update_repo', 'Eddlm/ars-fivem'),
-        branch = readConvar('racingsystem_update_branch', 'main'),
-        path = readConvar('racingsystem_update_path', 'racingsystem'),
-        token = trim(GetConvar('racingsystem_update_token', '')),
-        timeoutMs = 12000,
+        repo = tostring(Config.repo or 'Eddlm/ars-fivem'),
+        branch = tostring(Config.branch or 'main'),
+        path = tostring(Config.path or 'racingsystem'),
+        token = trim(Config.token or ''),
+        timeoutMs = math.max(1000, math.floor(tonumber(Config.timeoutMs) or 12000)),
     }
 end
 
 local function getDebugPrintLevel()
-    if type(GetConvarInt) == 'function' then
-        return math.floor(tonumber(GetConvarInt('rSystemExtraPrints', 0)) or 0)
-    end
-
-    local raw = type(GetConvar) == 'function' and GetConvar('rSystemExtraPrints', '0') or '0'
-    return math.floor(tonumber(raw) or 0)
+    return Config.verbose == true and 2 or 0
 end
 
 local function shouldLogUpdateCheck()

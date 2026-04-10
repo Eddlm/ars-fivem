@@ -7,6 +7,6 @@ name 'customcam'
 description 'Custom drone-style follow camera for FiveM.'
 version '0.0.3'
 
-shared_script 'shared.lua'
+shared_script 'Config.lua'
 client_script 'client.lua'
 server_script 'UpdateNotifier.lua'

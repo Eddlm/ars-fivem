@@ -9,6 +9,7 @@ local buildNormalizedOnlineRaceJson
 local loadBundledOnlineRace
 local cloneMissionValue
 local knownRaceDefinitionsByName = {}
+local immutableExampleLookupNames = {}
 local RACE_INDEX_FILE = 'race_index.json'
 local RACE_INDEX_EXAMPLES_FILE = 'race_index_examples.json'
 local RESOURCE_NAME = 'racingsystem'
@@ -16,9 +17,10 @@ local CUSTOM_RACE_FOLDER = 'CustomRaces'
 local ONLINE_RACE_FOLDER = 'OnlineRaces'
 local checkpointAnomalyLogByKey = {}
 local lifecycleAnomalyLogByKey = {}
-local UGC_FETCH_RETRY_COOLDOWN_MS = 700
+local ServerAdvancedConfig = (((RacingSystem or {}).Config or {}).advanced or {}).server or {}
+local UGC_FETCH_RETRY_COOLDOWN_MS = math.max(0, math.floor(tonumber(ServerAdvancedConfig.ugcFetchRetryCooldownMs) or 700))
 local nextAllowedUGCFetchAt = 0
-local GTAO_CHECKPOINT_RADIUS_SCALE = 1.5
+local GTAO_CHECKPOINT_RADIUS_SCALE = tonumber(ServerAdvancedConfig.gtaoCheckpointRadiusScale) or 1.0
 local nextEntrantIdToken = 1
 local nextSnapshotVersion = 0
 local reliabilityCounters = {
@@ -26,20 +28,13 @@ local reliabilityCounters = {
     emptyInstanceAutoDestroyed = 0,
     illegalLifecycleRequests = 0,
 }
+local SERVER_EXTRA_PRINT_LEVEL = math.floor(tonumber(ServerAdvancedConfig.extraPrintLevel) or 0)
 
 local function getExtraPrintLevel()
-    local rawLevel = 0
-    if type(GetConvarInt) == 'function' then
-        rawLevel = math.floor(tonumber(GetConvarInt('rSystemExtraPrints', 0)) or 0)
-    else
-        local raw = type(GetConvar) == 'function' and GetConvar('rSystemExtraPrints', '0') or '0'
-        rawLevel = math.floor(tonumber(raw) or 0)
-    end
-
-    if rawLevel == 1 then
+    if SERVER_EXTRA_PRINT_LEVEL == 1 then
         return 1
     end
-    if rawLevel == 2 then
+    if SERVER_EXTRA_PRINT_LEVEL == 2 then
         return 2
     end
     return 0
@@ -50,15 +45,11 @@ local function logError(message)
 end
 
 local function logLevelOne(message)
-    if getExtraPrintLevel() == 1 then
-        print(tostring(message or ''))
-    end
+    local _ = message
 end
 
 local function logVerbose(message)
-    if getExtraPrintLevel() == 2 then
-        print(tostring(message or ''))
-    end
+    local _ = message
 end
 
 local function shouldLogCheckpointAnomaly(source, instanceId)
@@ -248,17 +239,16 @@ local function logCheckpointPassContext(instance, entrant, reportedCheckpoint, t
         table.insert(details, ('route: %s'):format(routeVariant))
     end
 
-    local detailText = #details > 0 and (' Details: %s.'):format(table.concat(details, ', ')) or ''
-    print(("%s (%s) passed checkpoint %d/%d in race '%s' (lap %d/%d).%s"):format(
-        playerName,
-        tostring(playerSource),
-        checkpointNumber,
-        checkpointTotal,
-        raceName,
-        currentLap,
-        lapTotal,
-        detailText
-    ))
+    local _ = {
+        playerName = playerName,
+        playerSource = playerSource,
+        checkpointNumber = checkpointNumber,
+        checkpointTotal = checkpointTotal,
+        raceName = raceName,
+        currentLap = currentLap,
+        lapTotal = lapTotal,
+        details = details,
+    }
 end
 
 local function hasAdminAccess(sourceId)
@@ -474,26 +464,38 @@ end
 local function loadRaceIndex()
     knownRaceDefinitionsByName = {}
 
-    local rawExamples = LoadResourceFile(RESOURCE_NAME, RACE_INDEX_EXAMPLES_FILE)
-    if rawExamples and rawExamples ~= '' then
+    local function mergeExampleDefinitions(definitionsByName)
+        immutableExampleLookupNames = {}
+
+        local rawExamples = LoadResourceFile(RESOURCE_NAME, RACE_INDEX_EXAMPLES_FILE)
+        if not rawExamples or rawExamples == '' then
+            return 0
+        end
+
         local decodedExamples = json.decode(rawExamples)
         local exampleDefinitions = type(decodedExamples) == 'table' and decodedExamples.definitions or nil
-        if type(exampleDefinitions) == 'table' then
-            local exampleCount = 0
-            for _, definition in ipairs(exampleDefinitions) do
-                local clonedDefinition = cloneKnownRaceDefinition(definition)
-                if clonedDefinition then
-                    local normalizedName = RacingSystem.NormalizeRaceName(clonedDefinition.lookupName or clonedDefinition.name)
-                    clonedDefinition.isExample = true
-                    knownRaceDefinitionsByName[normalizedName] = clonedDefinition
-                    exampleCount = exampleCount + 1
-                end
-            end
-            logVerbose(('Loaded %s example definition(s) from %s.'):format(exampleCount, RACE_INDEX_EXAMPLES_FILE))
-        else
+        if type(exampleDefinitions) ~= 'table' then
             logError(("The server could not read '%s' as a race definition list."):format(RACE_INDEX_EXAMPLES_FILE))
+            return 0
         end
+
+        local mergedCount = 0
+        for _, definition in ipairs(exampleDefinitions) do
+            local clonedDefinition = cloneKnownRaceDefinition(definition)
+            if clonedDefinition then
+                local normalizedName = RacingSystem.NormalizeRaceName(clonedDefinition.lookupName or clonedDefinition.name)
+                clonedDefinition.isExample = true
+                definitionsByName[normalizedName] = clonedDefinition
+                immutableExampleLookupNames[normalizedName] = true
+                mergedCount = mergedCount + 1
+            end
+        end
+
+        return mergedCount
     end
+
+    local exampleCount = mergeExampleDefinitions(knownRaceDefinitionsByName)
+    logVerbose(('Loaded %s example definition(s) from %s.'):format(exampleCount, RACE_INDEX_EXAMPLES_FILE))
 
     local rawIndex = LoadResourceFile(RESOURCE_NAME, RACE_INDEX_FILE)
     if not rawIndex or rawIndex == '' then
@@ -634,6 +636,121 @@ local function cloneEntrant(entrant)
     }
 end
 
+local function getEntrantStateKeyFromEntrant(entrant)
+    if type(entrant) ~= 'table' then
+        return nil
+    end
+
+    local entrantId = tostring(entrant.entrantId or '')
+    if entrantId ~= '' then
+        return ('id:%s'):format(entrantId)
+    end
+
+    local source = tonumber(entrant.source)
+    if source and source > 0 then
+        return ('src:%s'):format(source)
+    end
+
+    return nil
+end
+
+local function getEntrantStateKeyFromSource(source)
+    local numericSource = tonumber(source)
+    if not numericSource or numericSource <= 0 then
+        return nil
+    end
+
+    return ('src:%s'):format(numericSource)
+end
+
+local function ensureEntrantStateMap(instance)
+    if type(instance) ~= 'table' then
+        return {}
+    end
+
+    if type(instance.entrantStateById) == 'table' then
+        return instance.entrantStateById
+    end
+
+    local map = {}
+    for _, entrant in ipairs(type(instance.entrants) == 'table' and instance.entrants or {}) do
+        local entrantKey = getEntrantStateKeyFromEntrant(entrant)
+        if entrantKey then
+            map[entrantKey] = entrant
+        end
+
+        local sourceKey = getEntrantStateKeyFromSource(entrant.source)
+        if sourceKey then
+            map[sourceKey] = entrant
+        end
+    end
+
+    instance.entrantStateById = map
+    return map
+end
+
+local function upsertEntrantState(instance, entrant)
+    if type(instance) ~= 'table' or type(entrant) ~= 'table' then
+        return
+    end
+
+    local map = ensureEntrantStateMap(instance)
+    local entrantKey = getEntrantStateKeyFromEntrant(entrant)
+    if entrantKey then
+        map[entrantKey] = entrant
+    end
+
+    local sourceKey = getEntrantStateKeyFromSource(entrant.source)
+    if sourceKey then
+        map[sourceKey] = entrant
+    end
+end
+
+local function removeEntrantStateBySource(instance, source)
+    if type(instance) ~= 'table' then
+        return
+    end
+
+    local map = ensureEntrantStateMap(instance)
+    local sourceKey = getEntrantStateKeyFromSource(source)
+    if not sourceKey then
+        return
+    end
+
+    local entrant = map[sourceKey]
+    map[sourceKey] = nil
+
+    local entrantKey = getEntrantStateKeyFromEntrant(entrant)
+    if entrantKey then
+        map[entrantKey] = nil
+    end
+end
+
+local function listEntrantsFromState(instance)
+    if type(instance) ~= 'table' then
+        return {}
+    end
+
+    local map = ensureEntrantStateMap(instance)
+    local entrants = {}
+    local seen = {}
+    for _, entrant in pairs(map) do
+        if type(entrant) == 'table' then
+            local uniqueKey = tostring(entrant.entrantId or '')
+            if uniqueKey == '' then
+                uniqueKey = ('src:%s'):format(tostring(tonumber(entrant.source) or 0))
+            end
+
+            if not seen[uniqueKey] then
+                seen[uniqueKey] = true
+                entrants[#entrants + 1] = entrant
+            end
+        end
+    end
+
+    return entrants
+end
+
 local function resetEntrantProgress(entrant)
     if type(entrant) ~= 'table' then
         return
@@ -651,7 +768,19 @@ local function resetEntrantProgress(entrant)
 end
 
 local function getRaceStartCheckpoint(instance)
-    return 1
+    local checkpoints = type(instance) == 'table' and type(instance.checkpoints) == 'table' and instance.checkpoints or {}
+    local checkpointCount = math.max(0, #checkpoints)
+    if checkpointCount <= 1 then
+        return 1
+    end
+
+    if type(instance) == 'table' and instance.pointToPoint == true then
+        -- Point-to-point races start on the first checkpoint.
+        return 1
+    end
+
+    -- Coherency rule: start line is always the final checkpoint in the route.
+    return checkpointCount
 end
 
 local function getLapTriggerCheckpoint(instance, totalCheckpoints, totalLaps)
@@ -660,12 +789,55 @@ local function getLapTriggerCheckpoint(instance, totalCheckpoints, totalLaps)
         return 1
     end
 
-    local laps = math.max(1, tonumber(totalLaps) or 1)
-    if laps == 1 then
-        return getRaceStartCheckpoint(instance)
+    -- Coherency rule: finish/lap trigger is always the final checkpoint.
+    return checkpointCount
+end
+
+local function getNextCheckpointIndex(totalCheckpoints, currentCheckpoint)
+    local checkpointCount = math.max(1, math.floor(tonumber(totalCheckpoints) or 1))
+    local index = math.max(1, math.floor(tonumber(currentCheckpoint) or 1))
+    local nextIndex = index + 1
+    if nextIndex > checkpointCount then
+        nextIndex = 1
+    end
+    return nextIndex
+end
+
+local function getPreRaceExpectedCheckpoint(instance)
+    local checkpoints = type(instance) == 'table' and type(instance.checkpoints) == 'table' and instance.checkpoints or {}
+    local checkpointCount = math.max(1, #checkpoints)
+    local startCheckpoint = getRaceStartCheckpoint(instance)
+    if type(instance) == 'table' and instance.pointToPoint == true then
+        -- Point-to-point races expect the starting checkpoint first.
+        return startCheckpoint
+    end
+    -- Spawn can stay on start/finish, but expected pass must be the next checkpoint.
+    return getNextCheckpointIndex(checkpointCount, startCheckpoint)
+end
+
+local POINT_TO_POINT_AUTODETECT_DISTANCE_METERS = tonumber(ServerAdvancedConfig.pointToPointAutodetectDistanceMeters) or 500.0
+
+local function isPointToPointByCheckpointDistance(checkpoints)
+    local list = type(checkpoints) == 'table' and checkpoints or {}
+    local total = #list
+    if total <= 1 then
+        return false
     end
 
-    return checkpointCount
+    local first = list[1]
+    local last = list[total]
+    if type(first) ~= 'table' or type(last) ~= 'table' then
+        return false
+    end
+
+    local firstX = tonumber(first.x) or 0.0
+    local firstY = tonumber(first.y) or 0.0
+    local lastX = tonumber(last.x) or 0.0
+    local lastY = tonumber(last.y) or 0.0
+    local dx = lastX - firstX
+    local dy = lastY - firstY
+    local distance2D = math.sqrt((dx * dx) + (dy * dy))
+    return distance2D > POINT_TO_POINT_AUTODETECT_DISTANCE_METERS
 end
 
 local function buildEntrant(source, instance)
@@ -676,7 +848,7 @@ local function buildEntrant(source, instance)
         source = numericSource,
         name = GetPlayerName(numericSource) or ('Player %s'):format(numericSource),
         joinedAt = os.time(),
-        currentCheckpoint = getRaceStartCheckpoint(instance),
+        currentCheckpoint = getPreRaceExpectedCheckpoint(instance),
         currentLap = 1,
         checkpointsPassed = 0,
         lastCheckpointAt = 0,
@@ -702,18 +874,26 @@ local function removeRaceInstanceNameIndex(instance)
     end
 end
 
-local function getEntrantSortScore(entrant)
+local function getEntrantSortScore(entrant, instance)
     if type(entrant) ~= 'table' then
         return 0
     end
 
-    return tonumber(entrant.checkpointsPassed) or 0
+    local checkpoints = type(instance) == 'table' and type(instance.checkpoints) == 'table' and instance.checkpoints or {}
+    local totalCheckpoints = math.max(1, #checkpoints)
+    local currentLap = math.max(1, math.floor(tonumber(entrant.currentLap) or 1))
+    local currentCheckpoint = math.max(1, math.floor(tonumber(entrant.currentCheckpoint) or 1))
+    local currentLapProgress = math.max(0, math.min(totalCheckpoints, currentCheckpoint - 1))
+    local scalarProgress = ((currentLap - 1) * totalCheckpoints) + currentLapProgress
+    local absolutePassCount = math.max(0, math.floor(tonumber(entrant.checkpointsPassed) or 0))
+    return math.max(scalarProgress, absolutePassCount)
 end
 
 local function buildOrderedEntrants(instance)
     local ordered = {}
+    local stateMap = ensureEntrantStateMap(instance)
 
-    for _, entrant in ipairs(type(instance.entrants) == 'table' and instance.entrants or {}) do
+    for _, entrant in ipairs(listEntrantsFromState(instance)) do
         if tostring(entrant.entrantId or '') == '' then
             entrant.entrantId = buildEntrantId(tonumber(entrant.source) or 0)
         end
@@ -739,8 +919,8 @@ local function buildOrderedEntrants(instance)
             return false
         end
 
-        local aScore = getEntrantSortScore(a)
-        local bScore = getEntrantSortScore(b)
+        local aScore = getEntrantSortScore(a, instance)
+        local bScore = getEntrantSortScore(b, instance)
         if aScore ~= bScore then
             return aScore > bScore
         end
@@ -759,14 +939,66 @@ local function buildOrderedEntrants(instance)
             return aLastCheckpointAt < bLastCheckpointAt
         end
 
-        return (tonumber(a.joinedAt) or 0) < (tonumber(b.joinedAt) or 0)
+        local aJoinedAt = tonumber(a.joinedAt) or 0
+        local bJoinedAt = tonumber(b.joinedAt) or 0
+        if aJoinedAt ~= bJoinedAt then
+            return aJoinedAt < bJoinedAt
+        end
+
+        return tostring(a.entrantId or '') < tostring(b.entrantId or '')
     end)
 
     for index, entrant in ipairs(ordered) do
         entrant.position = index
+        local stateKey = getEntrantStateKeyFromEntrant(entrant)
+        if stateKey and type(stateMap[stateKey]) == 'table' then
+            stateMap[stateKey].position = index
+        end
+
+        local sourceKey = getEntrantStateKeyFromSource(entrant.source)
+        if sourceKey and type(stateMap[sourceKey]) == 'table' then
+            stateMap[sourceKey].position = index
+        end
     end
 
     return ordered
+end
+
+local function buildInstanceStandingsPayload(instance)
+    if type(instance) ~= 'table' then
+        return nil
+    end
+
+    return {
+        instanceId = tonumber(instance.id) or -1,
+        standingsVersion = tonumber(instance.standingsVersion) or 0,
+        state = tostring(instance.state or RacingSystem.States.idle),
+        entrants = buildOrderedEntrants(instance),
+    }
+end
+
+local function broadcastInstanceStandings(instance)
+    if type(instance) ~= 'table' then
+        return
+    end
+
+    local entrants = listEntrantsFromState(instance)
+    if #entrants <= 0 then
+        return
+    end
+
+    instance.standingsVersion = (tonumber(instance.standingsVersion) or 0) + 1
+    local payload = buildInstanceStandingsPayload(instance)
+    if type(payload) ~= 'table' then
+        return
+    end
+
+    for _, entrant in ipairs(entrants) do
+        local target = tonumber(entrant.source) or 0
+        if target > 0 then
+            TriggerClientEvent('racingsystem:standingsUpdate', target, payload)
+        end
+    end
 end
 
 local function getLeaderProgress(instance)
@@ -777,7 +1009,7 @@ local function getLeaderProgress(instance)
     if #ordered == 0 then
         return 0
     end
-    return tonumber(ordered[1].checkpointsPassed) or 0
+    return getEntrantSortScore(ordered[1], instance)
 end
 
 local function getLastPlaceEntrant(instance)
@@ -859,7 +1091,8 @@ local function buildRaceInstanceSnapshot(instance)
         definitionName = instance.definitionName,
         sourceType = instance.sourceType,
         sourceName = instance.sourceName,
-        trafficMode = tostring(instance.trafficMode or 'none'),
+        pointToPoint = instance.pointToPoint == true,
+        trafficDensity = math.max(0.0, math.min(1.0, tonumber(instance.trafficDensity) or 0.0)),
         laps = tonumber(instance.laps) or 3,
         owner = instance.owner,
         state = instance.state,
@@ -982,16 +1215,20 @@ local function sendTeleportToLastCheckpoint(target, instance)
     end
 
     local checkpoints = type(instance.checkpoints) == 'table' and instance.checkpoints or {}
-    local lastCheckpoint = checkpoints[#checkpoints]
-    if type(lastCheckpoint) ~= 'table' then
+    local startCheckpointIndex = getRaceStartCheckpoint(instance)
+    local startCheckpoint = checkpoints[startCheckpointIndex]
+    if type(startCheckpoint) ~= 'table' then
         return
     end
 
     local heading = 0.0
-    local nextCheckpoint = checkpoints[1]
-    if type(nextCheckpoint) == 'table' and nextCheckpoint ~= lastCheckpoint then
-        local deltaX = (tonumber(nextCheckpoint.x) or 0.0) - (tonumber(lastCheckpoint.x) or 0.0)
-        local deltaY = (tonumber(nextCheckpoint.y) or 0.0) - (tonumber(lastCheckpoint.y) or 0.0)
+    local nextCheckpoint = checkpoints[startCheckpointIndex + 1]
+    if not nextCheckpoint and #checkpoints > 0 then
+        nextCheckpoint = checkpoints[1]
+    end
+    if type(nextCheckpoint) == 'table' and nextCheckpoint ~= startCheckpoint then
+        local deltaX = (tonumber(nextCheckpoint.x) or 0.0) - (tonumber(startCheckpoint.x) or 0.0)
+        local deltaY = (tonumber(nextCheckpoint.y) or 0.0) - (tonumber(startCheckpoint.y) or 0.0)
         heading = math.deg(math.atan(deltaY, deltaX)) - 90.0
         if heading < 0.0 then
             heading = heading + 360.0
@@ -1000,9 +1237,9 @@ local function sendTeleportToLastCheckpoint(target, instance)
 
     TriggerClientEvent('racingsystem:teleportToCheckpoint', target, {
         instanceId = instance.id,
-        x = tonumber(lastCheckpoint.x) or 0.0,
-        y = tonumber(lastCheckpoint.y) or 0.0,
-        z = (tonumber(lastCheckpoint.z) or 0.0) + 1.0,
+        x = tonumber(startCheckpoint.x) or 0.0,
+        y = tonumber(startCheckpoint.y) or 0.0,
+        z = (tonumber(startCheckpoint.z) or 0.0) + 1.0,
         heading = heading,
     })
 end
@@ -1022,9 +1259,13 @@ local function sendTeleportToCheckpoint(target, instance, checkpointIndex)
     local heading = 0.0
     local nextCheckpointIdx = checkpointIdx + 1
     if nextCheckpointIdx > #checkpoints then
-        nextCheckpointIdx = 1
+        if instance.pointToPoint == true then
+            nextCheckpointIdx = nil
+        else
+            nextCheckpointIdx = 1
+        end
     end
-    local nextCheckpoint = checkpoints[nextCheckpointIdx]
+    local nextCheckpoint = nextCheckpointIdx and checkpoints[nextCheckpointIdx] or nil
     if type(nextCheckpoint) == 'table' and nextCheckpoint ~= checkpoint then
         local deltaX = (tonumber(nextCheckpoint.x) or 0.0) - (tonumber(checkpoint.x) or 0.0)
         local deltaY = (tonumber(nextCheckpoint.y) or 0.0) - (tonumber(checkpoint.y) or 0.0)
@@ -1033,6 +1274,19 @@ local function sendTeleportToCheckpoint(target, instance, checkpointIndex)
             heading = heading + 360.0
         end
     end
+
+    logVerbose(("[startfinish] teleport target=%s instance=%s requestedCheckpoint=%s resolvedCheckpoint=%s startCheckpoint=%s lapTrigger=%s heading=%.2f xyz=(%.2f,%.2f,%.2f)"):format(
+        tostring(target),
+        tostring(instance.id),
+        tostring(checkpointIndex),
+        tostring(checkpointIdx),
+        tostring(getRaceStartCheckpoint(instance)),
+        tostring(getLapTriggerCheckpoint(instance, #checkpoints, tonumber(instance.laps) or 1)),
+        heading,
+        tonumber(checkpoint.x) or 0.0,
+        tonumber(checkpoint.y) or 0.0,
+        tonumber(checkpoint.z) or 0.0
+    ))
 
     TriggerClientEvent('racingsystem:teleportToCheckpoint', target, {
         instanceId = instance.id,
@@ -1061,7 +1315,7 @@ local function findRaceInstanceByEntrant(source)
     local numericSource = tonumber(source) or 0
 
     for _, instance in pairs(raceInstancesById) do
-        for _, entrant in ipairs(instance.entrants or {}) do
+        for _, entrant in ipairs(listEntrantsFromState(instance)) do
             if tonumber(entrant.source) == numericSource then
                 return instance
             end
@@ -1073,6 +1327,12 @@ end
 
 local function findEntrantInRaceInstance(instance, source)
     local numericSource = tonumber(source) or 0
+
+    local map = ensureEntrantStateMap(instance)
+    local sourceKey = getEntrantStateKeyFromSource(numericSource)
+    if sourceKey and type(map[sourceKey]) == 'table' then
+        return map[sourceKey]
+    end
 
     for _, entrant in ipairs(type(instance.entrants) == 'table' and instance.entrants or {}) do
         if tonumber(entrant.source) == numericSource then
@@ -1093,6 +1353,7 @@ local function removeEntrantFromRaceInstance(instance, source)
     for index, entrant in ipairs(instance.entrants or {}) do
         if tonumber(entrant.source) == numericSource then
             local removedEntrant = table.remove(instance.entrants, index)
+            removeEntrantStateBySource(instance, numericSource)
             return removedEntrant
         end
     end
@@ -1457,6 +1718,38 @@ end
 
 local function syncKnownRaceDefinitionsFromFiles()
     local syncedDefinitionsByName = {}
+    local onlineFileCount = countJsonFilesInFolder(ONLINE_RACE_FOLDER)
+    local customFileCount = countJsonFilesInFolder(CUSTOM_RACE_FOLDER)
+
+    local function mergeExampleDefinitions(definitionsByName)
+        immutableExampleLookupNames = {}
+
+        local rawExamples = LoadResourceFile(RESOURCE_NAME, RACE_INDEX_EXAMPLES_FILE)
+        if not rawExamples or rawExamples == '' then
+            return 0
+        end
+
+        local decodedExamples = json.decode(rawExamples)
+        local exampleDefinitions = type(decodedExamples) == 'table' and decodedExamples.definitions or nil
+        if type(exampleDefinitions) ~= 'table' then
+            logError(("The server could not read '%s' as a race definition list."):format(RACE_INDEX_EXAMPLES_FILE))
+            return 0
+        end
+
+        local mergedCount = 0
+        for _, definition in ipairs(exampleDefinitions) do
+            local clonedDefinition = cloneKnownRaceDefinition(definition)
+            if clonedDefinition then
+                local normalizedName = RacingSystem.NormalizeRaceName(clonedDefinition.lookupName or clonedDefinition.name)
+                clonedDefinition.isExample = true
+                definitionsByName[normalizedName] = clonedDefinition
+                immutableExampleLookupNames[normalizedName] = true
+                mergedCount = mergedCount + 1
+            end
+        end
+
+        return mergedCount
+    end
 
     local function registerDefinitionsFromFolder(folderName, sourceType)
         for _, fileName in ipairs(listJsonFilesInFolder(folderName)) do
@@ -1498,6 +1791,13 @@ local function syncKnownRaceDefinitionsFromFiles()
 
     registerDefinitionsFromFolder(ONLINE_RACE_FOLDER, 'online')
     registerDefinitionsFromFolder(CUSTOM_RACE_FOLDER, 'custom')
+    local exampleCount = mergeExampleDefinitions(syncedDefinitionsByName)
+    logLevelOne(("[race-index] sync scan onlineFiles=%s customFiles=%s exampleDefs=%s"):format(
+        tostring(onlineFileCount),
+        tostring(customFileCount),
+        tostring(exampleCount)
+    ))
+    logVerbose(('Merged %s immutable example definition(s) from %s during sync.'):format(exampleCount, RACE_INDEX_EXAMPLES_FILE))
 
     local syncedDefinitionCount = 0
     for _ in pairs(syncedDefinitionsByName) do
@@ -1516,7 +1816,8 @@ local function syncKnownRaceDefinitionsFromFiles()
         if existingDefinition == nil
             or tostring(existingDefinition.sourceType) ~= tostring(definition.sourceType)
             or RacingSystem.Trim(existingDefinition.name) ~= RacingSystem.Trim(definition.name)
-            or RacingSystem.Trim(existingDefinition.raceId or '') ~= RacingSystem.Trim(definition.raceId or '') then
+            or RacingSystem.Trim(existingDefinition.raceId or '') ~= RacingSystem.Trim(definition.raceId or '')
+            or (existingDefinition.isExample == true) ~= (definition.isExample == true) then
             changed = true
             break
         end
@@ -1536,6 +1837,9 @@ local function syncKnownRaceDefinitionsFromFiles()
     end
 
     knownRaceDefinitionsByName = syncedDefinitionsByName
+    logLevelOne(("[race-index] sync apply changed=true syncedDefinitionCount=%s (examples excluded on save)"):format(
+        tostring(syncedDefinitionCount)
+    ))
     saveRaceIndex()
 
     logVerbose(('Synchronized race index from disk with %s definition(s).'):format(#buildSavedRaceDefinitions()))
@@ -1669,9 +1973,6 @@ local function buildUGCJsonUrlCandidates(ugcId)
             candidates[#candidates + 1] = ('https://prod.cloud.rockstargames.com/ugc/gta5mission/%s/%s/0_0_%s.json'):format(titleId, ugcId, normalized)
         end
     end
-
-    appendLanguage(GetConvar and GetConvar('locale', '') or '')
-    appendLanguage(GetConvar and GetConvar('sv_locale', '') or '')
 
     for _, language in ipairs(languages) do
         appendLanguage(language)
@@ -1911,11 +2212,14 @@ local function buildOnlineRaceModelHidesFromMission(hideObjectData)
     return modelHides
 end
 
-buildCheckpointsFromMissionRace = function(raceData)
+buildCheckpointsFromMissionRace = function(raceData, options)
     local checkpoints = {}
     if type(raceData) ~= 'table' then
         return checkpoints
     end
+
+    local isGTAORace = type(options) == 'table' and options.isGTAORace == true
+    local checkpointRadiusScale = GTAO_CHECKPOINT_RADIUS_SCALE * (isGTAORace and 2.0 or 1.0)
 
     local locations = raceData.chl or {}
     local sizes = raceData.chs or {}
@@ -1930,7 +2234,7 @@ buildCheckpointsFromMissionRace = function(raceData)
                 x = tonumber(location.x) or 0.0,
                 y = tonumber(location.y) or 0.0,
                 z = tonumber(location.z) or 0.0,
-                radius = math.max(2.0, 8.0 * size * GTAO_CHECKPOINT_RADIUS_SCALE),
+                radius = math.max(2.0, 8.0 * size * checkpointRadiusScale),
             }
         end
     end
@@ -1993,7 +2297,9 @@ parseRaceDefinitionFromJson = function(rawRaceJson, contextLabel, fileNameHint)
     local mission = type(decoded.mission) == 'table' and decoded.mission or nil
     if mission then
         local raceData = type(mission.race) == 'table' and mission.race or {}
-        local checkpoints = buildCheckpointsFromMissionRace(mission.race)
+        local checkpoints = buildCheckpointsFromMissionRace(mission.race, {
+            isGTAORace = extractedUGCId ~= nil,
+        })
         if #checkpoints == 0 then
             return nil, ('The %s mission has no checkpoints.'):format(label)
         end
@@ -2248,64 +2554,116 @@ local function registerRaceDefinitionIfValid(raceName)
     return nil, 'That race name is not valid in CustomRaces or OnlineRaces.'
 end
 
-local function deleteRaceDefinition(raceName)
-    local normalizedName = RacingSystem.NormalizeRaceName(raceName)
-    if not normalizedName then
+local function deleteRaceDefinition(request)
+    local requestedName = nil
+    local requestedLookupName = nil
+    local requestedSourceType = nil
+    local requestedRaceId = nil
+
+    if type(request) == 'table' then
+        requestedName = RacingSystem.Trim(request.name or request.lookupName or '')
+        requestedLookupName = RacingSystem.NormalizeRaceName(request.lookupName or request.name)
+        local normalizedSourceType = tostring(request.sourceType or ''):lower()
+        if normalizedSourceType == 'custom' or normalizedSourceType == 'online' then
+            requestedSourceType = normalizedSourceType
+        end
+        requestedRaceId = sanitizeUGCId(request.raceId)
+    else
+        requestedName = RacingSystem.Trim(request or '')
+        requestedLookupName = RacingSystem.NormalizeRaceName(requestedName)
+    end
+
+    if not requestedLookupName then
         return nil, 'A valid race name is required.'
     end
 
-    if findRaceInstanceByName(normalizedName) then
-        return nil, 'Cannot delete a race while its instance is active.'
-    end
+    local definitionLookupName = requestedLookupName
+    local definition = knownRaceDefinitionsByName[definitionLookupName]
 
-    local definition = knownRaceDefinitionsByName[normalizedName]
-    local customRace = loadCustomRace(normalizedName)
-    local onlineRace = nil
-    local sourceType = definition and definition.sourceType or nil
-
-    if customRace then
-        sourceType = 'custom'
-    else
-        onlineRace = loadBundledOnlineRace(normalizedName)
-        if onlineRace then
-            sourceType = 'online'
+    if not definition and requestedRaceId then
+        for lookupName, knownDefinition in pairs(knownRaceDefinitionsByName) do
+            if tostring(knownDefinition.sourceType) == 'online'
+                and RacingSystem.Trim(knownDefinition.raceId or '') == requestedRaceId then
+                definitionLookupName = lookupName
+                definition = knownDefinition
+                break
+            end
         end
     end
 
+    if not definition then
+        return nil, 'That race could not be found in race_index for deletion.'
+    end
+
+    if immutableExampleLookupNames[definitionLookupName] == true then
+        return nil, 'That race is an immutable example and cannot be deleted.'
+    end
+
+    if findRaceInstanceByName(definitionLookupName) then
+        return nil, 'Cannot delete a race while its instance is active.'
+    end
+
+    local sourceType = tostring(definition.sourceType or requestedSourceType or 'custom')
     if sourceType ~= 'custom' and sourceType ~= 'online' then
-        return nil, 'That race could not be found for deletion.'
+        sourceType = requestedSourceType or 'custom'
     end
 
-    local resourcePath = GetResourcePath(RESOURCE_NAME)
-    if type(resourcePath) ~= 'string' or resourcePath == '' then
-        return nil, 'Could not resolve the resource path.'
+    local displayName = RacingSystem.Trim(definition.name or requestedName or definitionLookupName)
+    local definitionRaceId = sanitizeUGCId(definition.raceId)
+    local resolvedRaceId = requestedRaceId or definitionRaceId
+
+    local customRace = nil
+    local onlineRace = nil
+    if sourceType == 'custom' then
+        customRace = loadCustomRace(displayName) or loadCustomRace(definitionLookupName)
+    else
+        if resolvedRaceId then
+            onlineRace = loadBundledOnlineRace(resolvedRaceId)
+        end
+        if not onlineRace then
+            onlineRace = loadBundledOnlineRace(displayName) or loadBundledOnlineRace(definitionLookupName)
+        end
     end
 
-    local separator = resourcePath:find('\\', 1, true) and '\\' or '/'
-    local targetFileName = normalizedName
-    if sourceType == 'custom' and customRace and customRace.fileName then
-        targetFileName = tostring(customRace.fileName)
-    elseif sourceType == 'online' and onlineRace and onlineRace.fileName then
-        targetFileName = tostring(onlineRace.fileName)
+    local targetFileName = nil
+    if sourceType == 'custom' then
+        targetFileName = (customRace and customRace.fileName) or sanitizeOnlineRaceFileName(displayName) or definitionLookupName
+    else
+        targetFileName = (onlineRace and onlineRace.fileName) or resolvedRaceId or sanitizeOnlineRaceFileName(displayName) or definitionLookupName
     end
 
     local relativePath = sourceType == 'custom'
         and buildCustomRaceFilePath(targetFileName)
         or buildOnlineRaceFilePath(targetFileName)
-    local absolutePath = resourcePath .. separator .. relativePath:gsub('/', separator)
 
-    local removeOk, removeError = os.remove(absolutePath)
-    if not removeOk then
-        logError(("The server could not delete '%s'. Reason: %s."):format(relativePath, tostring(removeError or 'unknown error')))
-        return nil, ('Could not delete %s (%s)'):format(relativePath, tostring(removeError or 'unknown error'))
+    local fileRemoved = false
+    local fileRemoveError = nil
+    local resourcePath = GetResourcePath(RESOURCE_NAME)
+    if type(resourcePath) == 'string' and resourcePath ~= '' then
+        local separator = resourcePath:find('\\', 1, true) and '\\' or '/'
+        local absolutePath = resourcePath .. separator .. relativePath:gsub('/', separator)
+        local removeOk, removeError = os.remove(absolutePath)
+        if removeOk then
+            fileRemoved = true
+        else
+            fileRemoveError = tostring(removeError or 'unknown error')
+            logError(("The server could not delete '%s'. Reason: %s. Continuing with race index deletion."):format(relativePath, fileRemoveError))
+        end
+    else
+        fileRemoveError = 'Could not resolve the resource path.'
+        logError('Could not resolve the resource path. Continuing with race index deletion only.')
     end
 
-    unregisterKnownRaceDefinition(normalizedName)
+    unregisterKnownRaceDefinition(definitionLookupName)
 
     return {
-        name = normalizedName,
+        name = displayName ~= '' and displayName or definitionLookupName,
+        lookupName = definitionLookupName,
         sourceType = sourceType,
+        raceId = resolvedRaceId,
         filePath = relativePath,
+        fileRemoved = fileRemoved,
+        fileRemoveError = fileRemoveError,
     }, nil
 end
 
@@ -2398,7 +2756,7 @@ local function resetRaceInstanceProgress(instance)
 
     for _, entrant in ipairs(instance.entrants or {}) do
         resetEntrantProgress(entrant)
-        entrant.currentCheckpoint = getRaceStartCheckpoint(instance)
+        entrant.currentCheckpoint = getPreRaceExpectedCheckpoint(instance)
     end
 end
 
@@ -2416,7 +2774,7 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
     local invokeLookupName = nil
     local invokeSourceType = nil
     local invokeRaceId = nil
-    local invokeTrafficMode = 'none'
+    local invokeTrafficDensity = 0.0
     local invokeLateJoinPercent = nil
     if type(raceName) == 'table' then
         local requestPayload = raceName
@@ -2430,16 +2788,32 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         if normalizedSourceType == 'custom' or normalizedSourceType == 'online' then
             invokeSourceType = normalizedSourceType
         end
-        local normalizedTrafficMode = tostring(requestPayload.trafficMode or 'none'):lower()
-        if normalizedTrafficMode == 'low' or normalizedTrafficMode == 'high' or normalizedTrafficMode == 'full' then
-            invokeTrafficMode = normalizedTrafficMode
+        local requestedTrafficDensity = tonumber(requestPayload.trafficDensity)
+        if requestedTrafficDensity ~= nil then
+            if requestedTrafficDensity < 0.0 then
+                requestedTrafficDensity = 0.0
+            elseif requestedTrafficDensity > 1.0 then
+                requestedTrafficDensity = 1.0
+            end
+            invokeTrafficDensity = requestedTrafficDensity
+        else
+            local normalizedTrafficMode = tostring(requestPayload.trafficMode or 'none'):lower()
+            if normalizedTrafficMode == 'low' then
+                invokeTrafficDensity = 0.35
+            elseif normalizedTrafficMode == 'high' then
+                invokeTrafficDensity = 0.7
+            elseif normalizedTrafficMode == 'full' or normalizedTrafficMode == 'normal' then
+                invokeTrafficDensity = 1.0
+            else
+                invokeTrafficDensity = 0.0
+            end
         end
         local lateJoinPercent = tonumber(requestPayload.lateJoinProgressLimitPercent)
         if lateJoinPercent and lateJoinPercent >= 0 and lateJoinPercent <= 100 then
             invokeLateJoinPercent = lateJoinPercent
         end
     end
-    logVerbose(("[invoke] owner=%s rawType=%s request='%s' lookup='%s' sourceType='%s' raceId='%s' laps=%s traffic=%s"):format(
+    logVerbose(("[invoke] owner=%s rawType=%s request='%s' lookup='%s' sourceType='%s' raceId='%s' laps=%s trafficDensity=%.2f"):format(
         tostring(ownerSource),
         tostring(type(raceName)),
         tostring(invokeRequestName),
@@ -2447,7 +2821,7 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         tostring(invokeSourceType or 'nil'),
         tostring(invokeRaceId or 'nil'),
         tostring(lapCount),
-        tostring(invokeTrafficMode)
+        invokeTrafficDensity
     ))
 
     if RacingSystem.Trim(invokeRequestName) == '' then
@@ -2547,7 +2921,8 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         definitionName = definitionName,
         sourceType = sourceType,
         sourceName = sourceName,
-        trafficMode = invokeTrafficMode,
+        pointToPoint = isPointToPointByCheckpointDistance(checkpoints),
+        trafficDensity = invokeTrafficDensity,
         lateJoinProgressLimitPercent = invokeLateJoinPercent,
         laps = laps,
         owner = tonumber(ownerSource) or 0,
@@ -2563,11 +2938,14 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         props = props,
         modelHides = modelHides,
         entrants = {},
+        entrantStateById = {},
+        standingsVersion = 0,
     }
 
     local numericOwnerSource = tonumber(ownerSource) or 0
     if numericOwnerSource > 0 then
         instance.entrants = { buildEntrant(numericOwnerSource, instance) }
+        upsertEntrantState(instance, instance.entrants[1])
     end
 
     raceInstancesById[id] = instance
@@ -2639,6 +3017,7 @@ local function joinRaceInstanceByName(source, instanceName)
     end
 
     instance.entrants[#instance.entrants + 1] = newEntrant
+    upsertEntrantState(instance, newEntrant)
     return instance, nil
 end
 
@@ -2691,6 +3070,7 @@ local function joinRaceInstanceById(source, instanceId)
     end
 
     instance.entrants[#instance.entrants + 1] = newEntrant
+    upsertEntrantState(instance, newEntrant)
     return instance, nil
 end
 
@@ -2880,12 +3260,26 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
     end
 
     local now = GetGameTimer()
-    entrant.checkpointsPassed = math.min(totalCheckpoints, (tonumber(entrant.checkpointsPassed) or 0) + 1)
+    local totalLaps = math.max(1, tonumber(instance.laps) or 1)
+    local maxProgress = math.max(totalCheckpoints, totalCheckpoints * totalLaps)
+    entrant.checkpointsPassed = math.min(maxProgress, (tonumber(entrant.checkpointsPassed) or 0) + 1)
     entrant.lastCheckpointAt = now
 
-    local totalLaps = math.max(1, tonumber(instance.laps) or 1)
     local currentLap = math.max(1, tonumber(entrant.currentLap) or 1)
     local lapTriggerCheckpoint = getLapTriggerCheckpoint(instance, totalCheckpoints, totalLaps)
+    logVerbose(("[startfinish] pass player=%s race='%s' instance=%s expected=%s reported=%s lap=%s/%s lapTrigger=%s startCheckpoint=%s totalCheckpoints=%s"):format(
+        resolveReadablePlayerName(source, entrant),
+        tostring(instance.name or 'unknown'),
+        tostring(instance.id),
+        tostring(expectedCheckpoint),
+        tostring(reportedCheckpoint),
+        tostring(currentLap),
+        tostring(totalLaps),
+        tostring(lapTriggerCheckpoint),
+        tostring(getRaceStartCheckpoint(instance)),
+        tostring(totalCheckpoints)
+    ))
+
     if reportedCheckpoint == lapTriggerCheckpoint then
         local currentLapTimeMs = tonumber(type(lapTimingPayload) == 'table' and lapTimingPayload.lapTimeMs) or nil
         local currentTotalTimeMs = tonumber(type(lapTimingPayload) == 'table' and lapTimingPayload.totalTimeMs) or nil
@@ -2902,7 +3296,13 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
             entrant.totalTimeMs = currentTotalTimeMs and math.max(0, currentTotalTimeMs) or nil
         else
             entrant.currentLap = currentLap + 1
-            entrant.currentCheckpoint = getRaceStartCheckpoint(instance)
+            if instance.pointToPoint == true then
+                -- Point-to-point keeps finish on last checkpoint; no wrap back to checkpoint 1.
+                entrant.currentCheckpoint = totalCheckpoints
+            else
+                -- Circuit mode: after crossing the finish line, next target becomes checkpoint 1.
+                entrant.currentCheckpoint = 1
+            end
         end
 
         if currentLapTimeMs ~= nil then
@@ -2982,7 +3382,6 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
 end
 
 RegisterNetEvent('racingsystem:requestState', function()
-    syncKnownRaceDefinitionsFromFiles()
     sendSnapshot(source)
 end)
 
@@ -3121,27 +3520,10 @@ RegisterNetEvent('racingsystem:validateGTAORaceUGCId', function(ugcId)
 
     registerKnownRaceDefinition(importedRace.raceName, 'online', importedRace.ugcId)
 
-    local hostedInstance, hostError = invokeRaceInstance(src, importedRace.raceName, 1)
-    if not hostedInstance and importedRace.ugcId then
-        local fallbackInstance, fallbackError = invokeRaceInstance(src, importedRace.ugcId, 1)
-        if fallbackInstance then
-            hostedInstance = fallbackInstance
-            hostError = nil
-        else
-            hostError = fallbackError or hostError
-        end
-    end
-    local hosted = hostedInstance ~= nil
-    if hosted then
-        auditLog("importAndAutoHostGTAORace", src, ("imported UGC '%s' and hosted '%s' (instance %s, %s lap(s))"):format(
-            tostring(importedRace.ugcId or validation.ugcId),
-            tostring(importedRace.raceName),
-            tostring(hostedInstance.id),
-            tostring(hostedInstance.laps)
-        ))
-        sendInstanceAssets(src, hostedInstance)
-        sendTeleportToLastCheckpoint(src, hostedInstance)
-    end
+    auditLog("importGTAORace", src, ("imported UGC '%s' as '%s'"):format(
+        tostring(importedRace.ugcId or validation.ugcId),
+        tostring(importedRace.raceName)
+    ))
 
     broadcastSnapshot()
     TriggerClientEvent('racingsystem:gtAoRaceValidationResult', src, {
@@ -3151,28 +3533,32 @@ RegisterNetEvent('racingsystem:validateGTAORaceUGCId', function(ugcId)
         checkpointCount = tonumber(importedRace.checkpointCount) or tonumber(validation.checkpointCount) or 0,
         propCount = tonumber(importedRace.propCount) or tonumber(validation.propCount) or 0,
         modelHideCount = tonumber(importedRace.modelHideCount) or tonumber(validation.modelHideCount) or 0,
-        autoHosted = hosted,
-        autoHostedLaps = hosted and (tonumber(hostedInstance.laps) or 1) or 1,
-        autoHostError = hosted and nil or (hostError or 'Could not auto-host race instance.'),
     })
 end)
 
-RegisterNetEvent('racingsystem:deleteRaceDefinition', function(raceName)
+RegisterNetEvent('racingsystem:deleteRaceDefinition', function(payload)
     local src = source
+    local payloadLabel = nil
+    if type(payload) == 'table' then
+        payloadLabel = RacingSystem.Trim(payload.name or payload.lookupName or payload.raceId or '')
+    else
+        payloadLabel = tostring(payload or '')
+    end
+
     if not hasAdminAccess(src) then
         logLevelOne(("%s tried to delete race definition '%s' without permission."):format(
             resolvePlayerLogLabel(src),
-            tostring(raceName)
+            tostring(payloadLabel)
         ))
         notifyPlayer(src, "You do not have permission to delete races.", true)
         return
     end
-    local deletedDefinition, deleteError = deleteRaceDefinition(raceName)
+    local deletedDefinition, deleteError = deleteRaceDefinition(payload)
 
     if not deletedDefinition then
         logLevelOne(("%s could not delete race definition '%s'. Reason: %s."):format(
             resolvePlayerLogLabel(src),
-            tostring(raceName),
+            tostring(payloadLabel),
             tostring(deleteError or 'unknown error')
         ))
         TriggerClientEvent('racingsystem:raceDefinitionDeleted', src, {
@@ -3182,7 +3568,7 @@ RegisterNetEvent('racingsystem:deleteRaceDefinition', function(raceName)
         return
     end
 
-    auditLog("deleteRaceDefinition", src, ("deleted race definition '%s'"):format(tostring((deletedDefinition or {}).name or raceName)))
+    auditLog("deleteRaceDefinition", src, ("deleted race definition '%s'"):format(tostring((deletedDefinition or {}).name or payloadLabel)))
     broadcastSnapshot()
     TriggerClientEvent('racingsystem:raceDefinitionDeleted', src, {
         ok = true,
@@ -3191,15 +3577,16 @@ RegisterNetEvent('racingsystem:deleteRaceDefinition', function(raceName)
 end)
 
 RegisterNetEvent('racingsystem:invokeRace', function(payload, lapCount)
+    local invokePayload = payload
     local raceName = type(payload) == 'table' and (payload.lookupName or payload.name) or payload
     local src = source
-    if type(raceName) == 'table' then
+    if type(payload) == 'table' then
         logVerbose(("[invoke:event] %s payload name='%s' lookupName='%s' sourceType='%s' raceId='%s' laps=%s"):format(
             resolvePlayerLogLabel(src),
-            tostring(raceName.name or ''),
-            tostring(raceName.lookupName or ''),
-            tostring(raceName.sourceType or ''),
-            tostring(raceName.raceId or ''),
+            tostring(payload.name or ''),
+            tostring(payload.lookupName or ''),
+            tostring(payload.sourceType or ''),
+            tostring(payload.raceId or ''),
             tostring(lapCount)
         ))
     else
@@ -3209,7 +3596,7 @@ RegisterNetEvent('racingsystem:invokeRace', function(payload, lapCount)
             tostring(lapCount)
         ))
     end
-    local instance, invokeError = invokeRaceInstance(src, raceName, lapCount)
+    local instance, invokeError = invokeRaceInstance(src, invokePayload, lapCount)
 
     if not instance then
         logLevelOne(("%s could not invoke race '%s'. Reason: %s."):format(
@@ -3228,6 +3615,7 @@ RegisterNetEvent('racingsystem:invokeRace', function(payload, lapCount)
         tostring(instance.sourceType or 'unknown')
     ))
     broadcastSnapshot()
+    broadcastInstanceStandings(instance)
     sendInstanceAssets(src, instance)
     sendTeleportToLastCheckpoint(src, instance)
 end)
@@ -3252,6 +3640,7 @@ RegisterNetEvent('racingsystem:joinRace', function(raceName)
         tostring(#(instance.entrants or {}))
     ))
     broadcastSnapshot()
+    broadcastInstanceStandings(instance)
     sendInstanceAssets(src, instance)
 
     -- For mid-race joins, teleport to the current checkpoint; otherwise use default start teleport
@@ -3285,6 +3674,7 @@ RegisterNetEvent('racingsystem:joinRaceInstanceById', function(instanceId)
         tostring(#(instance.entrants or {}))
     ))
     broadcastSnapshot()
+    broadcastInstanceStandings(instance)
     sendInstanceAssets(src, instance)
 
     -- For mid-race joins, teleport to the current checkpoint; otherwise use default start teleport
@@ -3318,6 +3708,7 @@ RegisterNetEvent('racingsystem:startRace', function()
         tostring(tonumber((RacingSystem.Config or {}).countdownMs) or 5000)
     ))
     broadcastSnapshot()
+    broadcastInstanceStandings(instance)
 end)
 
 RegisterNetEvent('racingsystem:checkpointPassed', function(instanceId, checkpointIndex, lapTimingPayload, passContext)
@@ -3332,6 +3723,7 @@ RegisterNetEvent('racingsystem:checkpointPassed', function(instanceId, checkpoin
     end
 
     broadcastSnapshot()
+    broadcastInstanceStandings(instance)
 end)
 
 RegisterNetEvent('racingsystem:finishRace', function()
@@ -3351,6 +3743,7 @@ RegisterNetEvent('racingsystem:finishRace', function()
         tostring((instance or {}).id or "unknown")
     ))
     broadcastSnapshot()
+    broadcastInstanceStandings(instance)
 end)
 
 RegisterNetEvent('racingsystem:countdownReachedZero', function(instanceId, clientGameTimerAtZero)
@@ -3392,6 +3785,9 @@ RegisterNetEvent('racingsystem:leaveRace', function()
         tostring(#(instance.entrants or {}))
     ))
     broadcastSnapshot()
+    if type(instance) == 'table' then
+        broadcastInstanceStandings(instance)
+    end
 end)
 
 RegisterNetEvent('racingsystem:killRace', function(raceName)
@@ -3423,6 +3819,7 @@ RegisterNetEvent('racingsystem:killRace', function(raceName)
         tostring(raceName),
         tostring(killedInstance.id or 'unknown')
     ))
+    broadcastInstanceStandings(killedInstance)
     broadcastSnapshot()
 end)
 
@@ -3466,6 +3863,7 @@ CreateThread(function()
                         tostring(instance.id),
                         tostring(#(instance.entrants or {}))
                     ))
+                    broadcastInstanceStandings(instance)
                     changedAnyState = true
                 elseif shouldLogLifecycleAnomaly('countdownElapsed', 0, instance.id) then
                     logLifecycleEvent(
@@ -3490,15 +3888,5 @@ CreateThread(function()
 end)
 
 loadRaceIndex()
-syncKnownRaceDefinitionsFromFiles()
 runIntegrityScript()
 
-local startupInfo = buildFullSnapshot(0)
-print(
-    ('[racingsystem] Server system loaded with %s saved races (%s custom, %s online) and %s active instances.'):format(
-        startupInfo.definitionCount,
-        startupInfo.customRaceCount or 0,
-        startupInfo.onlineRaceCount or 0,
-        startupInfo.instanceCount
-    )
-)

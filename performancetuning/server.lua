@@ -321,19 +321,6 @@ RegisterNetEvent('performancetuning:storeStableLapSample', function(payload)
     end
 end)
 
-RegisterNetEvent('performancetuning:requestServerDiagnostics', function()
-    local src = source
-    if not src or src <= 0 then
-        return
-    end
-    local stable = loadStableLapDocument()
-    TriggerClientEvent('performancetuning:serverDiagnostics', src, {
-        trackedTunedVehicles = countTrackedVehicles(),
-        scopePairs = countScopePairs(),
-        stableLapModelCount = #((stable and stable.records) or {}),
-    })
-end)
-
 RegisterCommand('ptlaptimes', function(src, args)
     local subcommand = tostring((args or {})[1] or "help"):lower()
     local model = tostring((args or {})[2] or ""):upper()

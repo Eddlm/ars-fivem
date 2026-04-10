@@ -14,11 +14,17 @@ lua54 'yes'
 dependency 'ScaleformUI_Assets'
 dependency 'ScaleformUI_Lua'
 
+ui_page 'ui/index.html'
+
 shared_scripts {
+    'Config.lua',
     'shared.lua'
 }
 
 files {
+    'ui/index.html',
+    'ui/app.js',
+    'ui/style.css',
     'race_index.json',
     'CustomRaces/*.json',
     'OnlineRaces/*.json',

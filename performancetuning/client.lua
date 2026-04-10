@@ -580,12 +580,23 @@ exports('GetPerformanceBarsDisplayMode', function()
     return 'absolute_benchmark'
 end)
 
-exports('SetPerformanceBarsDisplayMode', function(mode)
-    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.setPerformanceBarsDisplayMode then
-        return PerformanceTuning.ScaleformUI.setPerformanceBarsDisplayMode(mode)
+local function applyPerformanceBarsModeRequest(requestedMode)
+    local scaleformUI = PerformanceTuning.ScaleformUI
+    if not scaleformUI or type(scaleformUI.setPerformanceBarsDisplayMode) ~= 'function' or type(scaleformUI.getPerformanceBarsDisplayMode) ~= 'function' then
+        return 'absolute_benchmark'
     end
 
-    return 'absolute_benchmark'
+    local targetMode = tostring(requestedMode or ''):lower()
+    if targetMode == '' or targetMode == 'toggle' then
+        local currentMode = tostring(scaleformUI.getPerformanceBarsDisplayMode() or 'absolute_benchmark')
+        targetMode = (currentMode == 'vehicle_relative') and 'absolute' or 'relative'
+    end
+
+    return scaleformUI.setPerformanceBarsDisplayMode(targetMode)
+end
+
+exports('SetPerformanceBarsDisplayMode', function(mode)
+    return applyPerformanceBarsModeRequest(mode)
 end)
 
 exports('GetCurrentVehicleRevLimiterEnabled', function()
@@ -620,64 +631,6 @@ exports('SetCurrentVehicleSteeringLockMode', function(mode)
     return false, nil
 end)
 
-RegisterCommand('ptune', function()
-    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.openMainMenu then
-        local scaleformUI = PerformanceTuning.ScaleformUI
-        local mode = (type(scaleformUI.getPerformanceBarsDisplayMode) == "function" and scaleformUI.getPerformanceBarsDisplayMode()) or "absolute_benchmark"
-        local modeLabel = tostring(mode) == "vehicle_relative" and "Relative" or "Absolute"
-        notify(("Opening performance tuning menu (PI mode: %s)."):format(modeLabel))
-        PerformanceTuning.ScaleformUI.openMainMenu()
-    else
-        notify('ScaleformUI tuning menu is not available.')
-        notify('Ensure resource `performancetuning` and ScaleformUI dependencies are started.')
-    end
-end, false)
-
-RegisterCommand('ptbarsmode', function(_, args)
-    local requested = tostring((args or {})[1] or ''):lower()
-    local scaleformUI = PerformanceTuning.ScaleformUI
-    if not scaleformUI or type(scaleformUI.setPerformanceBarsDisplayMode) ~= 'function' or type(scaleformUI.getPerformanceBarsDisplayMode) ~= 'function' then
-        notify('Bars mode controls are not available.')
-        return
-    end
-
-    local targetMode = requested
-    if requested == "help" or requested == "?" then
-        notify("Usage: /ptbarsmode [toggle|relative|absolute]")
-        return
-    end
-    if targetMode == '' or targetMode == 'toggle' then
-        local current = tostring(scaleformUI.getPerformanceBarsDisplayMode() or 'absolute_benchmark')
-        targetMode = (current == 'vehicle_relative') and 'absolute' or 'relative'
-    end
-
-    local applied = scaleformUI.setPerformanceBarsDisplayMode(targetMode)
-    local label = applied == 'vehicle_relative' and 'Relative' or 'Absolute'
-    notify(('PI bars mode: %s'):format(label))
-end, false)
-
-RegisterCommand('ptdiag', function()
-    local diagnostics = (PerformanceTuning.SyncOrchestrator and PerformanceTuning.SyncOrchestrator.getDiagnostics and PerformanceTuning.SyncOrchestrator.getDiagnostics()) or {}
-    local pending = tonumber(diagnostics.pendingResyncCount) or 0
-    local tracked = tonumber(diagnostics.trackedVehicleCount) or 0
-    local mode = (PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.getPerformanceBarsDisplayMode and PerformanceTuning.ScaleformUI.getPerformanceBarsDisplayMode()) or "absolute_benchmark"
-    local modeLabel = tostring(mode) == "vehicle_relative" and "Relative" or "Absolute"
-    notify(("PT diagnostics | tracked=%d pendingResync=%d PI mode=%s"):format(tracked, pending, modeLabel))
-    TriggerServerEvent('performancetuning:requestServerDiagnostics')
-end, false)
-
-RegisterNetEvent('performancetuning:serverDiagnostics', function(payload)
-    if type(payload) ~= "table" then
-        return
-    end
-
-    notify(("PT server diagnostics | tracked=%s scopePairs=%s models=%s"):format(
-        tostring(payload.trackedTunedVehicles or 0),
-        tostring(payload.scopePairs or 0),
-        tostring(payload.stableLapModelCount or 0)
-    ))
-end)
-
 PerformanceTuning.RuntimeState = RuntimeState
 PerformanceTuning.RuntimeConfig = RuntimeConfig
 PerformanceTuning.ClientBindings = {
@@ -700,6 +653,7 @@ PerformanceTuning.ClientBindings = {
     resetPerformanceIndexDisplayState = resetPerformanceIndexDisplayState,
     drawPerformanceIndexPanel = drawPerformanceIndexPanel,
     drawPerformanceIndexPanelInstance = drawPerformanceIndexPanelInstance,
+    applyPerformanceBarsModeRequest = applyPerformanceBarsModeRequest,
 }
 
 

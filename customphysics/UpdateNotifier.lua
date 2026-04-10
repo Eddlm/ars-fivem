@@ -1,35 +1,23 @@
 local RESOURCE_NAME = GetCurrentResourceName()
-local DEBUG_CONVAR = 'cPhysicsExtraPrints'
+local Config = (((CustomPhysics or {}).Config) or {}).updateCheck or {}
 
 local function trim(value)
     local text = tostring(value or '')
     return (text:match('^%s*(.-)%s*$') or '')
 end
 
-local function readConvar(name, fallback)
-    local value = trim(GetConvar(name, tostring(fallback or '')))
-    if value == '' then
-        return tostring(fallback or '')
-    end
-    return value
-end
-
 local function getCheckerConfig()
     return {
-        repo = readConvar('customphysics_update_repo', 'Eddlm/ars-fivem'),
-        branch = readConvar('customphysics_update_branch', 'main'),
-        path = readConvar('customphysics_update_path', 'customphysics'),
-        token = trim(GetConvar('customphysics_update_token', '')),
-        timeoutMs = 12000,
+        repo = tostring(Config.repo or 'Eddlm/ars-fivem'),
+        branch = tostring(Config.branch or 'main'),
+        path = tostring(Config.path or 'customphysics'),
+        token = trim(Config.token or ''),
+        timeoutMs = math.max(1000, math.floor(tonumber(Config.timeoutMs) or 12000)),
     }
 end
 
 local function shouldLogUpdateCheck()
-    if type(GetConvarInt) == 'function' then
-        return math.floor(tonumber(GetConvarInt(DEBUG_CONVAR, 0)) or 0) == 2
-    end
-    local raw = type(GetConvar) == 'function' and GetConvar(DEBUG_CONVAR, '0') or '0'
-    return math.floor(tonumber(raw) or 0) == 2
+    return Config.verbose == true
 end
 
 local function buildHttpHeaders(config)

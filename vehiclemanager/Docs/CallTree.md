@@ -7,10 +7,10 @@
 ## Entry Points
 | File | Trigger | What it does |
 |---|---|---|
-| `fxmanifest.lua` | Resource load | Loads `shared.lua`, client script (`client/vehiclemanager.lua`), server script (`server/vehicle_saves.lua`), and update notifier. |
+| `fxmanifest.lua` | Resource load | Loads `Config.lua`, client script (`client/vehiclemanager.lua`), server script (`server/vehicle_saves.lua`), and update notifier. |
 | `client/vehiclemanager.lua` | Client script load | Registers keybind commands, net event handlers, and availability/update worker loops. |
 | `server/vehicle_saves.lua` | Server script load | Registers save/load/delete/update net events and admin inspection commands. |
-| `UpdateNotifier.lua` | `onResourceStart` + command | Runs delayed/manual update check (`/vmupdatecheck`). |
+| `UpdateNotifier.lua` | `onResourceStart` + command | Runs delayed/manual update check (`/vmupdatecheck`, server console). |
 
 ---
 
@@ -18,9 +18,9 @@
 | Module | Responsibility |
 |---|---|
 | `client/vehiclemanager.lua` | UI/menu flow, spawn/load orchestration, performancetuning bridge handling, client-side state refresh loops. |
-| `server/vehicle_saves.lua` | Save index management and vehicle JSON payload persistence under `savedvehicles/`. |
-| `shared.lua` | Config/constants used by client runtime. |
-| `UpdateNotifier.lua` | Version-check command/startup logic. |
+| `server/vehicle_saves.lua` | Save index management and vehicle JSON payload persistence under `savedvehicles/`; internal debug logger (`logVm`) is currently silent. |
+| `Config.lua` | Config/constants used by client runtime. |
+| `UpdateNotifier.lua` | Version-check command/startup logic with hardcoded repo/branch/path/token settings. |
 
 ---
 
@@ -51,7 +51,7 @@ fxmanifest.lua
 │
 └─ UpdateNotifier.lua
     ├─ RegisterCommand('vmupdatecheck')
-    └─ AddEventHandler('onResourceStart') -> delayed performUpdateCheck()
+    └─ AddEventHandler('onResourceStart') -> delayed performUpdateCheck() (3-6 min delay)
 ```
 
 ---
@@ -69,4 +69,5 @@ fxmanifest.lua
 - This resource does **not** expose the `performancetuning`-style bucket exports described in the previous version of this document.
 - Client entry file is `client/vehiclemanager.lua` (not root `client.lua`).
 - Runtime includes multiple thread workers in client script, including a persistent availability refresh loop.
+- There are currently no runtime convar toggles for `vehiclemanager` logging/update-check behavior; update-check settings are hardcoded in `UpdateNotifier.lua`.
 

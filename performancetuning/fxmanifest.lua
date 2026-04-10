@@ -13,7 +13,7 @@ version '0.0.2'
 dependency 'ScaleformUI_Assets'
 dependency 'ScaleformUI_Lua'
 
-shared_script 'shared.lua'
+shared_script 'Config.lua'
 
 client_scripts {
     '@ScaleformUI_Lua/ScaleformUI.lua',

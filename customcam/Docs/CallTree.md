@@ -7,8 +7,8 @@
 ## Entry Points
 | File | Trigger | What it does |
 |---|---|---|
-| `fxmanifest.lua` | Resource load | Declares `shared.lua`, `client.lua`, and `UpdateNotifier.lua`. |
-| `client.lua` | Client script load | Initializes camera state and starts runtime loops. Registers debug command. |
+| `fxmanifest.lua` | Resource load | Declares `Config.lua`, `client.lua`, and `UpdateNotifier.lua`. |
+| `client.lua` | Client script load | Initializes camera state and starts runtime loops. |
 | `UpdateNotifier.lua` | `onResourceStart` + command | Runs delayed GitHub version check and exposes manual command. |
 
 ---
@@ -16,7 +16,7 @@
 ## Module Overview
 | Module | Responsibility |
 |---|---|
-| `shared.lua` | Defines `CustomCam.Config` used by client logic. |
+| `Config.lua` | Defines `CustomCam.Config` used by client logic. |
 | `client.lua` | Camera activation/deactivation, follow update, virtual mirror update/draw, cleanup on resource stop. |
 | `UpdateNotifier.lua` | Update check helper (`/ccamupdatecheck`). |
 
@@ -27,13 +27,12 @@
 ```text
 fxmanifest.lua
 │
-├─ shared.lua
+├─ Config.lua
 │   └─ CustomCam.Config
 │
 ├─ client.lua
 │   ├─ CreateThread: virtual mirror vehicle polling loop
 │   ├─ CreateThread: main camera runtime loop (toggle/update/draw)
-│   ├─ RegisterCommand(Config.Debug.command default "customcamdebug")
 │   └─ AddEventHandler('onResourceStop') -> cleanupCamera()
 │
 └─ UpdateNotifier.lua
@@ -56,3 +55,4 @@ fxmanifest.lua
 - There is **no `/ccam` command** in current implementation.
 - `client.lua` currently exposes **no `exports(...)` API**.
 - Runtime has **two long-running client threads** (plus one delayed one-shot update-check thread in `UpdateNotifier.lua`).
+- Debug/config warning logging in `client.lua` is intentionally silent (`warnConfig` does not print).

@@ -1026,6 +1026,18 @@ function PerformanceTuning.ScaleformUI.openMainMenu()
     return true
 end
 
+
+RegisterCommand('+ptmenu', function()
+    PerformanceTuning.ScaleformUI.openMainMenu()
+end, false)
+local ptmenuDefaultKey = GetResourceState('vehiclemanager') == 'started' and '' or 'F5'
+if ptmenuDefaultKey == '' then
+    print('[performancetuning] Vehicle Manager found, +ptmenu will not be bound to a key.')
+else
+    print('[performancetuning] Vehicle Manager not found, binding +ptmenu to F5 by default.')
+end
+RegisterKeyMapping('+ptmenu', 'Open Performance Tuning menu', 'keyboard', ptmenuDefaultKey)
+
 function PerformanceTuning.ScaleformUI.processFrame()
     local scaleformUI = PerformanceTuning.ScaleformUI
     local state = getScaleformUIState()

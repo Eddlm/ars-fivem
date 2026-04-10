@@ -7,8 +7,8 @@
 ## Entry Points
 | File | Trigger | What it does |
 |---|---|---|
-| `fxmanifest.lua` | Resource load | Loads shared config, subsystem modules, client orchestrator, and update notifier. |
-| `client.lua` | Client script load | Starts stability sampler + per-frame coordinator threads; registers debug command; handles cleanup on stop. |
+| `fxmanifest.lua` | Resource load | Loads `Config.lua`, subsystem modules, client orchestrator, and update notifier. |
+| `client.lua` | Client script load | Starts stability sampler + per-frame coordinator threads; handles cleanup on stop. |
 | `nitrous.lua` | Client script load | Registers local event handlers for nitrous shot execute/clear events. |
 | `UpdateNotifier.lua` | `onResourceStart` + command | Delayed/manual update checking. |
 
@@ -17,7 +17,7 @@
 ## Module Overview
 | Module | Responsibility |
 |---|---|
-| `shared.lua` | Defines `CustomPhysics.Config`. |
+| `Config.lua` | Defines `CustomPhysics.Config`. |
 | `util.lua` | Shared math/geometry helpers. |
 | `power.lua` | Acceleration stability, anti-boost, rev/fallback related updates. |
 | `wheelies.lua` | Wheelie detection/control updates. |
@@ -33,7 +33,7 @@
 ```text
 fxmanifest.lua
 │
-├─ shared.lua -> CustomPhysics.Config
+├─ Config.lua -> CustomPhysics.Config
 ├─ util.lua
 ├─ wheelies.lua / rollovers.lua / power.lua / nitrous.lua
 │   └─ nitrous.lua AddEventHandler('customphysics:nitrous:executeShot'|'customphysics:nitrous:clear')
@@ -41,7 +41,6 @@ fxmanifest.lua
 ├─ client.lua
 │   ├─ CreateThread: stability sampler (100ms) -> CustomPhysicsPower.sampleStability()
 │   ├─ CreateThread: per-frame coordinator -> Rollovers.update(), Wheelies.update(), Power.update(), Nitrous.update()
-│   ├─ RegisterCommand(Config.debug.command default "customphysicsdebug")
 │   └─ AddEventHandler('onResourceStop') -> clearOverrides(lastVehicle)
 │
 └─ UpdateNotifier.lua

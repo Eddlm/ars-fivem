@@ -1,4 +1,5 @@
 CustomPhysicsWheelies = CustomPhysicsWheelies or {}
+local WheelieConfig = (((CustomPhysics or {}).Config or {}).advanced or {}).wheelies or {}
 
 local WheelieStage = {
     off = 0,
@@ -12,9 +13,9 @@ local prevBrake = false
 local prevHandbrake = false
 local wheelieStage = WheelieStage.off
 local wheelieForce = 0.0
-local CUSTOM_WHEELIE_ARM_SPEED_THRESHOLD_METERS_PER_SECOND = 1.0
-local CUSTOM_WHEELIE_FORCE_MULTIPLIER = 0.4
-local CUSTOM_WHEELIE_FRONT_OFFSET_LENGTH_MULTIPLIER = 2.0
+local CUSTOM_WHEELIE_ARM_SPEED_THRESHOLD_METERS_PER_SECOND = tonumber(WheelieConfig.armSpeedThresholdMetersPerSecond) or 1.0
+local CUSTOM_WHEELIE_FORCE_MULTIPLIER = tonumber(WheelieConfig.forceMultiplier) or 0.4
+local CUSTOM_WHEELIE_FRONT_OFFSET_LENGTH_MULTIPLIER = tonumber(WheelieConfig.frontOffsetLengthMultiplier) or 2.0
 
 -- State helpers
 

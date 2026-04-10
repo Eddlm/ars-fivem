@@ -124,3 +124,36 @@ Config.engineSwaps = {
     { id = 'TYRUS', label = 'Tyrus Swap', enabled = true, description = 'Uses Tyrus engine values and audio for a full swap.', swapModel = 'TYRUS' },
     { id = 'TAIPAN', label = 'Taipan Swap', enabled = true, description = 'Uses Taipan engine values and audio for a full swap.', swapModel = 'TAIPAN' },
 }
+
+Config.advanced = {
+    panel = {
+        sharedPanelHeightUnits = 0.15,
+        sharedPanelBaseScale = 0.95,
+        sharedPanelMinScale = 0.72,
+        sharedPanelAlpha = 168,
+        sharedPanelFillAlpha = 204,
+        sharedPanelHeaderHeightRatio = 0.15,
+        sharedPanelTextBaseHeightUnits = 0.20,
+        sharedPanelWidthUnits = 0.1875,
+        defaultPanelHeightUnits = 0.0874,
+        primaryPanelLeftMargin = 0.014,
+        menuPanelGapX = 0.018,
+        stackedPanelGapY = 0.0032,
+        defaultMenuLeftPx = 20.0,
+        defaultMenuWidthPx = 431.0,
+        panelDrawRequestStaleMs = 1000,
+        mainPanelYOffset = -0.01,
+    },
+    tuning = {
+        transmissionPowerBonusPerUpgrade = 0.01,
+    },
+}
+
+Config.updateCheck = {
+    verbose = false,
+    repo = 'Eddlm/ars-fivem',
+    branch = 'main',
+    path = 'performancetuning',
+    token = '',
+    timeoutMs = 12000,
+}

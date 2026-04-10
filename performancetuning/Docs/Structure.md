@@ -1,9 +1,9 @@
 # performancetuning — Structure
 
 ## 1) Runtime topology
-- **Shared definitions/config:** `shared.lua`, `definitions.lua`, `configruntime.lua`.
+- **Shared definitions/config:** `Config.lua`, `definitions.lua`, `configruntime.lua`.
 - **Client domain modules:** handling, vehicle state, tuning packs, surface/material grip, nitrous, performance panel, menu/runtime bindings.
-- **Client composition root:** `client.lua` wires commands, exports, local events, and UI/PI update loops.
+- **Client composition root:** `client.lua` wires exports, local events, and UI/PI update loops.
 - **Server domain module:** `server.lua` stores diagnostics-related and stable-lap related data/events.
 - **Server utility module:** `UpdateNotifier.lua` for update checks.
 
@@ -11,7 +11,6 @@
 - Client is the primary runtime owner for live vehicle interaction, UI, and handling mutations.
 - Server handles selected authoritative operations:
   - stable lap sample persistence
-  - server diagnostics request/response
   - player scope/drop cleanup logic used by synchronization paths.
 - Bidirectional communication uses explicit net events (`TriggerServerEvent`/`RegisterNetEvent`).
 
@@ -28,11 +27,11 @@
 ## 4) Call tree (high-level)
 1. `fxmanifest.lua` loads shared layer, then client scripts in ordered list, then server scripts.
 2. Client load path initializes runtime tables and module interlinks.
-3. `client.lua` registers exports and player commands (`/ptune`, `/ptbarsmode`, `/ptdiag`).
+3. `client.lua` registers exports and runtime event handlers.
 4. UI and PI synchronization loops run continuously while resource is active.
 5. User interactions route through menu + tuning modules into handling write/reset operations.
-6. Selected operations dispatch to server for diagnostics or stable lap persistence.
-7. Server responds with confirmation and diagnostics events.
+6. Selected operations dispatch to server for stable lap persistence.
+7. Server responds with confirmation events.
 
 ## 5) State model
 - **Vehicle bucket state:** per-vehicle tune/PI/handling-original cache containers.
@@ -54,6 +53,18 @@ Ownership is split: interactive/live state mostly client-side; persistence and s
 
 ## 7) Lifecycle boundaries
 - **Start:** ordered module load from `fxmanifest.lua` establishes internals and export surface.
-- **Runtime:** commands/events drive tuning operations; threads maintain live UI/sync behavior.
+- **Runtime:** events/exports drive tuning operations; threads maintain live UI/sync behavior.
 - **Stop:** resource unload naturally stops loops; state will be reconstructed on next load.
+
+## 8) Configuration and logging behavior
+- `performancetuning` runtime does not currently read convars for tuning behavior or diagnostics verbosity.
+- `UpdateNotifier.lua` uses hardcoded update-check configuration:
+  - repo: `Eddlm/ars-fivem`
+  - branch: `main`
+  - path: `performancetuning`
+  - token: empty by default
+- Update checker logging is not runtime-configurable:
+  - verbose update status logging is fixed off
+  - only update-available notification is printed when a newer version is detected
+- Manual update check entry point remains `/ptupdatecheck`; startup check still runs once after a randomized delay.
 
