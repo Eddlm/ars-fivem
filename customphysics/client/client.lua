@@ -59,7 +59,7 @@ CreateThread(function()
             if lastVehicle and lastVehicle ~= vehicle then
                 clearOverrides(lastVehicle)
             end
-
+            
             CustomPhysicsRollovers.update(vehicle)
             CustomPhysicsWheelies.update(vehicle)
             CustomPhysicsPower.update(vehicle, now)
@@ -76,6 +76,12 @@ CreateThread(function()
     end
 end)
 
+function ShowSubtitle(text)
+
+	BEGIN_TEXT_COMMAND_PRINT("STRING")
+	ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME(text)
+	END_TEXT_COMMAND_PRINT(2000, 1)
+end 
 -- Clears active overrides when the resource stops to avoid leaving stale effects behind.
 AddEventHandler('onResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then

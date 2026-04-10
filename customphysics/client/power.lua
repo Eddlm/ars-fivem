@@ -396,7 +396,7 @@ local function advanceStabilityRecovery(vehicle, deltaSeconds)
     else
         state.antiBoostMultiplier = math.min(targetAntiBoostMultiplier, state.antiBoostMultiplier + recoveryStep)
     end
-
+  
     state.antiBoostMultiplier = math.max(getSpeedBasedMinimumAntiBoostMultiplier(vehicle), state.antiBoostMultiplier)
 end
 
@@ -451,9 +451,7 @@ function CustomPhysicsPower.sampleStability(vehicle, now)
     while #samples > maxSamples do
         table.remove(samples, 1)
     end
-    BeginTextCommandPrint('STRING')
-    AddTextComponentSubstringPlayerName(('%.2f'):format(state.antiBoostMultiplier))
-    EndTextCommandPrint(500, true)
+
     state.lastStabilityVelocity = currentVelocity
     state.lastStabilitySampleAt = now
 end
@@ -480,10 +478,16 @@ end
 
 -- Builds the full cheat-power multiplier stack for the current update.
 local function updatePowerMultiplierStack(vehicle, now)
+    
     local snapshot = buildVehicleUpdateSnapshot(vehicle)
     local slideMultiplier = calculateSlideMultiplier(vehicle)
     local offroadMultiplier = getOffroadMultiplier(snapshot, now)
     SetVehicleCheatPowerIncrease(vehicle, slideMultiplier * offroadMultiplier * state.antiBoostMultiplier * state.overspeedPowerMultiplier)
+                
+    
+	BEGIN_TEXT_COMMAND_PRINT("STRING")
+	ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME(('%.2f'):format(state.antiBoostMultiplier))
+	END_TEXT_COMMAND_PRINT(2000, 1)
 end
 
 -- Runs all power-related subsystems for the current vehicle update.
