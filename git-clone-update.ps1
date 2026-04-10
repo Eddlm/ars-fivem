@@ -32,11 +32,14 @@ foreach ($module in $modules) {
         git -C $targetDir pull origin main
     } else {
         Write-Host "[$module] Cloning..."
-        git init $targetDir
-        git -C $targetDir remote add origin $repoUrl
-        git -C $targetDir sparse-checkout init --cone
-        git -C $targetDir sparse-checkout set $module
-        git -C $targetDir pull origin main
+        $tmpDir = Join-Path $baseDir "_ars_tmp_$module"
+        git init $tmpDir
+        git -C $tmpDir remote add origin $repoUrl
+        git -C $tmpDir sparse-checkout init --cone
+        git -C $tmpDir sparse-checkout set $module
+        git -C $tmpDir pull origin main
+        Move-Item -Path (Join-Path $tmpDir $module) -Destination $targetDir
+        Remove-Item -Recurse -Force $tmpDir
     }
 
     Write-Host ""
