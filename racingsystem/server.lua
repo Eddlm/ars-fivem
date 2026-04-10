@@ -1221,26 +1221,13 @@ local function sendTeleportToLastCheckpoint(target, instance)
         return
     end
 
-    local heading = 0.0
-    local nextCheckpoint = checkpoints[startCheckpointIndex + 1]
-    if not nextCheckpoint and #checkpoints > 0 then
-        nextCheckpoint = checkpoints[1]
-    end
-    if type(nextCheckpoint) == 'table' and nextCheckpoint ~= startCheckpoint then
-        local deltaX = (tonumber(nextCheckpoint.x) or 0.0) - (tonumber(startCheckpoint.x) or 0.0)
-        local deltaY = (tonumber(nextCheckpoint.y) or 0.0) - (tonumber(startCheckpoint.y) or 0.0)
-        heading = math.deg(math.atan(deltaY, deltaX)) - 90.0
-        if heading < 0.0 then
-            heading = heading + 360.0
-        end
-    end
-
     TriggerClientEvent('racingsystem:teleportToCheckpoint', target, {
         instanceId = instance.id,
+        checkpointIndex = startCheckpointIndex,
         x = tonumber(startCheckpoint.x) or 0.0,
         y = tonumber(startCheckpoint.y) or 0.0,
         z = (tonumber(startCheckpoint.z) or 0.0) + 1.0,
-        heading = heading,
+        teleportType = 'join',
     })
 end
 
@@ -1256,33 +1243,14 @@ local function sendTeleportToCheckpoint(target, instance, checkpointIndex)
         return
     end
 
-    local heading = 0.0
-    local nextCheckpointIdx = checkpointIdx + 1
-    if nextCheckpointIdx > #checkpoints then
-        if instance.pointToPoint == true then
-            nextCheckpointIdx = nil
-        else
-            nextCheckpointIdx = 1
-        end
-    end
-    local nextCheckpoint = nextCheckpointIdx and checkpoints[nextCheckpointIdx] or nil
-    if type(nextCheckpoint) == 'table' and nextCheckpoint ~= checkpoint then
-        local deltaX = (tonumber(nextCheckpoint.x) or 0.0) - (tonumber(checkpoint.x) or 0.0)
-        local deltaY = (tonumber(nextCheckpoint.y) or 0.0) - (tonumber(checkpoint.y) or 0.0)
-        heading = math.deg(math.atan(deltaY, deltaX)) - 90.0
-        if heading < 0.0 then
-            heading = heading + 360.0
-        end
-    end
-
-    logVerbose(("[startfinish] teleport target=%s instance=%s requestedCheckpoint=%s resolvedCheckpoint=%s startCheckpoint=%s lapTrigger=%s heading=%.2f xyz=(%.2f,%.2f,%.2f)"):format(
+    logVerbose(("[startfinish] teleport target=%s instance=%s requestedCheckpoint=%s resolvedCheckpoint=%s startCheckpoint=%s lapTrigger=%s heading=%s xyz=(%.2f,%.2f,%.2f)"):format(
         tostring(target),
         tostring(instance.id),
         tostring(checkpointIndex),
         tostring(checkpointIdx),
         tostring(getRaceStartCheckpoint(instance)),
         tostring(getLapTriggerCheckpoint(instance, #checkpoints, tonumber(instance.laps) or 1)),
-        heading,
+        'client',
         tonumber(checkpoint.x) or 0.0,
         tonumber(checkpoint.y) or 0.0,
         tonumber(checkpoint.z) or 0.0
@@ -1290,10 +1258,11 @@ local function sendTeleportToCheckpoint(target, instance, checkpointIndex)
 
     TriggerClientEvent('racingsystem:teleportToCheckpoint', target, {
         instanceId = instance.id,
+        checkpointIndex = checkpointIdx,
         x = tonumber(checkpoint.x) or 0.0,
         y = tonumber(checkpoint.y) or 0.0,
         z = (tonumber(checkpoint.z) or 0.0) + 1.0,
-        heading = heading,
+        teleportType = 'join',
     })
 end
 

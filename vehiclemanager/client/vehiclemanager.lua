@@ -54,8 +54,6 @@ local TextConfig = {
     performancePiDisplayDescription = "Show or hide nearby PI comparison panels.",
     performanceRevLimiterLabel = "Rev Limiter",
     performanceRevLimiterDescription = "Turn the current vehicle's rev limiter behavior on or off.",
-    performanceSteeringLockModeLabel = "Steering Lock Mode",
-    performanceSteeringLockModeDescription = "Adjust how steering lock scales from tire lateral grip.",
     noVehicleLabel = "No vehicle",
     noVehicleDescription = "Get into a vehicle and take the driver seat to use this option.",
     noLiveriesLabel = "No liveries available",
@@ -75,7 +73,6 @@ local MENU_AVAILABILITY_REFRESH_MS = math.max(0, math.floor(tonumber(UIConfig.me
 local VEHICLE_TUNING_AUTOSAVE_DELAY_MS = 6000
 local PERFORMANCE_SETTINGS_PI_OPTIONS = UIConfig.performanceSettingsPiOptions or { "No", "Yes" }
 local PERFORMANCE_SETTINGS_REV_LIMITER_OPTIONS = UIConfig.performanceSettingsRevLimiterOptions or { "Off", "On" }
-local PERFORMANCE_SETTINGS_STEERING_LOCK_MODE_OPTIONS = UIConfig.performanceSettingsSteeringLockModeOptions or { "Stock", "Balanced", "Aggro", "Very Aggro", "Very Smooth", "Smooth" }
 
 local VMUI = {}
 
@@ -191,7 +188,6 @@ local customTyresItem = UIMenuCheckboxItem.New(TextConfig.customTyresLabel or "C
 customTyresItem.Activated = customTyresItem.Activated or function() end
 local performancePiDisplayListItem = VMUI.CreateListItem(TextConfig.performancePiDisplayLabel or "PI Display", PERFORMANCE_SETTINGS_PI_OPTIONS, 1, TextConfig.performancePiDisplayDescription or "Choose which performance index values are shown in the tuning UI.")
 local performanceRevLimiterListItem = VMUI.CreateListItem(TextConfig.performanceRevLimiterLabel or "Rev Limiter", PERFORMANCE_SETTINGS_REV_LIMITER_OPTIONS, 1, TextConfig.performanceRevLimiterDescription or "Turn the current vehicle's rev limiter behavior on or off.")
-local performanceSteeringLockModeListItem = VMUI.CreateListItem(TextConfig.performanceSteeringLockModeLabel or "Steering Lock Mode", PERFORMANCE_SETTINGS_STEERING_LOCK_MODE_OPTIONS, 1, TextConfig.performanceSteeringLockModeDescription or "Adjust how steering lock scales from tire lateral grip.")
 
 local currentPrimaryColorOptions = {}
 local currentSecondaryColorOptions = {}
@@ -542,68 +538,6 @@ local function setPerformanceTuningRevLimiterEnabled(enabled)
     return ok and result == true
 end
 
-local function getPerformanceTuningSteeringLockModeIndex()
-    if not isPerformanceTuningStarted() then
-        return false, 1
-    end
-
-    local ok, mode = pcall(function()
-        return exports["performancetuning"]:GetCurrentVehicleSteeringLockMode()
-    end)
-
-    if not ok or type(mode) ~= "string" then
-        return false, 1
-    end
-
-    local normalized = string.lower(mode)
-    if normalized == "balanced" or normalized == "balance" then
-        return true, 2
-    end
-    if normalized == "aggro" or normalized == "aggressive" then
-        return true, 3
-    end
-    if normalized == "very_aggro" or normalized == "very_aggressive" or normalized == "extreme_aggressive" then
-        return true, 4
-    end
-    if normalized == "very_smooth" or normalized == "extreme_smooth" then
-        return true, 5
-    end
-    if normalized == "smooth" or normalized == "sooth" then
-        return true, 6
-    end
-
-    return true, 1
-end
-
-local function setPerformanceTuningSteeringLockModeIndex(index)
-    if not isPerformanceTuningStarted() then
-        return false
-    end
-
-    local modeByIndex = {
-        [1] = "stock",
-        [2] = "balanced",
-        [3] = "aggressive",
-        [4] = "very_aggressive",
-        [5] = "very_smooth",
-        [6] = "smooth",
-    }
-    local targetMode = modeByIndex[math.floor(tonumber(index) or 1)] or "stock"
-
-    local ok, result = pcall(function()
-        return exports["performancetuning"]:SetCurrentVehicleSteeringLockMode(targetMode)
-    end)
-
-    if not ok then
-        return false
-    end
-
-    if type(result) == "boolean" then
-        return result == true
-    end
-
-    return true
-end
 
 local function refreshPerformanceSettingsMenu()
     local hasVehicle = availabilityState.hasDriverVehicle == true
@@ -611,16 +545,13 @@ local function refreshPerformanceSettingsMenu()
 
     performancePiDisplayListItem:Enabled(tuningAvailable and hasVehicle)
     performanceRevLimiterListItem:Enabled(tuningAvailable and hasVehicle)
-    performanceSteeringLockModeListItem:Enabled(tuningAvailable and hasVehicle)
 
     if not tuningAvailable then
         local description = "Start performancetuning to adjust these settings."
         performancePiDisplayListItem:Description(description)
         performanceRevLimiterListItem:Description(description)
-        performanceSteeringLockModeListItem:Description(description)
         performancePiDisplayListItem:Index(1)
         performanceRevLimiterListItem:Index(1)
-        performanceSteeringLockModeListItem:Index(1)
         return
     end
 
@@ -628,10 +559,8 @@ local function refreshPerformanceSettingsMenu()
         local description = TextConfig.noVehicleDescription or "Get into a vehicle to see options here."
         performancePiDisplayListItem:Description(description)
         performanceRevLimiterListItem:Description(description)
-        performanceSteeringLockModeListItem:Description(description)
         performancePiDisplayListItem:Index(1)
         performanceRevLimiterListItem:Index(1)
-        performanceSteeringLockModeListItem:Index(1)
         return
     end
 
@@ -645,15 +574,6 @@ local function refreshPerformanceSettingsMenu()
     else
         performanceRevLimiterListItem:Description(TextConfig.noVehicleDescription or "Get into a vehicle to see options here.")
         performanceRevLimiterListItem:Enabled(false)
-    end
-
-    local hasSteeringLockMode, steeringLockModeIndex = getPerformanceTuningSteeringLockModeIndex()
-    performanceSteeringLockModeListItem:Index(steeringLockModeIndex)
-    if hasSteeringLockMode then
-        clearItemDescription(performanceSteeringLockModeListItem)
-    else
-        performanceSteeringLockModeListItem:Description(TextConfig.noVehicleDescription or "Get into a vehicle to see options here.")
-        performanceSteeringLockModeListItem:Enabled(false)
     end
 end
 
@@ -2270,7 +2190,6 @@ statsGatewayItem.Activated = function(menu)
 end
 performanceSettingsMenu:AddItem(performancePiDisplayListItem)
 performanceSettingsMenu:AddItem(performanceRevLimiterListItem)
-performanceSettingsMenu:AddItem(performanceSteeringLockModeListItem)
 saveLoadSubMenu.Item.Activated = function(menu)
     requestSavedVehicleIndex()
     menu:SwitchTo(saveLoadSubMenu.SubMenu, 1, true)
@@ -2298,7 +2217,6 @@ registerVehicleRequiredItem(statsGatewayItem)
 registerVehicleRequiredItem(wheelsSubMenu.Item)
 registerVehicleRequiredItem(performancePiDisplayListItem)
 registerVehicleRequiredItem(performanceRevLimiterListItem)
-registerVehicleRequiredItem(performanceSteeringLockModeListItem)
 registerVehicleRequiredItem(paintCategoryListItem)
 registerVehicleRequiredItem(primaryPaintColorListItem)
 registerVehicleRequiredItem(secondaryPaintColorListItem)
@@ -2441,10 +2359,6 @@ performanceSettingsMenu.OnListChange = function(_, item, index)
         if setPerformanceTuningRevLimiterEnabled(index == 2) then
             scheduleVehicleTuningAutosave()
         end
-    elseif item == performanceSteeringLockModeListItem then
-        if setPerformanceTuningSteeringLockModeIndex(index) then
-            scheduleVehicleTuningAutosave()
-        end
     end
 end
 
@@ -2453,10 +2367,6 @@ performanceSettingsMenu.OnListSelect = function(_, item, index)
         setPerformanceTuningPiDisplayModeIndex(index)
     elseif item == performanceRevLimiterListItem then
         if setPerformanceTuningRevLimiterEnabled(index == 2) then
-            scheduleVehicleTuningAutosave()
-        end
-    elseif item == performanceSteeringLockModeListItem then
-        if setPerformanceTuningSteeringLockModeIndex(index) then
             scheduleVehicleTuningAutosave()
         end
     end
@@ -2572,4 +2482,3 @@ CreateThread(function()
         end
     end
 end)
-

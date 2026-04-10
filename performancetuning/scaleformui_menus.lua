@@ -20,7 +20,7 @@ local MENU_DESCRIPTIONS = {
     antirollBiasFront = 'Front-to-rear roll stiffness.',
     suspensionRaise = 'Ride height gap.',
     suspensionBiasFront = 'Front-to-rear suspension balance.',
-    steeringLockMode = 'Speed-based steering lock scaling.',
+    steeringLockMode = "Alters the underlying logic so your steering is more or less aggressive.",
     tweaks = 'Fine adjustments.',
 }
 local LIST_OPTION_DESCRIPTIONS = {
@@ -31,12 +31,12 @@ local LIST_OPTION_DESCRIPTIONS = {
         [4] = 'Least griploss offroad, not much grip on tarmac.',
     },
     steeringLockMode = {
-        [1] = 'Stock steering lock.',
-        [2] = '2.0x lateral grip scaling.',
-        [3] = '2.5x lateral grip scaling.',
-        [4] = '3.0x lateral grip scaling.',
-        [5] = '1.0x lateral grip scaling.',
-        [6] = '1.5x lateral grip scaling.',
+        [1] = 'No steering adjustment.',
+        [2] = 'Neutral steering balance.',
+        [3] = 'More aggressive steering response.',
+        [4] = 'Very aggressive steering response.',
+        [5] = 'Softer, more forgiving steering.',
+        [6] = 'Very soft, very forgiving steering.',
     },
 }
 local LIST_OPTION_DESCRIPTIONS_BY_ID = {
@@ -417,13 +417,13 @@ local function setSuspensionBiasSliderState(value)
     item:Index(scaleformUI.getSuspensionBiasSliderIndex(resolvedValue) - 1)
 end
 
+-- None=stock, Balanced=1.0, Aggressive=1.2, Very Aggressive=1.4, Soft=0.8, Very Soft=0.6
+local STEERING_LOCK_MODE_INDEX_TO_ID = { 'stock', '1.0', '1.2', '1.4', '0.6', '0.8' }
+local STEERING_LOCK_MODE_ID_TO_INDEX = { stock=1, ['1.0']=2, ['1.2']=3, ['1.4']=4, ['0.6']=5, ['0.8']=6 }
+
 local function getSteeringLockModeIdFromIndex(index)
-    if index == 2 then return 'balanced' end
-    if index == 3 then return 'aggressive' end
-    if index == 4 then return 'very_aggressive' end
-    if index == 5 then return 'very_smooth' end
-    if index == 6 then return 'smooth' end
-    return 'stock'
+    local idx = math.max(1, math.min(#STEERING_LOCK_MODE_INDEX_TO_ID, math.floor(tonumber(index) or 1)))
+    return STEERING_LOCK_MODE_INDEX_TO_ID[idx] or 'stock'
 end
 
 local function isAnyNativeMenuOpen()
@@ -448,13 +448,11 @@ local function isAnyNativeMenuOpen()
 end
 
 local function getSteeringLockModeIndex(modeId)
-    local normalized = tostring(modeId or 'stock'):lower()
-    if normalized == 'balanced' or normalized == 'balance' then return 2 end
-    if normalized == 'aggro' or normalized == 'aggressive' then return 3 end
-    if normalized == 'very_aggro' or normalized == 'very_aggressive' or normalized == 'extreme_aggressive' then return 4 end
-    if normalized == 'very_smooth' or normalized == 'extreme_smooth' then return 5 end
-    if normalized == 'sooth' or normalized == 'smooth' then return 6 end
-    return 1
+    return STEERING_LOCK_MODE_ID_TO_INDEX[tostring(modeId or 'stock'):lower()] or 1
+end
+
+local function buildSteeringLockModeLabels()
+    return { 'None', 'Balanced', 'Aggressive', 'Very Aggressive', 'Very Soft', 'Soft' }
 end
 
 local function handleSteeringLockModeSelection(index)
@@ -763,10 +761,7 @@ function PerformanceTuning.ScaleformUI.refreshMenu()
     setTireCompoundQualityAvailability(bucket)
 
     if state.items.steeringLockMode then
-        local steeringModeIndex = getSteeringLockModeIndex(bucket.steeringLockMode)
-        local steeringModeDescriptions = LIST_OPTION_DESCRIPTIONS.steeringLockMode or {}
-        state.items.steeringLockMode:Index(steeringModeIndex)
-        state.items.steeringLockMode:Description(steeringModeDescriptions[steeringModeIndex] or getMenuDescription('steeringLockMode'))
+        state.items.steeringLockMode:Index(getSteeringLockModeIndex(bucket.steeringLockMode))
     end
 
     setAntirollSliderState(bucket.antirollForce)
@@ -832,7 +827,7 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     state.items.nitrous = UIMenuListItem.New('Nitrous', { 'Stock' }, 1)
     state.items.antirollSlider = UIMenuSliderItem.New('Anti-Roll Bars', #state.sliderValues.antirollBars - 1, 1, scaleformUI.getAntirollSliderIndex(0.0) - 1, false)
     state.items.nitrousShotSlider = UIMenuSliderItem.New('Shot Strength', #state.sliderValues.nitrousShotStrength - 1, 1, scaleformUI.getNitroShotSliderIndex(1.0) - 1, false)
-    state.items.steeringLockMode = UIMenuListItem.New('Steering Lock Mode', { 'Stock', 'Balanced', 'Aggro', 'Very Aggro', 'Very Smooth', 'Smooth' }, 1)
+    state.items.steeringLockMode = UIMenuListItem.New('Steering Balance', buildSteeringLockModeLabels(), 1, getMenuDescription('steeringLockMode'))
     state.items.brakeBiasSlider = UIMenuSliderItem.New('Brake Bias Front', #state.sliderValues.brakeBiasFront - 1, 1, scaleformUI.getBrakeBiasSliderIndex(0.5) - 1, false)
     state.items.gripBiasSlider = UIMenuSliderItem.New('Grip Bias Front', #state.sliderValues.gripBiasFront - 1, 1, scaleformUI.getGripBiasSliderIndex(0.5) - 1, false)
     state.items.antirollBiasSlider = UIMenuSliderItem.New('Anti-Roll Bias Front', #state.sliderValues.antirollBiasFront - 1, 1, scaleformUI.getAntirollBiasSliderIndex(0.5) - 1, false)

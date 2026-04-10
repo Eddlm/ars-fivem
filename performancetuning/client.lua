@@ -162,30 +162,9 @@ local function requestDragRebalance(vehicle, options)
     return true
 end
 
-local function resolveSteeringLockModeFactor(mode)
-    local tuningPackManager = PerformanceTuning.TuningPackManager or {}
-    if type(tuningPackManager.getSteeringLockModeFactor) == 'function' then
-        return tuningPackManager.getSteeringLockModeFactor(mode)
-    end
 
-    local normalized = tostring(mode or 'stock'):lower()
-    if normalized == 'balanced' or normalized == 'balance' then
-        return 2.0
-    end
-    if normalized == 'aggro' or normalized == 'aggressive' then
-        return 2.5
-    end
-    if normalized == 'very_aggro' or normalized == 'very_aggressive' or normalized == 'extreme_aggressive' then
-        return 3.0
-    end
-    if normalized == 'very_smooth' or normalized == 'extreme_smooth' then
-        return 1.0
-    end
-    if normalized == 'sooth' or normalized == 'smooth' then
-        return 1.5
-    end
-    return nil
-end
+local steeringLockTargetByVehicleKey = {}
+local steeringLockActiveByVehicleKey = {}
 
 CreateThread(function()
     local steeringLockField = (HandlingFields.steering or {}).lock or 'fSteeringLock'
@@ -193,9 +172,9 @@ CreateThread(function()
     local appliedOverrides = RuntimeState.steeringLockOverrideAppliedByVehicleKey or {}
     RuntimeState.steeringLockOverrideAppliedByVehicleKey = appliedOverrides
     local minRefreshSpeedMph = 1.0
-    local maxRefreshSpeedMph = 30.0
-    local minRefreshIntervalMs = 200
-    local maxRefreshIntervalMs = 600
+    local maxRefreshSpeedMph = 15.0
+    local minRefreshIntervalMs = 50
+    local maxRefreshIntervalMs = 250
 
     while true do
         local ped = PlayerPedId()
@@ -223,7 +202,7 @@ CreateThread(function()
 
         local vehicleKey = PerformanceTuning.VehicleManager.getVehicleCacheKey(vehicle)
         local mode = bucket.steeringLockMode or 'stock'
-        local factor = resolveSteeringLockModeFactor(mode)
+        local factor = PerformanceTuning.TuningPackManager.getSteeringLockModeFactor(mode)
 
         if type(factor) == 'number' then
             local lateral = readHandlingValue(vehicle, 'float', tractionLateralField)
@@ -231,33 +210,54 @@ CreateThread(function()
                 goto continue
             end
 
-            local targetSteeringLock = lateral * factor
-            if not isFiniteNumber(targetSteeringLock) then
-                goto continue
-            end
+
 
             local baseSteeringLock = tonumber(bucket.baseSteeringLock)
             if not isFiniteNumber(baseSteeringLock) then
-                baseSteeringLock = readHandlingValue(vehicle, 'float', steeringLockField)
+                -- Prefer the pre-override original value stored by rememberOriginalValue,
+                -- so we never seed baseSteeringLock from an already-overridden live field.
+                local origBucket = PerformanceTuning.VehicleManager.getVehicleBucket(vehicle, false)
+                local origEntry = origBucket and origBucket[steeringLockField]
+                if origEntry and isFiniteNumber(origEntry.value) then
+                    baseSteeringLock = origEntry.value
+                else
+                    baseSteeringLock = readHandlingValue(vehicle, 'float', steeringLockField)
+                end
                 if isFiniteNumber(baseSteeringLock) then
                     bucket.baseSteeringLock = baseSteeringLock
                 end
             end
-
-            if isFiniteNumber(baseSteeringLock) then
-                if speedMph <= 5.0 then
-                    targetSteeringLock = baseSteeringLock
-                elseif speedMph < 30.0 then
-                    local blend = (speedMph - 5.0) / 25.0
-                    targetSteeringLock = baseSteeringLock + ((targetSteeringLock - baseSteeringLock) * blend)
+            local targetSteeringLock = lateral * ( baseSteeringLock/lateral) * factor
+            if not isFiniteNumber(targetSteeringLock) then
+                goto continue
+            end
+            -- If steering input and lateral slide are opposite, the driver is countersteering —
+            -- restore original lock. Same direction means sliding with steering, apply factor.
+            local localVel = GetEntitySpeedVector(vehicle, true)
+            local lateralSlide = localVel.x  -- positive = sliding right in vehicle space
+            local steeringInput = GetVehicleSteeringAngle(vehicle)  -- positive = turning right
+            local threshold = lateral / 3.0
+            local oppositeSide = (lateralSlide > threshold and steeringInput < -threshold) or (lateralSlide < -threshold and steeringInput > threshold)
+            if oppositeSide and isFiniteNumber(baseSteeringLock) then
+                targetSteeringLock = baseSteeringLock
+            else
+                if isFiniteNumber(baseSteeringLock) then
+                    local minBlendSpeedMph = 5.0
+                    local maxBlendSpeedMph = 30.0
+                    if speedMph <= minBlendSpeedMph then
+                        targetSteeringLock = baseSteeringLock
+                    elseif speedMph < maxBlendSpeedMph then
+                        local blend = (speedMph - minBlendSpeedMph) / (maxBlendSpeedMph - minBlendSpeedMph)
+                        targetSteeringLock = baseSteeringLock + ((targetSteeringLock - baseSteeringLock) * blend)
+                    end
                 end
             end
-
-            PerformanceTuning.HandlingManager.rememberOriginalValue(vehicle, steeringLockField, 'float')
-            writeHandlingValue(vehicle, 'float', steeringLockField, targetSteeringLock)
+        
             if type(vehicleKey) == 'string' and vehicleKey ~= '' then
+                steeringLockTargetByVehicleKey[vehicleKey] = targetSteeringLock
                 appliedOverrides[vehicleKey] = true
             end
+            PerformanceTuning.HandlingManager.rememberOriginalValue(vehicle, steeringLockField, 'float')
         else
             local shouldRestore = type(vehicleKey) == 'string' and vehicleKey ~= '' and appliedOverrides[vehicleKey] == true
             if shouldRestore then
@@ -266,16 +266,45 @@ CreateThread(function()
                     baseSteeringLock = readHandlingValue(vehicle, 'float', steeringLockField)
                     bucket.baseSteeringLock = baseSteeringLock
                 end
-
-                if isFiniteNumber(baseSteeringLock) then
-                    PerformanceTuning.HandlingManager.rememberOriginalValue(vehicle, steeringLockField, 'float')
-                    writeHandlingValue(vehicle, 'float', steeringLockField, baseSteeringLock)
+                if type(vehicleKey) == 'string' and vehicleKey ~= '' then
+                    steeringLockTargetByVehicleKey[vehicleKey] = baseSteeringLock
                 end
                 appliedOverrides[vehicleKey] = nil
+                steeringLockActiveByVehicleKey[vehicleKey] = nil
             end
         end
 
         ::continue::
+    end
+end)
+
+CreateThread(function()
+    local steeringLockField = (HandlingFields.steering or {}).lock or 'fSteeringLock'
+    while true do
+                Wait(0)
+
+        local ped = PlayerPedId()
+        local vehicle = GetVehiclePedIsIn(ped, false)
+        if not PerformanceTuning.VehicleManager.isPedDrivingVehicle(ped, vehicle) then
+            goto continueFrame
+        end
+        local vehicleKey = PerformanceTuning.VehicleManager.getVehicleCacheKey(vehicle)
+        if type(vehicleKey) ~= 'string' or vehicleKey == '' then
+            goto continueFrame
+        end
+        local target = steeringLockTargetByVehicleKey[vehicleKey]
+        if not isFiniteNumber(target) then
+            goto continueFrame
+        end
+        local current = steeringLockActiveByVehicleKey[vehicleKey] or target
+
+        local applied = current + (target - current) * 0.5
+        steeringLockActiveByVehicleKey[vehicleKey] = applied
+        writeHandlingValue(vehicle, 'float', steeringLockField, applied)
+        BeginTextCommandPrint('STRING')
+        AddTextComponentSubstringPlayerName(('SteerLock: %.2f'):format(applied))
+        EndTextCommandPrint(500, true)
+        ::continueFrame::
     end
 end)
 

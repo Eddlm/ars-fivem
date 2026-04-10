@@ -452,38 +452,9 @@ function CustomPhysicsPower.sampleStability(vehicle, now)
     state.lastStabilitySampleAt = now
 end
 
--- Rev limiter helpers
-
--- Disables throttle input briefly when the rev limiter conditions are active.
+-- Rev limiter enforcement has moved to performancetuning/nitrous.lua.
+-- performancetuning owns the rev limiter state and feature; no dependency on customphysics needed.
 local function updateRpmLimiter(vehicle, now)
-    local limiterEnabled = CustomPhysics.Config.fallbackRevLimiterEnabled == true
-    if NetworkGetEntityIsNetworked(vehicle) then
-        local tuneState = Entity(vehicle).state[StateBagKeys.tune]
-        if type(tuneState) == 'table' then
-            limiterEnabled = tuneState.revLimiterEnabled == true
-        end
-    end
-
-    if limiterEnabled ~= true then
-        state.accelDisabledAt = 0
-        return
-    end
-
-    local currentGear = GetVehicleCurrentGear(vehicle)
-    local highGear = math.max(GetVehicleHighGear(vehicle) or 0, 0)
-    local currentRpm = GetVehicleCurrentRpm(vehicle)
-    local planarSpeed = CustomPhysicsUtil.getVehiclePlanarSpeed(vehicle)
-    local moving = (planarSpeed * Units.metersPerSecondToMph) > 1.0
-    local validGear = currentGear >= 1 and (highGear <= 1 or currentGear < highGear)
-
-    if moving and validGear and currentRpm >= 1.0 then
-        state.accelDisabledAt = now + 10
-    end
-
-    if now < state.accelDisabledAt then
-        DisableControlAction(0, 71, true)
-        DisableControlAction(2, 71, true)
-    end
 end
 
 -- Public subsystem API

@@ -1,8 +1,5 @@
-# vehiclemanager
-
-## Requirements
-- Requires `ScaleformUI_Assets`.
-- Requires `ScaleformUI_Lua`.
+# Vehicle Manager
+- Requires `ScaleformUI_Assets` and. `ScaleformUI_Lua`.
 
 ## Interactions
 - Can open and coordinate with `performancetuning` menu and state.

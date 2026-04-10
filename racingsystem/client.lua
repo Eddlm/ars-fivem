@@ -1033,6 +1033,24 @@ local function getHeadingToNextCheckpoint(currentCheckpoint, nextCheckpoint)
     return math.deg(math.atan2(dy, dx)) - 90.0
 end
 
+local function getVehicleHeadingToNextCheckpoint(currentCheckpoint, nextCheckpoint)
+    local currentX = tonumber(currentCheckpoint and currentCheckpoint.x) or 0.0
+    local currentY = tonumber(currentCheckpoint and currentCheckpoint.y) or 0.0
+    local nextX = tonumber(nextCheckpoint and nextCheckpoint.x) or currentX
+    local nextY = tonumber(nextCheckpoint and nextCheckpoint.y) or currentY
+    local dx = nextX - currentX
+    local dy = nextY - currentY
+    if math.abs(dx) <= 0.0001 and math.abs(dy) <= 0.0001 then
+        return 0.0
+    end
+
+    local heading = tonumber(GetHeadingFromVector_2d(dx, dy)) or 0.0
+    if heading < 0.0 then
+        heading = heading + 360.0
+    end
+    return heading
+end
+
 local function getHorizontalDistance(origin, checkpoint)
     local originX = tonumber(origin and origin.x) or 0.0
     local originY = tonumber(origin and origin.y) or 0.0
@@ -2639,6 +2657,8 @@ local function tryResolveTeleportGroundZ(destinationX, destinationY, destination
     return false, destinationZ
 end
 
+local resolveTeleportHeading
+
 local function runSmartJoinTeleport(payload)
     if type(payload) ~= 'table' then
         return
@@ -2649,20 +2669,74 @@ local function runSmartJoinTeleport(payload)
     end
     isTeleportInProgress = true
 
-    local shouldNotifyFallback = false
     local didFadeOut = false
     local destinationX = tonumber(payload.x) or 0.0
     local destinationY = tonumber(payload.y) or 0.0
     local destinationZ = tonumber(payload.z) or 0.0
-    local heading = tonumber(payload.heading) or 0.0
+    local heading = resolveTeleportHeading(payload)
+    local teleportType = tostring(payload.teleportType or 'join')
+    local checkpointSpeedMph = math.max(0.0, tonumber(payload.speedMph) or 15.0)
+    local checkpointSpeedMps = checkpointSpeedMph * 0.44704
     local fadeOutMs = 650
     local fadeInMs = 650
     local fadeTimeoutMs = 2500
-    local streamTimeoutMs = 6000
     local pollIntervalMs = 75
-    local groundProbeOffsets = { 160.0, 100.0, 60.0, 30.0, 10.0 }
 
-    local ok, err = pcall(function()
+    local ok, _ = pcall(function()
+        if teleportType == 'join' then
+            local joinedInstance = getJoinedRaceInstance()
+            local entrants = type(joinedInstance) == 'table' and type(joinedInstance.entrants) == 'table' and joinedInstance.entrants or {}
+            local checkpoints = type(joinedInstance) == 'table' and type(joinedInstance.checkpoints) == 'table' and joinedInstance.checkpoints or {}
+            local checkpointCount = #checkpoints
+            local localSource = tonumber(GetPlayerServerId(PlayerId())) or 0
+            local slot = math.max(1, #entrants)
+            local localEntrant = getLocalEntrant(joinedInstance)
+            local checkpointIndex = math.max(1, math.min(checkpointCount, math.floor(tonumber(payload and payload.checkpointIndex) or 1)))
+
+            if type(localEntrant) == 'table' then
+                local positionSlot = math.floor(tonumber(localEntrant.position) or 0)
+                if positionSlot > 0 then
+                    slot = positionSlot
+                else
+                    for index, entrant in ipairs(entrants) do
+                        if tonumber(entrant and entrant.source) == localSource then
+                            slot = index
+                            break
+                        end
+                    end
+                end
+            end
+
+            if checkpointCount > 0 then
+                local currentVariant = getCheckpointVariantEntry(joinedInstance, checkpointIndex)
+                local currentCheckpoint = currentVariant and currentVariant.primary or checkpoints[checkpointIndex]
+                local previousIndex = checkpointIndex - 1
+                if previousIndex < 1 then previousIndex = checkpointCount end
+                local previousVariant = getCheckpointVariantEntry(joinedInstance, previousIndex)
+                local previousCheckpoint = previousVariant and previousVariant.primary or checkpoints[previousIndex]
+                local currentX = tonumber(currentCheckpoint and currentCheckpoint.x) or destinationX
+                local currentY = tonumber(currentCheckpoint and currentCheckpoint.y) or destinationY
+                local prevX = tonumber(previousCheckpoint and previousCheckpoint.x) or currentX
+                local prevY = tonumber(previousCheckpoint and previousCheckpoint.y) or currentY
+                local forwardX = currentX - prevX
+                local forwardY = currentY - prevY
+                local forwardLength = math.sqrt((forwardX * forwardX) + (forwardY * forwardY))
+
+                if forwardLength > 0.001 then
+                    forwardX = forwardX / forwardLength
+                    forwardY = forwardY / forwardLength
+                    local rightX = forwardY
+                    local rightY = -forwardX
+                    local sideMeters = math.max(2.0, ((tonumber(previousCheckpoint and previousCheckpoint.radius) or 8.0) * 0.5) - 2.0)
+                    local behindMeters = 5.0 * slot
+                    local sideSign = (slot % 2 == 0) and 1.0 or -1.0
+
+                    destinationX = currentX - (forwardX * behindMeters) + (rightX * sideMeters * sideSign)
+                    destinationY = currentY - (forwardY * behindMeters) + (rightY * sideMeters * sideSign)
+                end
+            end
+        end
+
         local ped = PlayerPedId()
         if not DoesEntityExist(ped) then
             return
@@ -2671,40 +2745,24 @@ local function runSmartJoinTeleport(payload)
         local vehicle = GetVehiclePedIsIn(ped, false)
         local isDriverVehicle = vehicle ~= 0 and GetPedInVehicleSeat(vehicle, -1) == ped
 
-        -- Stage C: fade out and wait.
         if not IsScreenFadedOut() then
             DoScreenFadeOut(fadeOutMs)
             waitForFadeState(true, fadeTimeoutMs, pollIntervalMs)
         end
         didFadeOut = true
 
-        -- Stage D: focus + stream + ground resolve.
-        local foundGround, resolvedGroundZ = tryResolveTeleportGroundZ(
-            destinationX,
-            destinationY,
-            destinationZ,
-            streamTimeoutMs,
-            pollIntervalMs,
-            groundProbeOffsets
-        )
         local targetZ = destinationZ
-        if foundGround then
-            targetZ = resolvedGroundZ + 1.0
-            Wait(1000)
-        else
-            shouldNotifyFallback = true
-        end
 
-        -- Stage E: actual teleport.
         if isDriverVehicle and DoesEntityExist(vehicle) and GetPedInVehicleSeat(vehicle, -1) == ped then
             SetEntityCoordsNoOffset(vehicle, destinationX, destinationY, targetZ, false, false, false)
             SetEntityHeading(vehicle, heading)
-            SetEntityVelocity(vehicle, 0.0, 0.0, 0.0)
-            SetVehicleForwardSpeed(vehicle, 0.0)
             SetVehicleOnGroundProperly(vehicle)
-
-            -- Ensure player vehicle control is restored after halt+teleport sequencing.
-            ClearPedTasks(ped)
+            SetEntityVelocity(vehicle, 0.0, 0.0, 0.0)
+            if teleportType == 'checkpoint' then
+                SetVehicleForwardSpeed(vehicle, checkpointSpeedMps)
+            else
+                SetVehicleForwardSpeed(vehicle, 0.0)
+            end
             SetVehicleHandbrake(vehicle, false)
             SetVehicleUndriveable(vehicle, false)
             SetVehicleEngineOn(vehicle, true, true, false)
@@ -2719,9 +2777,6 @@ local function runSmartJoinTeleport(payload)
         end
     end)
 
-    -- Stage F/G: always cleanup focus and fade-in, plus fallback warning.
-    ClearFocus()
-
     if didFadeOut then
         if not IsScreenFadedIn() then
             DoScreenFadeIn(fadeInMs)
@@ -2729,8 +2784,152 @@ local function runSmartJoinTeleport(payload)
         end
     end
 
-    if shouldNotifyFallback then
+    if not ok then
     end
+
+    isTeleportInProgress = false
+end
+
+resolveTeleportHeading = function(payload)
+    local heading = tonumber(payload and payload.heading)
+    if heading ~= nil then
+        return heading
+    end
+
+    local joinedInstance = getJoinedRaceInstance()
+    local checkpoints = type(joinedInstance) == 'table' and type(joinedInstance.checkpoints) == 'table' and joinedInstance.checkpoints or {}
+    local checkpointCount = #checkpoints
+    local checkpointIndex = math.max(1, math.min(checkpointCount, math.floor(tonumber(payload and payload.checkpointIndex) or 1)))
+    if checkpointCount <= 0 then
+        return 0.0
+    end
+
+    local targetVariant = getCheckpointVariantEntry(joinedInstance, checkpointIndex)
+    local targetCheckpoint = targetVariant and targetVariant.primary or checkpoints[checkpointIndex]
+    local previousIndex = checkpointIndex - 1
+    if previousIndex < 1 then
+        -- If previous checkpoint is not in-range, use the last checkpoint in the list.
+        previousIndex = checkpointCount
+    end
+    local previousVariant = getCheckpointVariantEntry(joinedInstance, previousIndex)
+    local previousCheckpoint = previousVariant and previousVariant.primary or checkpoints[previousIndex]
+    if type(previousCheckpoint) == 'table' and type(targetCheckpoint) == 'table' then
+        return getVehicleHeadingToNextCheckpoint(previousCheckpoint, targetCheckpoint)
+    end
+
+    return 0.0
+end
+
+local function runSmartJoinTeleportLerp(payload)
+    if type(payload) ~= 'table' then
+        return
+    end
+
+    if isTeleportInProgress then
+        return
+    end
+    isTeleportInProgress = true
+
+    local controlledEntity = 0
+    local pedToUnfreeze = 0
+
+    local ok, _ = pcall(function()
+        local destinationX = tonumber(payload.x) or 0.0
+        local destinationY = tonumber(payload.y) or 0.0
+        local destinationZ = tonumber(payload.z) or 0.0
+        local heading = resolveTeleportHeading(payload)
+        local teleportType = tostring(payload.teleportType or 'join')
+        local checkpointSpeedMph = math.max(0.0, tonumber(payload.speedMph) or 15.0)
+        local checkpointSpeedMps = checkpointSpeedMph * 0.44704
+        local closeEnoughMeters = math.max(0.1, tonumber(payload.closeEnoughMeters) or 3.0)
+        local lerpFactorPerSecond = math.max(0.01, tonumber(payload.lerpFactorPerSecond) or 0.25)
+
+        local ped = PlayerPedId()
+        if not DoesEntityExist(ped) then
+            return
+        end
+
+        local vehicle = GetVehiclePedIsIn(ped, false)
+        local isDriverVehicle = vehicle ~= 0 and GetPedInVehicleSeat(vehicle, -1) == ped
+        local entity = (isDriverVehicle and DoesEntityExist(vehicle)) and vehicle or ped
+        if not DoesEntityExist(entity) then
+            return
+        end
+
+        controlledEntity = entity
+        if entity ~= ped and DoesEntityExist(ped) then
+            pedToUnfreeze = ped
+        end
+
+        FreezeEntityPosition(entity, true)
+        if pedToUnfreeze ~= 0 then
+            FreezeEntityPosition(pedToUnfreeze, true)
+        end
+
+        SetEntityVelocity(entity, 0.0, 0.0, 0.0)
+        if isDriverVehicle then
+            SetVehicleForwardSpeed(vehicle, 0.0)
+        end
+
+        while true do
+            local current = GetEntityCoords(entity)
+            local dx = destinationX - (tonumber(current.x) or 0.0)
+            local dy = destinationY - (tonumber(current.y) or 0.0)
+            local distance = math.sqrt((dx * dx) + (dy * dy))
+            if distance <= closeEnoughMeters then
+                break
+            end
+
+            local alpha = lerpFactorPerSecond * math.max(0.0, tonumber(GetFrameTime()) or 0.0)
+            if alpha < 0.001 then
+                alpha = 0.001
+            elseif alpha > 1.0 then
+                alpha = 1.0
+            end
+
+            local stepX = (tonumber(current.x) or 0.0) + (dx * alpha)
+            local stepY = (tonumber(current.y) or 0.0) + (dy * alpha)
+            local stepZ = destinationZ
+            local currentHeading = tonumber(GetEntityHeading(entity)) or 0.0
+            local headingDelta = ((heading - currentHeading + 540.0) % 360.0) - 180.0
+            local stepHeading = currentHeading + (headingDelta * alpha)
+            if stepHeading < 0.0 then
+                stepHeading = stepHeading + 360.0
+            elseif stepHeading >= 360.0 then
+                stepHeading = stepHeading - 360.0
+            end
+
+            SetEntityCoordsNoOffset(entity, stepX, stepY, stepZ, false, false, false)
+            SetEntityHeading(entity, stepHeading)
+            Wait(0)
+        end
+
+        SetEntityCoordsNoOffset(entity, destinationX, destinationY, destinationZ, false, false, false)
+        SetEntityHeading(entity, heading)
+        SetEntityVelocity(entity, 0.0, 0.0, 0.0)
+
+        if isDriverVehicle then
+            if teleportType == 'checkpoint' then
+                SetVehicleForwardSpeed(vehicle, checkpointSpeedMps)
+            else
+                SetVehicleForwardSpeed(vehicle, 0.0)
+            end
+            SetVehicleHandbrake(vehicle, false)
+            SetVehicleUndriveable(vehicle, false)
+            SetVehicleEngineOn(vehicle, true, true, false)
+            SetVehicleBrakeLights(vehicle, false)
+        else
+            ClearPedTasks(ped)
+        end
+    end)
+
+    if controlledEntity ~= 0 and DoesEntityExist(controlledEntity) then
+        FreezeEntityPosition(controlledEntity, false)
+    end
+    if pedToUnfreeze ~= 0 and DoesEntityExist(pedToUnfreeze) then
+        FreezeEntityPosition(pedToUnfreeze, false)
+    end
+    SetPlayerControl(PlayerId(), true, 0)
 
     if not ok then
     end
@@ -2743,11 +2942,15 @@ local function buildCheckpointTeleportPayload(checkpoint, nextCheckpoint)
         return nil
     end
 
+    local checkpointIndex = math.max(1, math.floor(tonumber(checkpoint.index) or 1))
+
     local payload = {
+        checkpointIndex = checkpointIndex,
         x = tonumber(checkpoint.x) or 0.0,
         y = tonumber(checkpoint.y) or 0.0,
-        z = (tonumber(checkpoint.z) or 0.0) + 2.0,
-        heading = getHeadingToNextCheckpoint(checkpoint, nextCheckpoint) + 270.0,
+        z = (tonumber(checkpoint.z) or 0.0) + 1.0,
+        teleportType = 'checkpoint',
+        speedMph = 15.0,
     }
 
     return payload

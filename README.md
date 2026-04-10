@@ -1,25 +1,37 @@
 
 
+## Youtube "showcase"
 [![Showcase Video](https://img.youtube.com/vi/wnlUr-YwVt0/0.jpg)](https://www.youtube.com/watch?v=wnlUr-YwVt0)
+
+### In active development. Each script will print when there is an update in your FXServer, ~weekly.
 
 # TL;DR
 Its a system focused on better driving and racing, that's it. It has modules focusing on each aspect:
 
-| Module | Hotkey / Command | Docs | What it does |
-| --- | --- | --- | --- |
-| `customcam` | Camera toggle control (`INPUT_NEXT_CAMERA`) | [README](customcam/Docs/README.md) | Unhooks the driving camera from the car and makes it follow freeform. This gives you a LOT more feedback on the physics of your car and what the hell it is doing. |
-| `customphysics` | See readme for behavior triggers. | [README](customphysics/Docs/README.md) | Proper wheelies, proper powerslides, true speeding offroad, hollywood rollovers if you screw up.  A physics pack. |
-| `performancetuning` | `F5` (`+ptmenu`), not bound if you got vehmanager. | [README](performancetuning/Docs/README.md) | Live-edits the car's handling allowing you to change top speed, grip bias, antirolls, shift speed, wheel compounds (road, offroad) etc. This one pretends to be a TUNING menu, not a handling editor like others do. |
-| `racingsystem` | `F7` (`+racemenu`) | [README](racingsystem/Docs/README.md) | Implements checkpoint races and a race editor to plop your checkpoints. Also loads GTAO Races. |
-| `traffic_control` | Server only. `setr tControlDefault X.X` | [README](traffic_control/Docs/README.md) | Enforces levels of traffic, can be asked by other scripts to lower it, Racing System uses it. |
-| `vehiclemanager` | `F5` (`+vehiclemanager_menu`) | [README](vehiclemanager/Docs/README.md) | QoL menu to save and load your cars. Its wired to the Performance Tuning menu too, so you don't need one hotkey for each thing. |
+| Module | Hotkey / Command | Requirements | Docs | What it does |
+| --- | --- | --- | --- | --- |
+| `racingsystem` | `F7` (`+racemenu`) | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | [README](racingsystem/Docs/README.md) | Implements checkpoint races and a race editor to plop your checkpoints. Also loads GTAO Races. |
+| `performancetuning` | `F5` (`+ptmenu`), not bound if you got vehmanager. | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | [README](performancetuning/Docs/README.md) | A live handling editor, but this one pretends to be a tuning menu and has a PI system. |
+| `vehiclemanager` | `F5` (`+vehiclemanager_menu`) | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | [README](vehiclemanager/Docs/README.md) | QoL menu to save and load your cars. Its wired to the Performance Tuning menu too, so you don't need one hotkey for each thing. |
+| `customphysics` | See readme for behavior triggers. | None | [README](customphysics/Docs/README.md) | Proper wheelies, proper powerslides, true speeding offroad, hollywood rollovers if you screw up.  A physics pack. |
+| `customcam` | Camera toggle control (`INPUT_NEXT_CAMERA`) | None | [README](customcam/Docs/README.md) | WAY more freeform chase camera. Really lets you see the physics. |
+| `traffic_control` | Server only. `setr tControlDefault X.X` | None | [README](traffic_control/Docs/README.md) | Enforces levels of traffic, can be asked by other scripts to lower it, Racing System uses it. |
 
 
 
-# Installation
-Each resource can go anywhere inside `server-data\resources`, ensure them one by one. I reccomend `[eddlm]` or `[ars-fivem]` for clarity when going through your folders. Do not ensure the entire folder, they need a special order to load. 
+### Interfunctionality
 
-[Proper Handling](https://github.com/Eddlm/TheNewHandlingProject) goes well with this pack.
+| Resource | Benefits from |  Behavior |
+| --- | --- | --- |
+| `racingsystem` | `performancetunint` | PI maximum option repects PT instead of vanilla stats. |
+| `performancetuning`| `vehiclemanager`,`customphysics` | Can be opened through `vehiclemanager` instead. Needs `customphysics` to apply Nitro |
+| `vehiclemanager` |`performancetuning`| Saved cars with it retain `performancetuning` tweaks. |
+| `customcam` | |None. |
+| `customphysics`  | `performancetuning`| Reads `performancetuning` state for rev limiter and top-speed baseline when available |
+
+###  Installation
+From releases, drop the [ars-fivem] folder in `server-data\resources`. 
+
 
 ### Load Order
 
@@ -35,6 +47,9 @@ ensure customphysics
 ```
 
 Remember you do not need to install all, they don't require each other. You can just install racingsystem or customphysics or whatever.
+
+### Extras
+[Proper Handling](https://github.com/Eddlm/TheNewHandlingProject) goes well with this pack and may be folded into it.
 
 ## Contributing and Feedback
 

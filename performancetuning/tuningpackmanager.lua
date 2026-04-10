@@ -988,42 +988,48 @@ end
 
 function TuningPackManager.normalizeSteeringLockMode(mode)
     local normalized = tostring(mode or 'stock'):lower()
+    if normalized == 'stock' or normalized == 'none' then
+        return 'stock'
+    end
+
     if normalized == 'balanced' or normalized == 'balance' then
-        return 'balanced'
+        normalized = '1.0'
+    elseif normalized == 'aggro' or normalized == 'aggressive' then
+        normalized = '1.2'
+    elseif normalized == 'very_aggro' or normalized == 'very_aggressive' or normalized == 'extreme_aggressive' then
+        normalized = '1.4'
+    elseif normalized == 'very_smooth' or normalized == 'extreme_smooth' or normalized == 'very_soft' then
+        normalized = '0.6'
+    elseif normalized == 'sooth' or normalized == 'smooth' then
+        normalized = '0.8'
     end
-    if normalized == 'aggro' or normalized == 'aggressive' then
-        return 'aggressive'
+
+    local numeric = tonumber(normalized)
+    if numeric == nil then
+        local percentValue = normalized:match('^(%-?%d+%.?%d*)%%$')
+        if percentValue ~= nil then
+            numeric = tonumber(percentValue) / 100.0
+        end
     end
-    if normalized == 'very_aggro' or normalized == 'very_aggressive' or normalized == 'extreme_aggressive' then
-        return 'very_aggressive'
+
+    if numeric == nil then
+        return 'stock'
     end
-    if normalized == 'very_smooth' or normalized == 'extreme_smooth' then
-        return 'very_smooth'
-    end
-    if normalized == 'sooth' or normalized == 'smooth' then
-        return 'smooth'
-    end
-    return 'stock'
+
+    return ('%.1f'):format(numeric)
 end
 
 function TuningPackManager.getSteeringLockModeFactor(mode)
     local normalized = TuningPackManager.normalizeSteeringLockMode(mode)
-    if normalized == 'balanced' then
-        return 2.0
+    if normalized == 'stock' then
+        return nil
     end
-    if normalized == 'aggressive' then
-        return 2.5
+
+    local numeric = tonumber(normalized)
+    if numeric == nil then
+        return nil
     end
-    if normalized == 'very_aggressive' then
-        return 3.0
-    end
-    if normalized == 'very_smooth' then
-        return 1.0
-    end
-    if normalized == 'smooth' then
-        return 1.5
-    end
-    return nil
+    return numeric
 end
 
 function TuningPackManager.applySteeringLockModeTweak(vehicle, mode, options)
