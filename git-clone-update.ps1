@@ -29,18 +29,19 @@ foreach ($module in $modules) {
 
     if (Test-Path $targetDir) {
         Write-Host "[$module] Updating..."
-        git -C $targetDir pull origin main
+        Remove-Item -Recurse -Force $targetDir
     } else {
         Write-Host "[$module] Cloning..."
-        $tmpDir = Join-Path $baseDir "_ars_tmp_$module"
-        git init $tmpDir
-        git -C $tmpDir remote add origin $repoUrl
-        git -C $tmpDir sparse-checkout init --cone
-        git -C $tmpDir sparse-checkout set $module
-        git -C $tmpDir pull origin main
-        Move-Item -Path (Join-Path $tmpDir $module) -Destination $targetDir
-        Remove-Item -Recurse -Force $tmpDir
     }
+
+    $tmpDir = Join-Path $baseDir "_ars_tmp_$module"
+    git init $tmpDir
+    git -C $tmpDir remote add origin $repoUrl
+    git -C $tmpDir sparse-checkout init --cone
+    git -C $tmpDir sparse-checkout set $module
+    git -C $tmpDir pull origin main
+    Move-Item -Path (Join-Path $tmpDir $module) -Destination $targetDir
+    Remove-Item -Recurse -Force $tmpDir
 
     Write-Host ""
 }

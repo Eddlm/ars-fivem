@@ -3,6 +3,7 @@
 # Can be run directly from GitHub:
 #   irm https://raw.githubusercontent.com/Eddlm/ars-fivem/main/git-update.ps1 | iex
 
+$repoUrl = "https://github.com/Eddlm/ars-fivem"
 $modules = @(
     "customcam",
     "customphysics",
@@ -26,7 +27,15 @@ foreach ($module in $modules) {
 
     if (Test-Path $targetDir) {
         Write-Host "[$module] Updating..."
-        git -C $targetDir pull origin main
+        Remove-Item -Recurse -Force $targetDir
+        $tmpDir = Join-Path $baseDir "_ars_tmp_$module"
+        git init $tmpDir
+        git -C $tmpDir remote add origin $repoUrl
+        git -C $tmpDir sparse-checkout init --cone
+        git -C $tmpDir sparse-checkout set $module
+        git -C $tmpDir pull origin main
+        Move-Item -Path (Join-Path $tmpDir $module) -Destination $targetDir
+        Remove-Item -Recurse -Force $tmpDir
         Write-Host ""
     } else {
         Write-Host "[$module] Not found, skipping. Run git-clone-update.ps1 to clone it."
