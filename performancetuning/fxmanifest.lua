@@ -13,28 +13,28 @@ version '0.0.2'
 dependency 'ScaleformUI_Assets'
 dependency 'ScaleformUI_Lua'
 
-shared_script 'Config.lua'
+shared_script 'shared/Config.lua'
 
 client_scripts {
     '@ScaleformUI_Lua/ScaleformUI.lua',
-    'material_tyre_grip.lua',
-    'definitions.lua',
-    'configruntime.lua',
-    'client.lua',
-    'handlingmanager.lua',
-    'vehiclemanager.lua',
-    'tuningpackmanager.lua',
-    'surfacegrip.lua',
-    'menusliders.lua',
-    'performancepanel.lua',
-    'runtimebindings.lua',
-    'nitrous.lua',
-    'syncorchestrator.lua',
-    'scaleformui_menus.lua'
+    'client/material_tyre_grip.lua',
+    'client/definitions.lua',
+    'client/configruntime.lua',
+    'client/client.lua',
+    'client/handlingmanager.lua',
+    'client/vehiclemanager.lua',
+    'client/tuningpackmanager.lua',
+    'client/surfacegrip.lua',
+    'client/menusliders.lua',
+    'client/performancepanel.lua',
+    'client/runtimebindings.lua',
+    'client/nitrous.lua',
+    'client/syncorchestrator.lua',
+    'client/scaleformui_menus.lua'
 }
 server_scripts {
-    'UpdateNotifier.lua',
-    'server.lua'
+    'server/UpdateNotifier.lua',
+    'server/server.lua'
 }
 
 exports {

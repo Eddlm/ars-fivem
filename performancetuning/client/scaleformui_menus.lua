@@ -418,8 +418,8 @@ local function setSuspensionBiasSliderState(value)
 end
 
 -- None=stock, Balanced=1.0, Aggressive=1.2, Very Aggressive=1.4, Soft=0.8, Very Soft=0.6
-local STEERING_LOCK_MODE_INDEX_TO_ID = { 'stock', '1.0', '1.2', '1.4', '0.6', '0.8' }
-local STEERING_LOCK_MODE_ID_TO_INDEX = { stock=1, ['1.0']=2, ['1.2']=3, ['1.4']=4, ['0.6']=5, ['0.8']=6 }
+local STEERING_LOCK_MODE_INDEX_TO_ID = { 'stock', '1.0', '1.1', '1.2', '0.8', '0.9' }
+local STEERING_LOCK_MODE_ID_TO_INDEX = { stock=1, ['1.0']=2, ['1.1']=3, ['1.2']=4, ['0.8']=5, ['0.9']=6 }
 
 local function getSteeringLockModeIdFromIndex(index)
     local idx = math.max(1, math.min(#STEERING_LOCK_MODE_INDEX_TO_ID, math.floor(tonumber(index) or 1)))
@@ -730,6 +730,14 @@ function PerformanceTuning.ScaleformUI.refreshMenu()
     state.options.tireCompoundQuality = tireCompoundQualityState.context.options or {}
     state.options.brakes = brakesState.context.options or {}
     state.options.nitrous = nitrousState.context.options or {}
+    do
+        local steeringLabels = buildSteeringLockModeLabels()
+        local steeringOptions = {}
+        for i, label in ipairs(steeringLabels) do
+            steeringOptions[i] = { label = label, index = i }
+        end
+        state.options.steeringLockMode = steeringOptions
+    end
     state.menus.main:Subtitle(engineState.displayName)
     if state.menus.power then
         state.menus.power:Subtitle(engineState.displayName)
@@ -761,7 +769,9 @@ function PerformanceTuning.ScaleformUI.refreshMenu()
     setTireCompoundQualityAvailability(bucket)
 
     if state.items.steeringLockMode then
-        state.items.steeringLockMode:Index(getSteeringLockModeIndex(bucket.steeringLockMode))
+        local steeringModeIndex = getSteeringLockModeIndex(bucket.steeringLockMode)
+        state.items.steeringLockMode:Index(steeringModeIndex)
+        setListItemDescription(state.items.steeringLockMode, 'steeringLockMode', getIndexedListOption('steeringLockMode', steeringModeIndex), bucket.steeringLockMode)
     end
 
     setAntirollSliderState(bucket.antirollForce)
@@ -849,10 +859,10 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     state.menus.grip:AddItem(state.items.tireCompoundQuality)
     state.menus.grip:AddItem(state.items.brakes)
 
+    state.menus.suspension:AddItem(state.items.steeringLockMode)
     state.menus.suspension:AddItem(state.items.suspension)
     state.menus.suspension:AddItem(state.items.suspensionRaiseSlider)
     state.menus.suspension:AddItem(state.items.antirollSlider)
-    state.menus.suspension:AddItem(state.items.steeringLockMode)
 
     state.menus.bias:AddItem(state.items.brakeBiasSlider)
     state.menus.bias:AddItem(state.items.gripBiasSlider)

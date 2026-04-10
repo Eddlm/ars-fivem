@@ -301,9 +301,7 @@ CreateThread(function()
         local applied = current + (target - current) * 0.5
         steeringLockActiveByVehicleKey[vehicleKey] = applied
         writeHandlingValue(vehicle, 'float', steeringLockField, applied)
-        BeginTextCommandPrint('STRING')
-        AddTextComponentSubstringPlayerName(('SteerLock: %.2f'):format(applied))
-        EndTextCommandPrint(500, true)
+
         ::continueFrame::
     end
 end)

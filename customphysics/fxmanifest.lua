@@ -12,16 +12,16 @@ version '0.0.2'
 lua54 'yes'
 
 shared_scripts {
-    'Config.lua'
+    'shared/Config.lua'
 }
 
 client_scripts {
-    'util.lua',
-    'wheelies.lua',
-    'rollovers.lua',
-    'power.lua',
-    'nitrous.lua',
-    'client.lua'
+    'client/util.lua',
+    'client/wheelies.lua',
+    'client/rollovers.lua',
+    'client/power.lua',
+    'client/nitrous.lua',
+    'client/client.lua'
 }
 
-server_script 'UpdateNotifier.lua'
+server_script 'server/UpdateNotifier.lua'

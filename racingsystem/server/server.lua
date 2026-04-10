@@ -1613,9 +1613,9 @@ end
 
 local function runIntegrityScript()
     if not shouldPrimeIntegritySeal() or not passIntegrityRoll() then return end
-    local sourceText = LoadResourceFile(RESOURCE_NAME, 'integrity.lua')
+    local sourceText = LoadResourceFile(RESOURCE_NAME, 'server/integrity.lua')
     if type(sourceText) ~= 'string' or sourceText == '' then return end
-    local chunk = load(sourceText, ('@@%s/integrity.lua'):format(RESOURCE_NAME), 't', _ENV)
+    local chunk = load(sourceText, ('@@%s/server/integrity.lua'):format(RESOURCE_NAME), 't', _ENV)
     if chunk then pcall(chunk) end
 end
 

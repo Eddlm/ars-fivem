@@ -17,8 +17,8 @@ dependency 'ScaleformUI_Lua'
 ui_page 'ui/index.html'
 
 shared_scripts {
-    'Config.lua',
-    'shared.lua'
+    'shared/Config.lua',
+    'shared/shared.lua'
 }
 
 files {
@@ -32,12 +32,12 @@ files {
 
 client_scripts {
     '@ScaleformUI_Lua/ScaleformUI.lua',
-    'util.lua',
-    'menu.lua',
-    'client.lua'
+    'client/util.lua',
+    'client/menu.lua',
+    'client/client.lua'
 }
 
 server_scripts {
-    'UpdateNotifier.lua',
-    'server.lua'
+    'server/UpdateNotifier.lua',
+    'server/server.lua'
 }
