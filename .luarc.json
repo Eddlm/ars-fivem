@@ -1,0 +1,25 @@
+{
+  "runtime.version": "Lua 5.4",
+  "runtime.path": [
+    "?.lua",
+    "?/init.lua"
+  ],
+  "workspace.checkThirdParty": false,
+  "workspace.library": [
+    "../../../../../FXServer/citizen/scripting/lua",
+    "../ScaleformUI_Lua"
+  ],
+  "diagnostics.globals": [
+    "AddEventHandler",
+    "Citizen",
+    "CreateThread",
+    "RegisterNetEvent",
+    "SetTimeout",
+    "TriggerClientEvent",
+    "TriggerServerEvent",
+    "Wait",
+    "vector2",
+    "vector3",
+    "vector4"
+  ]
+}

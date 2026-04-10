@@ -13,3 +13,6 @@ racingsystem/race_index.json
 
 # Keep markdown docs inside any Docs folder
 !**/Docs/**/*.md
+
+# Keep the IntelliSense setup note in the repo root
+!InstelliSenseVSCode.md
