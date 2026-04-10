@@ -1,5 +1,7 @@
 
 
+<p style="text-align:center;">[![Showcase Video](https://img.youtube.com/vi/wnlUr-YwVt0/0.jpg)](https://www.youtube.com/watch?v=wnlUr-YwVt0)</p>
+
 # TL;DR
 Its a system focused on better driving and racing, that's it. It has modules focusing on each aspect:
 
@@ -12,8 +14,40 @@ Its a system focused on better driving and racing, that's it. It has modules foc
 | `traffic_control` | Server only. `setr tControlDefault X.X` | [README](traffic_control/Docs/README.md) | Enforces levels of traffic, can be asked by other scripts to lower it, Racing System uses it. |
 | `vehiclemanager` | `F5` (`+vehiclemanager_menu`) | [README](vehiclemanager/Docs/README.md) | QoL menu to save and load your cars. Its wired to the Performance Tuning menu too, so you don't need one hotkey for each thing. |
 
-# Cloning and updating through this repo
-There is a global git-clone.ps1 to pull all these resources do your desired `[folder]`. You can find similar  `git-clone.ps1` files to only pull a specific resource, inside each module.
+
+
+# Installation
+Each resource can go anywhere inside `server-data\resources`, ensure them one by one. I reccomend `[eddlm]` or `[ars-fivem]` for clarity when going through your folders. Do not ensure the entire folder, they need a special order to load. 
+
+[Proper Handling](https://github.com/Eddlm/TheNewHandlingProject) goes well with this pack.
+
+### Load Order
+
+```cfg
+ensure ScaleformUI_Assets
+ensure ScaleformUI_Lua
+
+ensure racingsystem
+ensure performancetuning
+ensure vehiclemanager
+ensure customcam
+ensure customphysics
+```
+
+Remember you do not need to install all, they don't require each other. You can just install racingsystem or customphysics or whatever.
+
+## Contributing and Feedback
+
+| Github | Discord | FiveM Server |
+| --- | --- | --- |
+| Use the [issues](https://github.com/Eddlm/ars-fivem/issues) system, **NOT** pull requests. | I am available on [The Nation]() and [Vanillaworks]()#handling-help | Join [Server](https://servers.fivem.net/servers/detail/2ryx47), tour the features, complain. |
+
+
+### Focus on improvements and not new features.
+
+
+# Updating and Configs
+I'm still trying to figure out how to let you guys update without overriding your personal config files with the release files.
 
 # Credits / Attributions / References
 
