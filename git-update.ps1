@@ -43,18 +43,7 @@ foreach ($module in $modules) {
         continue
     }
 
-    Write-Host "[$module] Removing old files..."
-    Remove-Item -Recurse -Force $targetDir -ErrorAction SilentlyContinue
-    Start-Sleep -Milliseconds 500
-
-    if (Test-Path $targetDir) {
-        Write-Warning "[$module] Could not remove '$targetDir'. Files may be locked (is FiveM running?). Skipping."
-        $failed += $module
-        Write-Host ""
-        continue
-    }
-
-    # Clean up any leftover tmp dir
+    # Clean up any leftover tmp dir from a previous failed run
     if (Test-Path $tmpDir) {
         Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
     }
@@ -81,8 +70,9 @@ foreach ($module in $modules) {
         continue
     }
 
+    # Overwrite only tracked files, leaving user files (custom races, etc.) untouched
     Write-Host "[$module] Installing..."
-    Move-Item -Path $moduleSrc -Destination $targetDir
+    robocopy $moduleSrc $targetDir /E /IS /IT /IM /NFL /NDL /NJH /NJS | Out-Null
     Start-Sleep -Milliseconds 300
 
     Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue

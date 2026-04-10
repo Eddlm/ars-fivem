@@ -31,20 +31,9 @@ $failed = @()
 function Install-Module($module) {
     $targetDir = Join-Path $baseDir $module
     $tmpDir = Join-Path $baseDir "_ars_tmp_$module"
+    $isUpdate = Test-Path $targetDir
 
-    # Remove old folder if updating
-    if (Test-Path $targetDir) {
-        Write-Host "[$module] Removing old files..."
-        Remove-Item -Recurse -Force $targetDir -ErrorAction SilentlyContinue
-        Start-Sleep -Milliseconds 500
-
-        if (Test-Path $targetDir) {
-            Write-Warning "[$module] Could not remove '$targetDir'. Files may be locked (is FiveM running?). Skipping."
-            return $false
-        }
-    }
-
-    # Clean up any leftover tmp dir
+    # Clean up any leftover tmp dir from a previous failed run
     if (Test-Path $tmpDir) {
         Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
     }
@@ -70,7 +59,12 @@ function Install-Module($module) {
     }
 
     Write-Host "[$module] Installing..."
-    Move-Item -Path $moduleSrc -Destination $targetDir
+    if ($isUpdate) {
+        # Overwrite only tracked files, leaving user files (custom races, etc.) untouched
+        robocopy $moduleSrc $targetDir /E /IS /IT /IM /NFL /NDL /NJH /NJS | Out-Null
+    } else {
+        Move-Item -Path $moduleSrc -Destination $targetDir
+    }
     Start-Sleep -Milliseconds 300
 
     Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
