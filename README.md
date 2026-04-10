@@ -1,6 +1,6 @@
 
 
-<p style="text-align:center;">[![Showcase Video](https://img.youtube.com/vi/wnlUr-YwVt0/0.jpg)](https://www.youtube.com/watch?v=wnlUr-YwVt0)</p>
+[![Showcase Video](https://img.youtube.com/vi/wnlUr-YwVt0/0.jpg)](https://www.youtube.com/watch?v=wnlUr-YwVt0)
 
 # TL;DR
 Its a system focused on better driving and racing, that's it. It has modules focusing on each aspect:
