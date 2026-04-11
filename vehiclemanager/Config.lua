@@ -2,7 +2,7 @@ VehicleManager = VehicleManager or {}
 VehicleManager.Config = {
     menu = {
         keybindCommand = "+vehiclemanager_menu",
-        defaultKey = "F5",
+        defaultKey = "F6",
     },
     save = {
         ownerIdentifierPrefixes = { "license:", "license2:", "fivem:", "steam:", "discord:" },
