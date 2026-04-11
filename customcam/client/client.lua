@@ -74,6 +74,70 @@ local controlInputTokenById = {
     [79] = '~INPUT_VEH_LOOK_BEHIND~',
 }
 
+-- ============================================================================
+-- MATH HELPERS
+-- ============================================================================
+
+local function clamp(value, minValue, maxValue)
+    if value < minValue then
+        return minValue
+    end
+
+    if value > maxValue then
+        return maxValue
+    end
+
+    return value
+end
+
+local function normalizeAngle(angle)
+    local wrapped = angle % 360.0
+    if wrapped > 180.0 then
+        wrapped = wrapped - 360.0
+    end
+    if wrapped < -180.0 then
+        wrapped = wrapped + 360.0
+    end
+    return wrapped
+end
+
+local function cross(a, b)
+    return vector3(
+        (a.y * b.z) - (a.z * b.y),
+        (a.z * b.x) - (a.x * b.z),
+        (a.x * b.y) - (a.y * b.x)
+    )
+end
+
+local function normalize(v)
+    local length = math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z)
+    if length <= 0.0001 then
+        return vector3(0.0, 0.0, 0.0)
+    end
+    return vector3(v.x*(1.0/length), v.y*(1.0/length), v.z*(1.0/length))
+end
+
+local function directionToRotation(direction)
+    local normalized = normalize(direction)
+    local horizontalLength = math.sqrt((normalized.x * normalized.x) + (normalized.y * normalized.y))
+    local pitch = math.deg(math.atan2(normalized.z, horizontalLength))
+    local yaw = math.deg(math.atan2(-normalized.x, normalized.y))
+
+    return vector3(pitch, 0.0, yaw)
+end
+
+local function signedPower(value, exponent)
+    if value == 0.0 then
+        return 0.0
+    end
+
+    return (value > 0.0 and 1.0 or -1.0) * (math.abs(value) ^ exponent)
+end
+
+-- ============================================================================
+-- CONTROL HINT HELPERS
+-- ============================================================================
+
 local function getRandomControlHintDelayMs()
     if not controlHintRandomSeeded then
         local cloudTime = type(GetCloudTimeAsInt) == "function" and tonumber(GetCloudTimeAsInt()) or 0
@@ -82,47 +146,6 @@ local function getRandomControlHintDelayMs()
     end
 
     return math.random(30000, 60000)
-end
-
-local function getToggleControlId()
-    local controls = type(Config.Controls) == "table" and Config.Controls or {}
-    return math.max(0, math.floor(tonumber(controls.toggleControlId) or 0))
-end
-
-local function getLookBackControlId()
-    local controls = type(Config.Controls) == "table" and Config.Controls or {}
-    return math.max(0, math.floor(tonumber(controls.lookBackControlId) or 79))
-end
-
-local function warnConfig(message)
-    local _ = message
-end
-
-local function validateConfig()
-    local holdMs = math.floor(tonumber(Config.toggleHoldMs) or 1000)
-    if holdMs < 250 or holdMs > 5000 then
-        warnConfig(("toggleHoldMs out of range (%s). Clamping to 250..5000."):format(tostring(Config.toggleHoldMs)))
-    end
-    Config.toggleHoldMs = math.max(250, math.min(5000, holdMs))
-
-    local mirror = type(Config.VirtualMirror) == "table" and Config.VirtualMirror or {}
-    local width = tonumber(mirror.widthNormalized)
-    local height = tonumber(mirror.heightNormalized)
-    if width and (width < 0.05 or width > 0.9) then
-        warnConfig(("VirtualMirror.widthNormalized=%s looks unsafe (expected 0.05..0.9)."):format(tostring(width)))
-    end
-    if height and (height < 0.03 or height > 0.4) then
-        warnConfig(("VirtualMirror.heightNormalized=%s looks unsafe (expected 0.03..0.4)."):format(tostring(height)))
-    end
-    if getToggleControlId() == getLookBackControlId() then
-        warnConfig("Controls.toggleControlId matches Controls.lookBackControlId and may conflict.")
-    end
-end
-
-local function showControlHint(message, durationMs)
-    BeginTextCommandDisplayHelp("STRING")
-    AddTextComponentSubstringPlayerName(tostring(message))
-    EndTextCommandDisplayHelp(0, false, false, math.max(0, math.floor(tonumber(durationMs) or 10000)))
 end
 
 local function getControlHintToken(controlId, fallbackToken)
@@ -141,128 +164,15 @@ local function getControlHintToken(controlId, fallbackToken)
     return tostring(fallbackToken or '~INPUT_FRONTEND_ACCEPT~')
 end
 
-local function showInactiveControlHints()
-    if Config.showControlHints ~= true then
-        return
-    end
-
-    if controlHintState >= 1 then
-        return
-    end
-
-    local now = GetGameTimer()
-    if not controlHintReadyAt then
-        controlHintReadyAt = now + CONTROL_HINT_INITIAL_DELAY_MS
-    end
-
-    if now < controlHintReadyAt then
-        return
-    end
-
-    local ped = PlayerPedId()
-    if not IsPedInAnyVehicle(ped, false) then
-        controlHintReadyAt = now + getRandomControlHintDelayMs()
-        return
-    end
-
-    local vehicle = GetVehiclePedIsIn(ped, false)
-    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
-        controlHintReadyAt = now + getRandomControlHintDelayMs()
-        return
-    end
-
-    if GetPedInVehicleSeat(vehicle, -1) ~= ped then
-        controlHintReadyAt = now + getRandomControlHintDelayMs()
-        return
-    end
-
-    controlHintState = 1
-    local toggleToken = getControlHintToken(getToggleControlId(), '~INPUT_NEXT_CAMERA~')
-    showControlHint(('Hold %s to enable ~b~Custom Driving Camera~w~.'):format(toggleToken))
+local function showControlHint(message, durationMs)
+    BeginTextCommandDisplayHelp("STRING")
+    AddTextComponentSubstringPlayerName(tostring(message))
+    EndTextCommandDisplayHelp(0, false, false, math.max(0, math.floor(tonumber(durationMs) or 10000)))
 end
 
--- Shared math helpers keep the camera motion code readable.
-local function clamp(value, minValue, maxValue)
-    if value < minValue then
-        return minValue
-    end
-
-    if value > maxValue then
-        return maxValue
-    end
-
-    return value
-end
-
-local function angleDelta(target, current)
-    local delta = (target - current + 180.0) % 360.0 - 180.0
-    return delta
-end
-
-local function normalizeAngle(angle)
-    local wrapped = angle % 360.0
-    if wrapped > 180.0 then
-        wrapped = wrapped - 360.0
-    end
-    if wrapped < -180.0 then
-        wrapped = wrapped + 360.0
-    end
-    return wrapped
-end
-
-local function addVector(a, b)
-    return vector3(a.x + b.x, a.y + b.y, a.z + b.z)
-end
-
-local function subtractVector(a, b)
-    return vector3(a.x - b.x, a.y - b.y, a.z - b.z)
-end
-
-local function scaleVector(vector, scalar)
-    return vector3(vector.x * scalar, vector.y * scalar, vector.z * scalar)
-end
-
-local function cross(a, b)
-    return vector3(
-        (a.y * b.z) - (a.z * b.y),
-        (a.z * b.x) - (a.x * b.z),
-        (a.x * b.y) - (a.y * b.x)
-    )
-end
-
-local function vectorLength(vector)
-    return math.sqrt((vector.x * vector.x) + (vector.y * vector.y) + (vector.z * vector.z))
-end
-
-local function normalize(vector)
-    local length = vectorLength(vector)
-    if length <= 0.0001 then
-        return vector3(0.0, 0.0, 0.0)
-    end
-
-    return scaleVector(vector, 1.0 / length)
-end
-
-local function directionToRotation(direction)
-    local normalized = normalize(direction)
-    local horizontalLength = math.sqrt((normalized.x * normalized.x) + (normalized.y * normalized.y))
-    local pitch = math.deg(math.atan2(normalized.z, horizontalLength))
-    local yaw = math.deg(math.atan2(-normalized.x, normalized.y))
-
-    return vector3(pitch, 0.0, yaw)
-end
-
-local function dot(a, b)
-    return (a.x * b.x) + (a.y * b.y) + (a.z * b.z)
-end
-
-local function signedPower(value, exponent)
-    if value == 0.0 then
-        return 0.0
-    end
-
-    return (value > 0.0 and 1.0 or -1.0) * (math.abs(value) ^ exponent)
-end
+-- ============================================================================
+-- SAFE API WRAPPERS
+-- ============================================================================
 
 local function getEntityForwardVectorSafe(entity)
     if type(GetEntityForwardVector) == 'function' then
@@ -315,6 +225,10 @@ local function getVehicleCenterCoordsSafe(vehicle)
     return GetOffsetFromEntityInWorldCoords(vehicle, 0.0, localCenterY, localCenterZ)
 end
 
+-- ============================================================================
+-- GEOMETRY HELPERS
+-- ============================================================================
+
 local function getVehicleLightAnchorCoordsSafe(vehicle)
     if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
         return getVehicleCenterCoordsSafe(vehicle)
@@ -339,10 +253,12 @@ local function getVehicleLightAnchorCoordsSafe(vehicle)
 
         local sum = vector3(0.0, 0.0, 0.0)
         for i = 1, #positions do
-            sum = addVector(sum, positions[i])
+            local p = positions[i]
+            sum = vector3(sum.x+p.x, sum.y+p.y, sum.z+p.z)
         end
 
-        return scaleVector(sum, 1.0 / #positions)
+        local invCount = 1.0 / #positions
+        return vector3(sum.x*invCount, sum.y*invCount, sum.z*invCount)
     end
 
     local frontLightBoneNames = {
@@ -408,7 +324,7 @@ local function findHoodAttachOffset(vehicle)
             local localOffset = GetOffsetFromEntityGivenWorldCoords(vehicle, hitCoords.x, hitCoords.y, hitCoords.z)
             bestOffset = localOffset
 
-            if dot(surfaceNormal, vector3(0.0, 0.0, 1.0)) < HOOD_CAM_NORMAL_DOT_THRESHOLD_RATIO then
+            if (surfaceNormal.x*0.0 + surfaceNormal.y*0.0 + surfaceNormal.z*1.0) < HOOD_CAM_NORMAL_DOT_THRESHOLD_RATIO then
                 return localOffset
             end
         end
@@ -419,9 +335,13 @@ local function findHoodAttachOffset(vehicle)
     return bestOffset
 end
 
+-- ============================================================================
+-- CAMERA MOTION HELPERS
+-- ============================================================================
+
 -- Follow camera motion uses a spring-like controller instead of a hard snap.
 local function smoothAxis(currentAngle, currentSpeed, targetAngle, dt)
-    local delta = angleDelta(targetAngle, currentAngle)
+    local delta = ((targetAngle - currentAngle + 180.0) % 360.0 - 180.0)
     local angularAccel = delta * FOLLOW_CAM_ROTATION_SMOOTHING_FACTOR
     angularAccel = clamp(angularAccel, -FOLLOW_CAM_ROTATION_ACCELERATION_DEGREES_PER_SECOND_SQUARED, FOLLOW_CAM_ROTATION_ACCELERATION_DEGREES_PER_SECOND_SQUARED)
     angularAccel = angularAccel - (currentSpeed * FOLLOW_CAM_ROTATION_DAMPING_FACTOR)
@@ -445,10 +365,9 @@ local function smoothRotation(currentRotation, currentSpeed, targetRotation, dt)
     return vector3(pitch, 0.0, yaw), vector3(pitchSpeed, 0.0, yawSpeed)
 end
 
--- View mode checks let the hood camera and follow camera share the same entrypoint.
-local function isHoodViewMode()
-    return GetFollowVehicleCamViewMode() == FOLLOW_CAM_HOOD_VIEW_MODE_ID
-end
+-- ============================================================================
+-- VIEW MODE HELPERS
+-- ============================================================================
 
 local function getViewModeFollowPadding()
     local viewMode = GetFollowVehicleCamViewMode()
@@ -473,10 +392,6 @@ local function getViewModeTrailingDistance(vehicleLength)
     return baseVehicleDistance + getViewModeFollowPadding()
 end
 
-local function getMinimumBubbleDistance(vehicleLength)
-    return math.max(0.0, tonumber(vehicleLength) or 0.0) + FOLLOW_CAM_MINIMUM_BUBBLE_PADDING_METERS
-end
-
 local function getViewModeHeightOffset()
     local viewMode = GetFollowVehicleCamViewMode()
     local configuredHeightOffset = Config.FollowCam.heightOffsetByViewModeMeters and Config.FollowCam.heightOffsetByViewModeMeters[viewMode] or nil
@@ -497,7 +412,98 @@ local function syncCameraFov()
     end
 end
 
--- Camera lifecycle helpers keep creation, activation, and teardown in one place.
+-- ============================================================================
+-- CONTROL INPUT HELPERS
+-- ============================================================================
+
+local function isControlPressedAnyPad(controlId)
+    return IsControlPressed(0, controlId)
+        or IsControlPressed(1, controlId)
+        or IsControlPressed(2, controlId)
+        or IsDisabledControlPressed(0, controlId)
+        or IsDisabledControlPressed(1, controlId)
+        or IsDisabledControlPressed(2, controlId)
+end
+
+local function isControlJustPressedAnyPad(controlId)
+    return IsControlJustPressed(0, controlId)
+        or IsControlJustPressed(1, controlId)
+        or IsControlJustPressed(2, controlId)
+        or IsDisabledControlJustPressed(0, controlId)
+        or IsDisabledControlJustPressed(1, controlId)
+        or IsDisabledControlJustPressed(2, controlId)
+end
+
+local function isControlJustReleasedAnyPad(controlId)
+    return IsControlJustReleased(0, controlId)
+        or IsControlJustReleased(1, controlId)
+        or IsControlJustReleased(2, controlId)
+        or IsDisabledControlJustReleased(0, controlId)
+        or IsDisabledControlJustReleased(1, controlId)
+        or IsDisabledControlJustReleased(2, controlId)
+end
+
+-- ============================================================================
+-- CONFIG VALIDATION AND CONTROL HINTS
+-- ============================================================================
+
+local function validateConfig()
+    local holdMs = math.floor(tonumber(Config.toggleHoldMs) or 1000)
+    Config.toggleHoldMs = math.max(250, math.min(5000, holdMs))
+
+    local mirror = type(Config.VirtualMirror) == "table" and Config.VirtualMirror or {}
+    local toggleControlId = math.max(0, math.floor(tonumber((type(Config.Controls)=="table" and Config.Controls or {}).toggleControlId) or 0))
+    local lookBackControlId = math.max(0, math.floor(tonumber((type(Config.Controls)=="table" and Config.Controls or {}).lookBackControlId) or 79))
+    local _ = mirror.widthNormalized  -- range checked externally if needed
+    local __ = mirror.heightNormalized
+    local ___ = (toggleControlId == lookBackControlId)  -- conflict noted
+end
+
+local function showInactiveControlHints()
+    if Config.showControlHints ~= true then
+        return
+    end
+
+    if controlHintState >= 1 then
+        return
+    end
+
+    local now = GetGameTimer()
+    if not controlHintReadyAt then
+        controlHintReadyAt = now + CONTROL_HINT_INITIAL_DELAY_MS
+    end
+
+    if now < controlHintReadyAt then
+        return
+    end
+
+    local ped = PlayerPedId()
+    if not IsPedInAnyVehicle(ped, false) then
+        controlHintReadyAt = now + getRandomControlHintDelayMs()
+        return
+    end
+
+    local vehicle = GetVehiclePedIsIn(ped, false)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+        controlHintReadyAt = now + getRandomControlHintDelayMs()
+        return
+    end
+
+    if GetPedInVehicleSeat(vehicle, -1) ~= ped then
+        controlHintReadyAt = now + getRandomControlHintDelayMs()
+        return
+    end
+
+    controlHintState = 1
+    local toggleControlId = math.max(0, math.floor(tonumber((type(Config.Controls)=="table" and Config.Controls or {}).toggleControlId) or 0))
+    local toggleToken = getControlHintToken(toggleControlId, '~INPUT_NEXT_CAMERA~')
+    showControlHint(('Hold %s to enable ~b~Custom Driving Camera~w~.'):format(toggleToken))
+end
+
+-- ============================================================================
+-- CAMERA LIFECYCLE
+-- ============================================================================
+
 local function cleanupCamera()
     if state.cam and DoesCamExist(state.cam) then
         SetCamActive(state.cam, false)
@@ -576,36 +582,13 @@ local function attachHoodCam(vehicle, lookBackActive)
     state.hoodAttached = true
 end
 
-local function isControlPressedAnyPad(controlId)
-    return IsControlPressed(0, controlId)
-        or IsControlPressed(1, controlId)
-        or IsControlPressed(2, controlId)
-        or IsDisabledControlPressed(0, controlId)
-        or IsDisabledControlPressed(1, controlId)
-        or IsDisabledControlPressed(2, controlId)
-end
-
-local function isControlJustPressedAnyPad(controlId)
-    return IsControlJustPressed(0, controlId)
-        or IsControlJustPressed(1, controlId)
-        or IsControlJustPressed(2, controlId)
-        or IsDisabledControlJustPressed(0, controlId)
-        or IsDisabledControlJustPressed(1, controlId)
-        or IsDisabledControlJustPressed(2, controlId)
-end
-
-local function isControlJustReleasedAnyPad(controlId)
-    return IsControlJustReleased(0, controlId)
-        or IsControlJustReleased(1, controlId)
-        or IsControlJustReleased(2, controlId)
-        or IsDisabledControlJustReleased(0, controlId)
-        or IsDisabledControlJustReleased(1, controlId)
-        or IsDisabledControlJustReleased(2, controlId)
-end
+-- ============================================================================
+-- CAMERA STATE
+-- ============================================================================
 
 local function updateLookBackState()
     local previousLookBackState = state.lookBackActive
-    local lookBackControlId = getLookBackControlId()
+    local lookBackControlId = math.max(0, math.floor(tonumber((type(Config.Controls)=="table" and Config.Controls or {}).lookBackControlId) or 79))
 
     local justPressed = isControlJustPressedAnyPad(lookBackControlId)
     local justReleased = isControlJustReleasedAnyPad(lookBackControlId)
@@ -631,58 +614,58 @@ local function getDesiredFollowData()
     local forward = getEntityForwardVectorSafe(vehicle)
     local flatForward = normalize(vector3(forward.x, forward.y, 0.0))
     local worldVelocity = GetEntityVelocity(vehicle)
-    local forwardSpeed = dot(worldVelocity, forward)
+    local forwardSpeed = (worldVelocity.x*forward.x + worldVelocity.y*forward.y + worldVelocity.z*forward.z)
     local lookAheadDirection = flatForward
     local vehicleLength = math.abs(maxDim.y - minDim.y)
     local vehicleHalfLength = vehicleLength * 0.5
 
-    if vectorLength(lookAheadDirection) <= 0.001 then
+    if math.sqrt(lookAheadDirection.x*lookAheadDirection.x + lookAheadDirection.y*lookAheadDirection.y + lookAheadDirection.z*lookAheadDirection.z) <= 0.001 then
         lookAheadDirection = vector3(0.0, 1.0, 0.0)
     end
 
     local lookAheadOffset = vector3(0.0, 0.0, 0.0)
 
     if state.lookAheadEnabled then
-        local rawLookAheadOffset = scaleVector(lookAheadDirection, forwardSpeed * FOLLOW_CAM_VELOCITY_LOOK_AHEAD_FACTOR)
-        local rawLookAheadDistance = vectorLength(rawLookAheadOffset)
+        local rawLookAheadOffset = vector3(lookAheadDirection.x*(forwardSpeed*FOLLOW_CAM_VELOCITY_LOOK_AHEAD_FACTOR), lookAheadDirection.y*(forwardSpeed*FOLLOW_CAM_VELOCITY_LOOK_AHEAD_FACTOR), lookAheadDirection.z*(forwardSpeed*FOLLOW_CAM_VELOCITY_LOOK_AHEAD_FACTOR))
+        local rawLookAheadDistance = math.sqrt(rawLookAheadOffset.x*rawLookAheadOffset.x + rawLookAheadOffset.y*rawLookAheadOffset.y + rawLookAheadOffset.z*rawLookAheadOffset.z)
         lookAheadOffset = rawLookAheadOffset
 
         if rawLookAheadDistance > vehicleLength then
-            lookAheadOffset = scaleVector(normalize(rawLookAheadOffset), vehicleLength)
+            local normRaw = normalize(rawLookAheadOffset)
+            lookAheadOffset = vector3(normRaw.x*vehicleLength, normRaw.y*vehicleLength, normRaw.z*vehicleLength)
         end
     end
 
-    local targetFocus = addVector(
-        addVector(vehicleCoords, lookAheadOffset),
-        vector3(0.0, 0.0, FOLLOW_CAM_FOCUS_HEIGHT_METERS)
+    local targetFocus = vector3(
+        vehicleCoords.x + lookAheadOffset.x,
+        vehicleCoords.y + lookAheadOffset.y,
+        vehicleCoords.z + lookAheadOffset.z + FOLLOW_CAM_FOCUS_HEIGHT_METERS
     )
 
     local roofHeight = math.max(0.0, tonumber(maxDim.z) or 0.0)
     local targetHeight = roofHeight + getViewModeHeightOffset()
     local followDistance = getViewModeTrailingDistance(vehicleHalfLength)
-    local currentOffsetFromVehicle = subtractVector(state.position, vehicleCoords)
-    local rearwardDirection = scaleVector(lookAheadDirection, -1.0)
+    local currentOffsetFromVehicle = vector3(state.position.x-vehicleCoords.x, state.position.y-vehicleCoords.y, state.position.z-vehicleCoords.z)
+    local rearwardDirection = vector3(-lookAheadDirection.x, -lookAheadDirection.y, -lookAheadDirection.z)
     local direction = normalize(currentOffsetFromVehicle)
 
-    if vectorLength(rearwardDirection) <= 0.001 then
+    if math.sqrt(rearwardDirection.x*rearwardDirection.x + rearwardDirection.y*rearwardDirection.y + rearwardDirection.z*rearwardDirection.z) <= 0.001 then
         rearwardDirection = vector3(0.0, -1.0, 0.0)
     end
 
-    if vectorLength(direction) <= 0.001 then
+    if math.sqrt(direction.x*direction.x + direction.y*direction.y + direction.z*direction.z) <= 0.001 then
         direction = rearwardDirection
     end
 
     direction = normalize(vector3(direction.x, direction.y, 0.0))
-    if vectorLength(direction) <= 0.001 then
+    if math.sqrt(direction.x*direction.x + direction.y*direction.y + direction.z*direction.z) <= 0.001 then
         direction = rearwardDirection
     end
 
-    local targetPosition = addVector(
-        vehicleCoords,
-        addVector(
-            scaleVector(direction, followDistance),
-            vector3(0.0, 0.0, targetHeight)
-        )
+    local targetPosition = vector3(
+        vehicleCoords.x + direction.x*followDistance,
+        vehicleCoords.y + direction.y*followDistance,
+        vehicleCoords.z + direction.z*followDistance + targetHeight
     )
 
     return targetPosition, targetFocus
@@ -696,10 +679,10 @@ local function getInitialFollowPosition(vehicle)
     local roofHeight = math.max(0.0, tonumber(maxDim.z) or 0.0)
     local forward = getEntityForwardVectorSafe(vehicle)
     local flatForward = normalize(vector3(forward.x, forward.y, 0.0))
-    local rearwardDirection = scaleVector(flatForward, -1.0)
+    local rearwardDirection = vector3(-flatForward.x, -flatForward.y, -flatForward.z)
     local targetHeight = roofHeight + getViewModeHeightOffset()
 
-    if vectorLength(rearwardDirection) <= 0.001 then
+    if math.sqrt(rearwardDirection.x*rearwardDirection.x + rearwardDirection.y*rearwardDirection.y + rearwardDirection.z*rearwardDirection.z) <= 0.001 then
         rearwardDirection = vector3(0.0, -1.0, 0.0)
     end
 
@@ -708,12 +691,10 @@ local function getInitialFollowPosition(vehicle)
         getViewModeTrailingDistance(vehicleLength)
     )
 
-    return addVector(
-        vehicleCoords,
-        addVector(
-            scaleVector(rearwardDirection, initialDistance),
-            vector3(0.0, 0.0, targetHeight)
-        )
+    return vector3(
+        vehicleCoords.x + rearwardDirection.x*initialDistance,
+        vehicleCoords.y + rearwardDirection.y*initialDistance,
+        vehicleCoords.z + rearwardDirection.z*initialDistance + targetHeight
     )
 end
 
@@ -723,7 +704,8 @@ local function seedFollowState(vehicle)
     local _, desiredFocus = getDesiredFollowData()
     state.velocity = vector3(0.0, 0.0, 0.0)
     state.focus = desiredFocus
-    state.rotation = directionToRotation(subtractVector(state.focus, state.position))
+    local focusOffset = vector3(state.focus.x-state.position.x, state.focus.y-state.position.y, state.focus.z-state.position.z)
+    state.rotation = directionToRotation(focusOffset)
     state.rotationSpeed = vector3(0.0, 0.0, 0.0)
     syncCameraFov()
 
@@ -737,20 +719,19 @@ end
 local function startFollowCam()
     local ped = PlayerPedId()
     if not IsPedInAnyVehicle(ped, false) then
-        warnConfig("startFollowCam aborted: player is not in a vehicle.")
         return
     end
 
     local vehicle = GetVehiclePedIsIn(ped, false)
     if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
-        warnConfig("startFollowCam aborted: invalid vehicle entity.")
         return
     end
+
     activateCamera()
     state.lookBackActive = false
     seedFollowState(vehicle)
 
-    if isHoodViewMode() then
+    if GetFollowVehicleCamViewMode() == FOLLOW_CAM_HOOD_VIEW_MODE_ID then
         attachHoodCam(vehicle, state.lookBackActive)
         state.position = GetCamCoord(state.cam)
         state.rotation = GetCamRot(state.cam, 2)
@@ -759,11 +740,9 @@ local function startFollowCam()
     end
 end
 
--- Gameplay controls are only suppressed while the custom camera is active.
-local function disableGameplayControls()
-    DisablePlayerFiring(PlayerId(), true)
-    DisplayRadar(true)
-end
+-- ============================================================================
+-- VIRTUAL MIRROR
+-- ============================================================================
 
 local function drawVirtualMirrorOverlay()
     local mirror = Config.VirtualMirror
@@ -842,7 +821,7 @@ local function drawVirtualMirrorOverlay()
     local playerForward = getEntityForwardVectorSafe(playerVehicle)
     local worldUp = vector3(0.0, 0.0, 1.0)
     local playerRight = normalize(cross(playerForward, worldUp))
-    if vectorLength(playerRight) <= 0.001 then
+    if math.sqrt(playerRight.x*playerRight.x + playerRight.y*playerRight.y + playerRight.z*playerRight.z) <= 0.001 then
         playerRight = vector3(1.0, 0.0, 0.0)
     end
     local playerForwardHorizontalLength = math.sqrt((playerForward.x * playerForward.x) + (playerForward.y * playerForward.y))
@@ -879,20 +858,20 @@ local function drawVirtualMirrorOverlay()
         if vehicle and DoesEntityExist(vehicle) then
             local vehicleCenterCoords = getVehicleCenterCoordsSafe(vehicle)
             local lightAnchorCoords = getVehicleLightAnchorCoordsSafe(vehicle)
-            local toVehicle = subtractVector(lightAnchorCoords, playerCoords)
-            local toPlayerFromVehicle = subtractVector(playerCoords, vehicleCenterCoords)
+            local toVehicle = vector3(lightAnchorCoords.x-playerCoords.x, lightAnchorCoords.y-playerCoords.y, lightAnchorCoords.z-playerCoords.z)
+            local toPlayerFromVehicle = vector3(playerCoords.x-vehicleCenterCoords.x, playerCoords.y-vehicleCenterCoords.y, playerCoords.z-vehicleCenterCoords.z)
             local vehicleForward = getEntityForwardVectorSafe(vehicle)
             local vehicleForwardFlat = normalize(vector3(vehicleForward.x, vehicleForward.y, 0.0))
             local toPlayerFlat = normalize(vector3(toPlayerFromVehicle.x, toPlayerFromVehicle.y, 0.0))
             local showRearLights = false
 
-            if vectorLength(vehicleForwardFlat) > 0.001 and vectorLength(toPlayerFlat) > 0.001 then
-                showRearLights = dot(vehicleForwardFlat, toPlayerFlat) < 0.0
+            if math.sqrt(vehicleForwardFlat.x*vehicleForwardFlat.x + vehicleForwardFlat.y*vehicleForwardFlat.y + vehicleForwardFlat.z*vehicleForwardFlat.z) > 0.001 and math.sqrt(toPlayerFlat.x*toPlayerFlat.x + toPlayerFlat.y*toPlayerFlat.y + toPlayerFlat.z*toPlayerFlat.z) > 0.001 then
+                showRearLights = (vehicleForwardFlat.x*toPlayerFlat.x + vehicleForwardFlat.y*toPlayerFlat.y + vehicleForwardFlat.z*toPlayerFlat.z) < 0.0
             end
 
             local activeDotColor = showRearLights and dotRearColor or dotColor
-            local localRight = dot(toVehicle, playerRight)
-            local localForward = dot(toVehicle, playerForward)
+            local localRight = (toVehicle.x*playerRight.x + toVehicle.y*playerRight.y + toVehicle.z*playerRight.z)
+            local localForward = (toVehicle.x*playerForward.x + toVehicle.y*playerForward.y + toVehicle.z*playerForward.z)
             local backwardsDepth = -localForward
 
             if backwardsDepth > 0.01 then
@@ -906,8 +885,8 @@ local function drawVirtualMirrorOverlay()
                     local normalizedY = pitch / verticalHalfFov
                     local mirrorX = centerX + (normalizedX * mirrorHalfWidth)
                     local mirrorY = centerY + (normalizedY * mirrorHalfHeight)
-                    local centerDistance = vectorLength(subtractVector(vehicleCenterCoords, playerCoords))
-                    local vehicleDistance = centerDistance
+                    local toCenter = vector3(vehicleCenterCoords.x-playerCoords.x, vehicleCenterCoords.y-playerCoords.y, vehicleCenterCoords.z-playerCoords.z)
+                    local vehicleDistance = math.sqrt(toCenter.x*toCenter.x + toCenter.y*toCenter.y + toCenter.z*toCenter.z)
                     local distanceScale = clamp(1.0 - (vehicleDistance / dotScaleDistance), 0.0, 1.0)
                     local dotScaleT = distanceScale ^ dotScaleExponent
                     local scaledDotSize = dotSize * dotScaleT * (1.0 + ((dotSizeNearMultiplier - 1.0) * dotScaleT))
@@ -1031,9 +1010,8 @@ local function rebuildVirtualMirrorTrackedVehicles(playerVehicle, playerCoords, 
     for vehicle, _ in pairs(tracker) do
         if vehicle and vehicle ~= playerVehicle and DoesEntityExist(vehicle) then
             local vehicleCoords = getVehicleCenterCoordsSafe(vehicle)
-            local toVehicle = subtractVector(vehicleCoords, playerCoords)
-            local toVehicleFlat = vector3(toVehicle.x, toVehicle.y, 0.0)
-            local distanceSquared = dot(toVehicleFlat, toVehicleFlat)
+            local toVehicle = vector3(vehicleCoords.x-playerCoords.x, vehicleCoords.y-playerCoords.y, 0.0)
+            local distanceSquared = (toVehicle.x*toVehicle.x + toVehicle.y*toVehicle.y)
 
             if distanceSquared <= searchRadiusSquared and distanceSquared > 0.01 then
                 trackedVehicles[#trackedVehicles + 1] = {
@@ -1084,7 +1062,7 @@ local function updateVirtualMirrorVehiclePollRoundRobin(playerVehicle)
     local playerForward = getEntityForwardVectorSafe(playerVehicle)
     local playerForwardFlat = normalize(vector3(playerForward.x, playerForward.y, 0.0))
 
-    if vectorLength(playerForwardFlat) <= 0.001 then
+    if math.sqrt(playerForwardFlat.x*playerForwardFlat.x + playerForwardFlat.y*playerForwardFlat.y + playerForwardFlat.z*playerForwardFlat.z) <= 0.001 then
         playerForwardFlat = vector3(0.0, 1.0, 0.0)
     end
 
@@ -1135,13 +1113,12 @@ local function updateVirtualMirrorVehiclePollRoundRobin(playerVehicle)
 
         if vehicle and vehicle ~= playerVehicle and DoesEntityExist(vehicle) then
             local vehicleCoords = getVehicleCenterCoordsSafe(vehicle)
-            local toVehicle = subtractVector(vehicleCoords, playerCoords)
-            local toVehicleFlat = vector3(toVehicle.x, toVehicle.y, 0.0)
-            local distanceSquared = dot(toVehicleFlat, toVehicleFlat)
+            local toVehicleFlat = vector3(vehicleCoords.x-playerCoords.x, vehicleCoords.y-playerCoords.y, 0.0)
+            local distanceSquared = (toVehicleFlat.x*toVehicleFlat.x + toVehicleFlat.y*toVehicleFlat.y)
             local isTracked = false
 
             if distanceSquared <= searchRadiusSquared and distanceSquared > 0.01 then
-                local longitudinalDistance = dot(toVehicleFlat, playerForwardFlat)
+                local longitudinalDistance = (toVehicleFlat.x*playerForwardFlat.x + toVehicleFlat.y*playerForwardFlat.y + toVehicleFlat.z*playerForwardFlat.z)
                 isTracked = longitudinalDistance < 0.0
             end
 
@@ -1158,6 +1135,10 @@ local function updateVirtualMirrorVehiclePollRoundRobin(playerVehicle)
     state.virtualMirrorTracker = tracker
     rebuildVirtualMirrorTrackedVehicles(playerVehicle, playerCoords, searchRadiusSquared, maxTrackedVehicles)
 end
+
+-- ============================================================================
+-- CAMERA UPDATE
+-- ============================================================================
 
 -- Hood mode only needs to keep the attach and focus state alive.
 local function updateHoodCam(vehicle)
@@ -1183,11 +1164,11 @@ local function updateFollowCam()
 
     local vehicle = GetVehiclePedIsIn(ped, false)
     if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
-        warnConfig("updateFollowCam cleanup: active camera lost vehicle context.")
         cleanupCamera()
         return
     end
-    if isHoodViewMode() then
+
+    if GetFollowVehicleCamViewMode() == FOLLOW_CAM_HOOD_VIEW_MODE_ID then
         updateHoodCam(vehicle)
         return
     end
@@ -1224,14 +1205,14 @@ local function updateFollowCam()
 
     local desiredPosition, desiredFocus = getDesiredFollowData()
     local dt = GetFrameTime()
-    local toTarget = subtractVector(desiredPosition, state.position)
-    local distance = vectorLength(toTarget)
+    local toTarget = vector3(desiredPosition.x-state.position.x, desiredPosition.y-state.position.y, desiredPosition.z-state.position.z)
+    local distance = math.sqrt(toTarget.x*toTarget.x + toTarget.y*toTarget.y + toTarget.z*toTarget.z)
     local minDim, maxDim = GetModelDimensions(GetEntityModel(vehicle))
     local vehicleLength = math.abs(maxDim.y - minDim.y) * 0.5
     local vehicleCoords = GetEntityCoords(vehicle)
-    local currentOffsetFromVehicle = subtractVector(state.position, vehicleCoords)
-    local currentVehicleDistance = vectorLength(currentOffsetFromVehicle)
-    local minBubbleDistance = getMinimumBubbleDistance(vehicleLength)
+    local currentOffsetFromVehicle = vector3(state.position.x-vehicleCoords.x, state.position.y-vehicleCoords.y, state.position.z-vehicleCoords.z)
+    local currentVehicleDistance = math.sqrt(currentOffsetFromVehicle.x*currentOffsetFromVehicle.x + currentOffsetFromVehicle.y*currentOffsetFromVehicle.y + currentOffsetFromVehicle.z*currentOffsetFromVehicle.z)
+    local minBubbleDistance = math.max(0.0, tonumber(vehicleLength) or 0.0) + FOLLOW_CAM_MINIMUM_BUBBLE_PADDING_METERS
     local vehicleSpeed = GetEntitySpeed(vehicle)
     local distanceOffset = distance - FOLLOW_CAM_SPEED_MATCH_DISTANCE_METERS
     local signedDistanceGain = signedPower(distanceOffset, 1.35) * FOLLOW_CAM_CATCHUP_FACTOR
@@ -1242,31 +1223,31 @@ local function updateFollowCam()
         desiredScalarSpeed = math.max(desiredScalarSpeed, bubbleEscapeSpeed)
     end
 
-    local desiredVelocity = scaleVector(
-        normalize(toTarget),
-        desiredScalarSpeed
-    )
-    local velocityError = subtractVector(desiredVelocity, state.velocity)
-    local acceleration = subtractVector(
-        scaleVector(velocityError, FOLLOW_CAM_ACCELERATION_FACTOR),
-        scaleVector(state.velocity, FOLLOW_CAM_DAMPING_FACTOR)
+    local normToTarget = normalize(toTarget)
+    local desiredVelocity = vector3(normToTarget.x*desiredScalarSpeed, normToTarget.y*desiredScalarSpeed, normToTarget.z*desiredScalarSpeed)
+    local velocityError = vector3(desiredVelocity.x-state.velocity.x, desiredVelocity.y-state.velocity.y, desiredVelocity.z-state.velocity.z)
+    local acceleration = vector3(
+        velocityError.x*FOLLOW_CAM_ACCELERATION_FACTOR - state.velocity.x*FOLLOW_CAM_DAMPING_FACTOR,
+        velocityError.y*FOLLOW_CAM_ACCELERATION_FACTOR - state.velocity.y*FOLLOW_CAM_DAMPING_FACTOR,
+        velocityError.z*FOLLOW_CAM_ACCELERATION_FACTOR - state.velocity.z*FOLLOW_CAM_DAMPING_FACTOR
     )
 
-    state.velocity = addVector(state.velocity, scaleVector(acceleration, dt))
-    state.position = addVector(state.position, scaleVector(state.velocity, dt))
+    state.velocity = vector3(state.velocity.x + acceleration.x*dt, state.velocity.y + acceleration.y*dt, state.velocity.z + acceleration.z*dt)
+    state.position = vector3(state.position.x + state.velocity.x*dt, state.position.y + state.velocity.y*dt, state.position.z + state.velocity.z*dt)
     state.focus = desiredFocus
 
-    local targetRotation = directionToRotation(subtractVector(state.focus, state.position))
+    local targetRotation = directionToRotation(vector3(state.focus.x-state.position.x, state.focus.y-state.position.y, state.focus.z-state.position.z))
     state.rotation, state.rotationSpeed = smoothRotation(state.rotation, state.rotationSpeed, targetRotation, dt)
     local appliedPosition = state.position
     local appliedRotation = state.rotation
 
     if state.lookBackActive then
         local renderVehicleCoords = GetEntityCoords(vehicle)
-        local relativeOffset = subtractVector(state.position, renderVehicleCoords)
-        appliedPosition = addVector(
-            renderVehicleCoords,
-            vector3(-relativeOffset.x, -relativeOffset.y, relativeOffset.z)
+        local relativeOffset = vector3(state.position.x-renderVehicleCoords.x, state.position.y-renderVehicleCoords.y, state.position.z-renderVehicleCoords.z)
+        appliedPosition = vector3(
+            renderVehicleCoords.x - relativeOffset.x,
+            renderVehicleCoords.y - relativeOffset.y,
+            renderVehicleCoords.z + relativeOffset.z
         )
         appliedRotation = vector3(
             appliedRotation.x,
@@ -1282,12 +1263,11 @@ local function updateFollowCam()
     SetFocusPosAndVel(appliedPosition.x, appliedPosition.y, appliedPosition.z, 0.0, 0.0, 0.0)
 end
 
--- Holding the camera control for long enough toggles the custom camera state.
-local function isToggleCameraHeld()
-    return IsControlPressed(0, getToggleControlId())
-end
+-- ============================================================================
+-- TOGGLE STATE MACHINE
+-- ============================================================================
 
--- The hold-toggle state machine prevents accidental camera flicker.
+-- Holding the camera control for long enough toggles the custom camera state.
 local function updateToggleHoldState()
     local ped = PlayerPedId()
     if not IsPedInAnyVehicle(ped, false) then
@@ -1296,7 +1276,9 @@ local function updateToggleHoldState()
         return false
     end
 
-    if not isToggleCameraHeld() then
+    local toggleControlId = math.max(0, math.floor(tonumber((type(Config.Controls)=="table" and Config.Controls or {}).toggleControlId) or 0))
+
+    if not IsControlPressed(0, toggleControlId) then
         toggleHoldState.heldSince = nil
         toggleHoldState.hasTriggered = false
         return false
@@ -1327,13 +1309,17 @@ local function updateToggleHoldState()
                 controlHintState = 1
             end
             controlHintState = 2
-            local toggleToken = getControlHintToken(getToggleControlId(), '~INPUT_NEXT_CAMERA~')
+            local toggleToken = getControlHintToken(toggleControlId, '~INPUT_NEXT_CAMERA~')
             showControlHint(('Hold %s again to disable custom cam.'):format(toggleToken), 8000)
         end
     end
 
     return true
 end
+
+-- ============================================================================
+-- THREADS AND RESOURCE LIFECYCLE
+-- ============================================================================
 
 CreateThread(function()
     while true do
@@ -1380,7 +1366,8 @@ CreateThread(function()
 
         if state.active then
             Wait(0)
-            disableGameplayControls()
+            DisablePlayerFiring(PlayerId(), true)
+            DisplayRadar(true)
             drawVirtualMirrorOverlay()
             updateFollowCam()
         else
@@ -1389,10 +1376,6 @@ CreateThread(function()
         end
     end
 end)
-
--- ============================================================================
--- RESOURCE LIFECYCLE SECTION
--- ============================================================================
 
 -- Resource shutdown always cleans up the active scripted camera.
 AddEventHandler('onResourceStop', function(resourceName)

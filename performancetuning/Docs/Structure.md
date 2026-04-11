@@ -1,70 +1,90 @@
-# performancetuning — Structure
+# performancetuning - Structure
 
 ## 1) Runtime topology
-- **Shared definitions/config:** `Config.lua`, `definitions.lua`, `configruntime.lua`.
-- **Client domain modules:** handling, vehicle state, tuning packs, surface/material grip, nitrous, performance panel, menu/runtime bindings.
-- **Client composition root:** `client.lua` wires exports, local events, and UI/PI update loops.
-- **Server domain module:** `server.lua` stores diagnostics-related and stable-lap related data/events.
-- **Server utility module:** `UpdateNotifier.lua` for update checks.
+- **Shared config layer:** `shared/Config.lua`.
+- **Shared metadata layer:** `client/definitions.lua`.
+- **Runtime config normalization:** `client/configruntime.lua`.
+- **Cross-module binding layer:** `client/runtimebindings.lua`.
+- **Client composition root:** `client/client.lua`.
+- **Client feature modules:** `handlingmanager.lua`, `vehiclemanager.lua`, `tuningpackmanager.lua`, `menusliders.lua`, `scaleformui_menus.lua`, `performancepanel.lua`, `surfacegrip.lua`, `material_tyre_grip.lua`, `nitrous.lua`, `syncorchestrator.lua`.
+- **Server modules:** `server/server.lua` and `server/UpdateNotifier.lua`.
+- **External UI dependency:** `ScaleformUI_Lua` is loaded before the menu code and provides the menu primitives the resource builds on.
 
 ## 2) Client/server relationship
-- Client is the primary runtime owner for live vehicle interaction, UI, and handling mutations.
-- Server handles selected authoritative operations:
-  - stable lap sample persistence
-  - player scope/drop cleanup logic used by synchronization paths.
-- Bidirectional communication uses explicit net events (`TriggerServerEvent`/`RegisterNetEvent`).
+- Client owns the live tuning UX, vehicle mutation, local state buckets, and most periodic loops.
+- Server owns:
+  - stable-lap PI persistence in `stable_laptimes.json`
+  - player scope bookkeeping for resync requests
+  - the `/ptlaptimes` command
+- The two sides communicate through explicit events:
+  - `TriggerServerEvent('performancetuning:registerTunedVehicle', ...)`
+  - `TriggerServerEvent('performancetuning:storeStableLapSample', ...)`
+  - `TriggerClientEvent('performancetuning:requestVehicleResync', ...)`
+  - `RegisterNetEvent(...)` / `AddEventHandler(...)`
 
 ## 3) Conceptual role separation
-- **Public API/export façade:** `client.lua` export surface.
-- **Handling IO/caching:** `handlingmanager.lua`.
-- **Per-vehicle state buckets:** `vehiclemanager.lua`.
-- **Pack application and option resolution:** `tuningpackmanager.lua`.
-- **UI metrics/rendering:** `performancepanel.lua`, `menusliders.lua`, `scaleformui_menus.lua`.
-- **Cross-module wiring/helpers:** `runtimebindings.lua`.
-- **Sync diagnostics/orchestration:** `syncorchestrator.lua`.
-- **Grip/nitrous subsystems:** `surfacegrip.lua`, `material_tyre_grip.lua`, `nitrous.lua`.
+- **Public API/export facade:** `client.lua`.
+- **Handling IO and parsing:** `handlingmanager.lua`.
+- **Per-vehicle state buckets and statebag sync:** `vehiclemanager.lua`.
+- **Pack definitions and tune application:** `tuningpackmanager.lua`.
+- **Menu slider math and labels:** `menusliders.lua`.
+- **Menu assembly and input handling:** `scaleformui_menus.lua`.
+- **PI metrics and panel rendering:** `performancepanel.lua`.
+- **Surface/material grip lookup and runtime adjustment:** `material_tyre_grip.lua`, `surfacegrip.lua`.
+- **Nitrous and rev limiter behavior:** `nitrous.lua`.
+- **Resync queueing and repair loops:** `syncorchestrator.lua`.
+- **Shared runtime wiring:** `runtimebindings.lua`.
+- **Server persistence and update notification:** `server.lua`, `UpdateNotifier.lua`.
 
 ## 4) Call tree (high-level)
-1. `fxmanifest.lua` loads shared layer, then client scripts in ordered list, then server scripts.
-2. Client load path initializes runtime tables and module interlinks.
-3. `client.lua` registers exports and runtime event handlers.
-4. UI and PI synchronization loops run continuously while resource is active.
-5. User interactions route through menu + tuning modules into handling write/reset operations.
-6. Selected operations dispatch to server for stable lap persistence.
-7. Server responds with confirmation events.
+1. `fxmanifest.lua` loads `shared/Config.lua`, then the ordered client scripts, then the server scripts.
+2. `client/definitions.lua` and `client/configruntime.lua` establish the static metadata and runtime config values.
+3. `client/runtimebindings.lua` connects config, helpers, and module references into `PerformanceTuning._internals`, `PerformanceTuning._state`, and `PerformanceTuning.ScaleformUI`.
+4. `client/client.lua` registers exports and relays `racingsystem:stableLapTime` into the server persistence path.
+5. `client/scaleformui_menus.lua` builds the menu tree and routes selection changes back into tuning pack application.
+6. `client/vehiclemanager.lua` serializes tune state and pushes it into entity state bags, which then feed the sync orchestrator.
+7. `client/performancepanel.lua`, `client/surfacegrip.lua`, `client/nitrous.lua`, and `client/syncorchestrator.lua` run their respective maintenance loops while the resource is active.
+8. `server/server.lua` stores PI records, handles scope cleanup, and requests resyncs when tuned vehicles or players change visibility.
+9. `server/UpdateNotifier.lua` checks the configured GitHub branch/path on startup or when `/ptupdatecheck` is used.
 
 ## 5) State model
-- **Vehicle bucket state:** per-vehicle tune/PI/handling-original cache containers.
-- **UI state:** panel draw requests, display mode settings, nearby panel ownership flags.
-- **Runtime integration state:** temporary synchronization queues/diagnostics counters in orchestrator.
-- **Persistence state:** stable lap data document (`stable_laptimes.json`) managed server-side.
+- **Vehicle bucket state:** per-vehicle tune state, original handling snapshots, and cached last-applied tune/PI values.
+- **UI state:** menu items, slider values, panel draw requests, display modes, and nearby-panel caches.
+- **Runtime integration state:** tracked vehicle keys, resync queues, and local auth windows for statebag updates.
+- **Persistence state:** stable lap records stored server-side in `stable_laptimes.json`.
 
-Ownership is split: interactive/live state mostly client-side; persistence and selected coordination on server.
+Ownership is mostly client-side for interactive state, with server-side ownership for persistence and resync coordination.
 
 ## 6) Independent threads
 | Thread | Where | Role | Start condition | Loop cadence | End condition |
 |---|---|---|---|---|---|
-| UI/vehicle refresh loops | `client.lua` | Refresh panel visuals and periodic PI state sync | Client script load | Mix of per-frame and throttled waits | Stop on resource unload |
-| Nitrous runtime loops | `nitrous.lua` | Maintain shot timing/cleanup and control behavior | Client script load | Continuous loop(s), throttled by waits | Stop on resource unload |
-| Surface grip monitor loop | `surfacegrip.lua` | Tracks and applies surface/material influence updates | Client script load | Continuous throttled loop | Stop on resource unload |
-| Performance panel helper loops | `performancepanel.lua` | Maintain display state and panel draw orchestration | Client script load | Continuous loops with waits | Stop on resource unload |
-| Sync orchestration worker loop(s) | `syncorchestrator.lua` | Handles deferred/immediate resync workflows | Client script load / event-triggered thread spawn | Event-driven + continuous maintenance loop | Stop on resource unload |
-| Update-check delayed worker | `UpdateNotifier.lua` | Randomized delayed version check | `onResourceStart` | One-shot | Ends after check |
+| Steering-lock adaptation loop | `client/client.lua` | Samples speed and updates steering lock targets | Client script load | 50-250 ms adaptive wait | Stop on resource unload |
+| Steering-lock application loop | `client/client.lua` | Smoothly writes steering lock changes | Client script load | `Wait(0)` | Stop on resource unload |
+| PI sync loop | `client/client.lua` | Periodically syncs vehicle PI state | Client script load | `Wait(500)` | Stop on resource unload |
+| Nitrous control loop | `client/nitrous.lua` | Disables the nitrous control while a shot is active | Client script load | `Wait(0)` while active, `Wait(100)` otherwise | Stop on resource unload |
+| Nitrous refill loop | `client/nitrous.lua` | Recharges nitrous when stationary | Client script load | `Wait(500)` | Stop on resource unload |
+| Rev-limiter loop | `client/nitrous.lua` | Triggers shot input handling and rev limiter enforcement | Client script load | `Wait(0)` while driving, `Wait(250)` when idle | Stop on resource unload |
+| Surface grip monitor loop | `client/surfacegrip.lua` | Updates and restores tire lateral grip | Client script load | `Wait(500)` | Stop on resource unload |
+| Nearby vehicle scan loop | `client/performancepanel.lua` | Populates the nearby vehicle cache for PI panel rendering | Client script load | `Wait(0)` | Stop on resource unload |
+| Panel/process loop | `client/performancepanel.lua` | Processes menu frame state and draws active panels | Client script load | `Wait(0)` | Stop on resource unload |
+| Immediate resync thread(s) | `client/syncorchestrator.lua` | Applies queued resyncs and statebag changes | Event-triggered and client load | One-shot + `Wait(0)` per queued apply | Stop on resource unload |
+| Sync maintenance loop | `client/syncorchestrator.lua` | Walks tracked vehicles and pending resyncs | Client script load | `Wait(250)` | Stop on resource unload |
+| Update-check worker | `server/UpdateNotifier.lua` | Delayed startup update check | `onResourceStart` | One-shot delayed thread | Ends after the check |
 
 ## 7) Lifecycle boundaries
-- **Start:** ordered module load from `fxmanifest.lua` establishes internals and export surface.
-- **Runtime:** events/exports drive tuning operations; threads maintain live UI/sync behavior.
-- **Stop:** resource unload naturally stops loops; state will be reconstructed on next load.
+- **Start:** the manifest loads config, metadata, bindings, features, and server modules in a fixed order.
+- **Runtime:** menu events, exports, and statebag updates drive the tuning flow while the loops keep panels, nitrous, and sync current.
+- **Stop:** all threads terminate with the resource and the live state is reconstructed on the next start.
 
 ## 8) Configuration and logging behavior
-- `performancetuning` runtime does not currently read convars for tuning behavior or diagnostics verbosity.
-- `UpdateNotifier.lua` uses hardcoded update-check configuration:
+- `performancetuning` does not currently use convars for live tuning or debug verbosity.
+- `UpdateNotifier.lua` reads its repo/branch/path/token/timeout from the shared `updateCheck` config, with defaults for:
   - repo: `Eddlm/ars-fivem`
   - branch: `main`
   - path: `performancetuning`
   - token: empty by default
-- Update checker logging is not runtime-configurable:
-  - verbose update status logging is fixed off
-  - only update-available notification is printed when a newer version is detected
-- Manual update check entry point remains `/ptupdatecheck`; startup check still runs once after a randomized delay.
+- Update logging is intentionally minimal:
+  - verbose status logging only appears when configured
+  - the normal path prints only when an update is available
+- The manual update entry point remains `/ptupdatecheck`.
 

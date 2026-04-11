@@ -31,6 +31,17 @@ power.lua
 │        ├─ applyCompressionPenalty(vehicle, snapshot, penaltyStrength)
 │        │  └─ getMaxDrivenWheelCompressionDelta(wheelSnapshot)
 │        └─ recoverSuspensionPenalty()
+├─ CustomPhysicsPower.sampleStability(vehicle, now)
+│  ├─ gate on powered driven wheels only
+│  ├─ capture current acceleration sample in Gs
+│  ├─ append structured rolling-window entry with timestamp
+│  ├─ prune samples older than 500ms
+│  └─ evaluateStabilityWindow(vehicle)
+│     ├─ peak measured acceleration across the powered 500ms window in Gs
+│     ├─ average baseline acceleration across the powered 500ms window in Gs
+│     └─ reduce antiBoostMultiplier when the spike exceeds threshold
+├─ CustomPhysicsPower.updateStabilityRecovery(vehicle, deltaSeconds)
+│  └─ advanceStabilityRecovery(vehicle, deltaSeconds)
 └─ CustomPhysicsPower.reset(vehicle)
    └─ stopEngineSmokeEffect()
 
@@ -59,6 +70,13 @@ calculateOffroadTargetMultiplier(snapshot, now, offroadMaxMultiplier)
 ├─ getUsableDrivenWheelPower(rawDrivenWheelPower)
 ├─ getOffroadSurfaceWheelCount(vehicle, wheelCount)
 └─ updateOffroadShiftBlock(currentGear, now)
+
+evaluateStabilityWindow(vehicle)
+├─ getSpeedBasedMinimumAntiBoostMultiplier(vehicle)
+└─ CustomPhysicsUtil.mapValue(...)
+
+advanceStabilityRecovery(vehicle, deltaSeconds)
+└─ getSpeedBasedMinimumAntiBoostMultiplier(vehicle)
 
 getSuspensionPenalty(vehicle, snapshot, slideAngle)
 ├─ applyAccelerationFactorPenalty(...)

@@ -24,7 +24,7 @@ end
 
 -- Runtime entrypoints
 
--- Runs the stability sampler at 8 Hz so acceleration noise is smoothed before it feeds the power stack.
+-- Runs the powered-wheel stability sampler at 10 Hz so acceleration noise is smoothed before it feeds the power stack.
 CreateThread(function()
     while true do
         local vehicle = getDriverVehicle()
@@ -32,20 +32,15 @@ CreateThread(function()
             CustomPhysicsPower.sampleStability(vehicle, GetGameTimer())
         end
 
-        Wait(CustomPhysicsPower.getStabilitySampleIntervalMs())
+        Wait(CustomPhysicsPower.STABILITY_SAMPLE_INTERVAL_MS or 100)
     end
 end)
 
--- Runs the anti-boost recovery independently at a frame-timed cadence.
+-- Recovers the anti-boost multiplier toward 1.0 at 1.0/s.
 CreateThread(function()
     while true do
-        local frameSeconds = CustomPhysicsUtil.getDeltaSeconds()
-        local vehicle = getDriverVehicle()
-        if vehicle then
-            CustomPhysicsPower.updateStabilityRecovery(vehicle, frameSeconds)
-        end
-
-        Wait(math.max(0, math.floor(frameSeconds * 1000.0)))
+        CustomPhysicsPower.recoverAntiBoost(CustomPhysicsUtil.getDeltaSeconds())
+        Wait(0)
     end
 end)
 
@@ -59,7 +54,7 @@ CreateThread(function()
             if lastVehicle and lastVehicle ~= vehicle then
                 clearOverrides(lastVehicle)
             end
-            
+
             CustomPhysicsRollovers.update(vehicle)
             CustomPhysicsWheelies.update(vehicle)
             CustomPhysicsPower.update(vehicle, now)
@@ -75,13 +70,6 @@ CreateThread(function()
         Wait(0)
     end
 end)
-
-function ShowSubtitle(text)
-
-	BEGIN_TEXT_COMMAND_PRINT("STRING")
-	ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME(text)
-	END_TEXT_COMMAND_PRINT(2000, 1)
-end 
 -- Clears active overrides when the resource stops to avoid leaving stale effects behind.
 AddEventHandler('onResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then

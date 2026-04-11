@@ -14,9 +14,8 @@ wheelies.lua
    ├─ getVehicleLength(vehicle)                   [for front force offset]
    ├─ getSlopeRelativePitchDegrees(vehicle)
    │  └─ getVehicleLength(vehicle)
-   ├─ getClampedDrivenWheelPower(vehicle)
-   │  ├─ CustomPhysicsUtil.getDrivenWheelPowerTotal(vehicle)
-   │  │  └─ CustomPhysicsUtil.buildWheelPowerSnapshot(vehicle)
+   ├─ CustomPhysicsUtil.buildWheelPowerSnapshot(vehicle)
+   ├─ getClampedDrivenWheelPower(wheelSnapshot)
    │  └─ CustomPhysicsUtil.clamp(...)
    ├─ CustomPhysicsUtil.clamp(...)                [wheelPowerNorm]
    ├─ CustomPhysicsUtil.clamp(...)                [rearBiasMultiplier]

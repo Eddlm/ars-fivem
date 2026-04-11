@@ -34,17 +34,6 @@ end
 
 -- Frame timing helpers
 
--- Returns the current frame rate relative to a 60 FPS baseline.
-function CustomPhysicsUtil.getFpsRatio()
-    local frameTime = GetFrameTime()
-    if frameTime <= 0.000001 then
-        return 1.0
-    end
-
-    local fps = 1.0 / frameTime
-    return math.max(0.1, fps / 60.0)
-end
-
 -- Returns the current frame time in seconds with a safe fallback.
 function CustomPhysicsUtil.getDeltaSeconds()
     local frameTime = GetFrameTime()
@@ -53,6 +42,13 @@ function CustomPhysicsUtil.getDeltaSeconds()
     end
 
     return frameTime
+end
+
+-- Displays a short subtitle/debug message using the standard text command pipeline.
+function CustomPhysicsUtil.showSubtitle(text, durationMs)
+    BeginTextCommandPrint("STRING")
+    AddTextComponentSubstringPlayerName(tostring(text or ""))
+    EndTextCommandPrint(math.max(0, math.floor(tonumber(durationMs) or 2000)), true)
 end
 
 -- Vehicle motion helpers
@@ -96,7 +92,7 @@ function CustomPhysicsUtil.buildWheelPowerSnapshot(vehicle)
     local drivenWheelPower = 0.0
     local wheelPowers = {}
 
-    for wheelIndex = 0, wheelCount - 1 do
+    for wheelIndex = 0, wheelCount  do
         local wheelPower = GetVehicleWheelPower(vehicle, wheelIndex)
         wheelPowers[wheelIndex] = wheelPower
         drivenWheelPower = drivenWheelPower + wheelPower
@@ -109,8 +105,3 @@ function CustomPhysicsUtil.buildWheelPowerSnapshot(vehicle)
     }
 end
 
--- Returns total driven wheel power and wheel count for callers that do not need the full snapshot.
-function CustomPhysicsUtil.getDrivenWheelPowerTotal(vehicle)
-    local snapshot = CustomPhysicsUtil.buildWheelPowerSnapshot(vehicle)
-    return snapshot.drivenWheelPower, snapshot.wheelCount
-end
