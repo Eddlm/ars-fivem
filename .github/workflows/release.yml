@@ -16,7 +16,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build per-module zips
+      - name: Build zip
         run: |
           STAGING="/tmp/staging"
           mkdir -p "$STAGING"
@@ -42,7 +42,6 @@ jobs:
                 --exclude='savedvehicles/*.json' \
                 "$module/" "$MODULE_STAGING/"
 
-              # ensure empty dirs that users need
               if [ "$module" = "racingsystem" ]; then
                 mkdir -p "$MODULE_STAGING/CustomRaces"
                 mkdir -p "$MODULE_STAGING/OnlineRaces"
@@ -50,12 +49,11 @@ jobs:
               if [ "$module" = "vehiclemanager" ]; then
                 mkdir -p "$MODULE_STAGING/savedvehicles"
               fi
-
-              cd "$STAGING"
-              zip -r "$GITHUB_WORKSPACE/${module}.zip" "$module/"
-              cd "$GITHUB_WORKSPACE"
             fi
           done
+
+          cd "$STAGING"
+          zip -r "$GITHUB_WORKSPACE/ars-fivem.zip" .
 
       - name: Create GitHub Release
         env:
@@ -64,10 +62,4 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             --title "ars-fivem $GITHUB_REF_NAME" \
             --generate-notes \
-            racingsystem.zip \
-            performancetuning.zip \
-            vehiclemanager.zip \
-            customphysics.zip \
-            customcam.zip \
-            traffic_control.zip \
-            proper-handling.zip
+            ars-fivem.zip
