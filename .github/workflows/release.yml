@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build per-module zips
+        run: |
+          STAGING="/tmp/staging"
+          mkdir -p "$STAGING"
+
+          for module in racingsystem performancetuning vehiclemanager customphysics customcam traffic_control proper-handling; do
+            if [ -d "$module" ]; then
+              MODULE_STAGING="$STAGING/$module"
+              mkdir -p "$MODULE_STAGING"
+
+              rsync -a \
+                --exclude='.git/' \
+                --exclude='.gitignore' \
+                --exclude='.gitattributes' \
+                --exclude='.luarc.json' \
+                --exclude='.claude/' \
+                --exclude='CLAUDE.md' \
+                --exclude='**/AGENTS.md' \
+                --exclude='Docs/' \
+                --exclude='calltrees/' \
+                --exclude='Inactive/' \
+                --exclude='tools/' \
+                --exclude='race_index.json' \
+                --exclude='savedvehicles/*.json' \
+                "$module/" "$MODULE_STAGING/"
+
+              # ensure empty dirs that users need
+              if [ "$module" = "racingsystem" ]; then
+                mkdir -p "$MODULE_STAGING/CustomRaces"
+                mkdir -p "$MODULE_STAGING/OnlineRaces"
+              fi
+              if [ "$module" = "vehiclemanager" ]; then
+                mkdir -p "$MODULE_STAGING/savedvehicles"
+              fi
+
+              cd "$STAGING"
+              zip -r "$GITHUB_WORKSPACE/${module}.zip" "$module/"
+              cd "$GITHUB_WORKSPACE"
+            fi
+          done
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "ars-fivem $GITHUB_REF_NAME" \
+            --generate-notes \
+            racingsystem.zip \
+            performancetuning.zip \
+            vehiclemanager.zip \
+            customphysics.zip \
+            customcam.zip \
+            traffic_control.zip \
+            proper-handling.zip
