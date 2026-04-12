@@ -82,6 +82,8 @@ function VehicleManager.getTuningBucket(vehicle, createIfMissing)
             tireCompoundPack = 'stock',
             tireCompoundCategory = 'stock',
             tireCompoundQuality = 'mid_end',
+            brakePack = 'stock',
+            handbrakePack = 'stock',
             nitrousLevel = 'stock',
             steeringLockMode = 'stock',
             nitrousAvailableCharge = 1.0,
@@ -174,6 +176,7 @@ function VehicleManager.serializeTuneState(bucket)
         tireCompoundCategory = bucket.tireCompoundCategory or 'stock',
         tireCompoundQuality = bucket.tireCompoundQuality or 'mid_end',
         brakePack = bucket.brakePack or 'stock',
+        handbrakePack = bucket.handbrakePack or 'stock',
         nitrousLevel = bucket.nitrousLevel or 'stock',
         steeringLockMode = normalizeSteeringLockMode(bucket.steeringLockMode),
         revLimiterEnabled = bucket.revLimiterEnabled == true,
@@ -184,6 +187,7 @@ function VehicleManager.serializeTuneState(bucket)
         antirollBiasFront = roundToThreeDecimals(internals.clampAntirollBiasFrontValue(bucket.antirollBiasFront or bucket.baseAntiroll[antirollBiasField] or 0.5), 0.5) or 0.5,
         suspensionRaise = roundToThreeDecimals(internals.clampSuspensionRaiseValue(bucket.suspensionRaise or bucket.baseSuspension.fSuspensionRaise or 0.0), 0.0) or 0.0,
         suspensionBiasFront = roundToThreeDecimals(internals.clampSuspensionBiasFrontValue(bucket.suspensionBiasFront or bucket.baseSuspension[suspensionBiasField] or 0.5), 0.5) or 0.5,
+        cgOffsetTweak = roundToThreeDecimals(internals.clampCgOffsetValue(bucket.cgOffsetTweak or 0.0), 0.0) or 0.0,
     }
 end
 
@@ -335,7 +339,8 @@ function VehicleManager.tuneStatesEqual(a, b)
         or a.tireCompoundPack ~= b.tireCompoundPack
         or (a.tireCompoundCategory or 'stock') ~= (b.tireCompoundCategory or 'stock')
         or (a.tireCompoundQuality or 'mid_end') ~= (b.tireCompoundQuality or 'mid_end')
-        or a.brakePack ~= b.brakePack
+        or (a.brakePack or 'stock') ~= (b.brakePack or 'stock')
+        or (a.handbrakePack or 'stock') ~= (b.handbrakePack or 'stock')
         or a.nitrousLevel ~= b.nitrousLevel
         or (a.steeringLockMode or 'stock') ~= (b.steeringLockMode or 'stock')
         or (a.revLimiterEnabled == true) ~= (b.revLimiterEnabled == true)
@@ -539,6 +544,12 @@ function VehicleManager.ensureTuningState(vehicle)
     if bucket.tireCompoundQuality == nil then
         bucket.tireCompoundQuality = 'mid_end'
     end
+    if bucket.brakePack == nil then
+        bucket.brakePack = 'stock'
+    end
+    if bucket.handbrakePack == nil then
+        bucket.handbrakePack = 'stock'
+    end
 
     if (internals.STEERING_LOCK_FIELD or '') ~= '' and bucket.baseSteeringLock == nil then
         bucket.baseSteeringLock = PerformanceTuning.HandlingManager.readHandlingValue(vehicle, 'float', internals.STEERING_LOCK_FIELD)
@@ -546,6 +557,13 @@ function VehicleManager.ensureTuningState(vehicle)
 
     if internals.DRAG_FIELD and bucket.baseDrag == nil then
         bucket.baseDrag = PerformanceTuning.HandlingManager.readHandlingValue(vehicle, 'float', internals.DRAG_FIELD)
+    end
+
+    if bucket.baseCgOffset == nil then
+        local cgVec = GetCgoffset(vehicle)  -- 0x8214A4B5A7A33612 GET_CGOFFSET
+        bucket.baseCgOffset = (type(cgVec) == 'vector3')
+            and { x = cgVec.x, y = cgVec.y, z = cgVec.z }
+            or  { x = 0.0, y = 0.0, z = 0.0 }
     end
 
     if bucket.baseSuspension == nil then
@@ -586,7 +604,9 @@ function VehicleManager.ensureTuningState(vehicle)
 
     if bucket.baseBrakes == nil then
         bucket.baseBrakes = {}
-        for _, fieldName in ipairs(internals.BRAKE_FIELDS) do
+    end
+    for _, fieldName in ipairs(internals.BRAKE_FIELDS) do
+        if bucket.baseBrakes[fieldName] == nil then
             bucket.baseBrakes[fieldName] = PerformanceTuning.HandlingManager.readHandlingValue(vehicle, 'float', fieldName)
         end
     end

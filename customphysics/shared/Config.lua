@@ -3,22 +3,29 @@ CustomPhysics = CustomPhysics or {}
 CustomPhysics.Config = {
     -- Wheelies
     nativeWheeliesDisabled = true,
-    customWheelieEnabled = true,    
+    -- convar: cp_wheelies_enabled <0|1> — toggle the custom wheelie system server-side without touching this file
+    -- convar candidate: cp_wheelies_muscle_only — some servers run mixed car classes and want wheelies available for all RWD vehicles
     wheeliesMuscleOnly = true,
 
--- Rollovers
-rolloversEnabled = true,
+    -- Rollovers
+    -- convar candidate: cp_rollovers_enabled — lets admins disable the recovery assist on servers preferring pure simulation
+    rolloversEnabled = true,
 
-    -- Offroad speed 
+    -- Offroad speed
+    -- convar candidate: cp_offroad_boost_enabled — servers focused on road racing may want to disable this without editing Lua
     offroadBoostEnabled = true,
+    -- convar candidate: cp_offroad_max_multiplier — tune the offroad boost ceiling for balance across different terrain servers
     offroadMaxMultiplier = 5.0,
 
     -- Fallback value in case the car does not get a rev limiter state bag from performancetuning.
     -- If performancetuning tune state is missing, this fallback controls whether customphysics still enforces a limiter.
+    -- convar candidate: cp_fallback_rev_limiter — allows enabling the limiter globally at startup when PT is not installed
     fallbackRevLimiterEnabled = false,
 
     -- Powerslides
+    -- convar candidate: cp_slide_speed_threshold — lower values make slides trigger earlier; useful tuning for different tire/surface setups
     slideAngleStepDegrees = 20.0,
+    -- convar candidate: cp_slide_max_multiplier — caps the power boost during slides; competitive servers may want a tighter cap
     slideMaxMultiplier = 5.0,
     slideSpeedThresholdMetersPerSecond = 3.0,
 

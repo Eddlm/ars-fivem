@@ -2,7 +2,9 @@ CustomCam = CustomCam or {}
 CustomCam.Config = {}
 
 -- Camera hold timing.
+-- convar candidate: cc_toggle_hold_ms — players on touch-heavy setups or with accessibility needs may want a shorter or longer hold
 CustomCam.Config.toggleHoldMs = 1000
+-- convar candidate: cc_show_control_hints — servers with experienced regulars can disable hints to reduce UI clutter
 CustomCam.Config.showControlHints = true
 
 CustomCam.Config.Controls = {
@@ -10,6 +12,8 @@ CustomCam.Config.Controls = {
     lookBackControlId = 79, -- INPUT_VEH_LOOK_BEHIND
 }
 
+-- convar candidates: cc_virtual_mirror_enabled, cc_virtual_mirror_width, cc_virtual_mirror_height
+-- Mirror is a per-frame render cost; admins may want to disable it globally or let players size it to their resolution
 CustomCam.Config.VirtualMirror = {
     enabled = true,
     centerXNormalized = 0.5,
@@ -19,6 +23,7 @@ CustomCam.Config.VirtualMirror = {
 }
 
 -- Smooth follow camera tuning.
+-- convar candidate: cc_followcam_spawn_distance — closer spawn suits tight city driving; farther suits open highway/track sessions
 CustomCam.Config.FollowCam = {
     initialSpawnDistanceMeters = 3.5,
     trailingDistanceByViewModeMeters = {

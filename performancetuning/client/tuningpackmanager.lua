@@ -209,6 +209,44 @@ local function getBrakeUpgradeProgress(selectedPackId)
     return selectedLevel, totalUpgrades
 end
 
+local function getBaseHandbrakePackId()
+    local internals = PerformanceTuning._internals or {}
+    local handbrakePacks = internals.HANDBRAKE_PACKS or {}
+    local firstPack = handbrakePacks[1]
+    local firstPackId = type(firstPack) == 'table' and firstPack.id or nil
+    if type(firstPackId) == 'string' and firstPackId ~= '' then
+        return firstPackId
+    end
+    return 'stock'
+end
+
+local function isBaseHandbrakePackId(packId)
+    return tostring(packId or '') == tostring(getBaseHandbrakePackId())
+end
+
+local function getHandbrakeUpgradeProgress(selectedPackId)
+    local packs = PerformanceTuning._internals.HANDBRAKE_PACKS or {}
+    local selectedId = tostring(selectedPackId or '')
+    local totalUpgrades = 0
+    local selectedLevel = 0
+
+    for index, pack in ipairs(packs) do
+        local isEligible = type(pack) == 'table' and pack.enabled ~= false
+        if isEligible then
+            if index > 1 then
+                totalUpgrades = totalUpgrades + 1
+                if pack.id == selectedId then
+                    selectedLevel = totalUpgrades
+                end
+            elseif pack.id == selectedId then
+                selectedLevel = 0
+            end
+        end
+    end
+
+    return selectedLevel, totalUpgrades
+end
+
 function TuningPackManager.normalizeEnginePackId(packId)
     local normalized = tostring(packId or getBaseEnginePackId())
     local basePackId = getBaseEnginePackId()
@@ -436,6 +474,14 @@ function TuningPackManager.getBrakePackLabel(packId)
     return getPackLabel(PerformanceTuning._internals.BRAKE_PACKS, packId, 'Stock')
 end
 
+function TuningPackManager.buildHandbrakePackOptions(selectedPackId)
+    return buildPackOptions(PerformanceTuning._internals.HANDBRAKE_PACKS, selectedPackId)
+end
+
+function TuningPackManager.getHandbrakePackLabel(packId)
+    return getPackLabel(PerformanceTuning._internals.HANDBRAKE_PACKS, packId, 'Stock')
+end
+
 function TuningPackManager.buildNitrousPackOptions(selectedPackId)
     return buildPackOptions(PerformanceTuning._internals.NITROUS_PACKS, selectedPackId)
 end
@@ -530,6 +576,18 @@ function TuningPackManager.getContextDetails(bucket, context)
             currentStep = bucket.brakePack,
             optionType = 'pack',
             options = TuningPackManager.buildBrakePackOptions(bucket.brakePack),
+        }
+    end
+
+    if context == 'handbrakes' then
+        return {
+            key = 'handbrakes',
+            title = 'HANDBRAKES',
+            fieldName = tostring(internals.HANDBRAKE_FORCE_FIELD or 'fHandBrakeForce'),
+            currentValue = TuningPackManager.getHandbrakePackLabel(bucket.handbrakePack),
+            currentStep = bucket.handbrakePack,
+            optionType = 'pack',
+            options = TuningPackManager.buildHandbrakePackOptions(bucket.handbrakePack),
         }
     end
 
@@ -934,6 +992,22 @@ end
 
 function TuningPackManager.applySuspensionBiasFrontTweak(vehicle, value, options)
     return applySimpleFloatTweak(vehicle, PerformanceTuning._internals.SUSPENSION_BIAS_FRONT_FIELD, value, PerformanceTuning._internals.clampSuspensionBiasFrontValue, 'suspensionBiasFront', 'Suspension', options)
+end
+
+function TuningPackManager.applyCgOffsetTweak(vehicle, delta, options)
+    options = options or {}
+    local bucket = PerformanceTuning.VehicleManager.ensureTuningState(vehicle)
+    local base = bucket.baseCgOffset or { x = 0.0, y = 0.0, z = 0.0 }
+    local resolvedDelta = PerformanceTuning._internals.clampCgOffsetValue(delta)
+    SetCgoffset(vehicle, base.x, base.y + resolvedDelta, base.z)  -- 0xD8FA3908D7B86904 SET_CGOFFSET
+    bucket.cgOffsetTweak = resolvedDelta
+    if not options.skipRefresh then
+        PerformanceTuning._internals.refreshVehicleAfterHandlingChange(vehicle)
+    end
+    if not options.skipSync then
+        PerformanceTuning.VehicleManager.syncVehicleTuneState(vehicle)
+    end
+    return true, resolvedDelta
 end
 
 function TuningPackManager.applySuspensionRaiseTweak(vehicle, value, options)
@@ -1544,6 +1618,74 @@ function TuningPackManager.applyBrakePack(vehicle, packId, options)
     return true, selectedPack.label
 end
 
+function TuningPackManager.applyHandbrakePack(vehicle, packId, options)
+    options = options or {}
+    local internals = PerformanceTuning._internals
+    local readHandlingValue = PerformanceTuning.HandlingManager.readHandlingValue
+    local writeHandlingValue = PerformanceTuning.HandlingManager.writeHandlingValue
+    local rememberOriginalValue = PerformanceTuning.HandlingManager.rememberOriginalValue
+    local formatHandlingValue = PerformanceTuning.HandlingManager.formatHandlingValue
+    local refreshVehicleAfterHandlingChange = internals.refreshVehicleAfterHandlingChange
+    local vehicleManager = PerformanceTuning.VehicleManager
+    local bucket = vehicleManager.ensureTuningState(vehicle)
+    local selectedPack
+
+    if type(internals.HANDBRAKE_FORCE_FIELD) ~= 'string' or internals.HANDBRAKE_FORCE_FIELD == '' then
+        return false, 'Handbrake field is not configured.'
+    end
+
+    local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
+    local configuredBars = runtimeConfig.performanceModel or runtimeConfig.performanceBars or {}
+    local configuredHandbrakeBar = configuredBars.handbrake or {}
+    local fallbackBrakeBar = configuredBars.brake or {}
+    local configuredHandbrakeTarget = tonumber(configuredHandbrakeBar.target)
+        or tonumber(fallbackBrakeBar.target)
+        or 0.60
+
+    for _, pack in ipairs(internals.HANDBRAKE_PACKS or {}) do
+        if pack.id == packId then
+            selectedPack = pack
+            break
+        end
+    end
+
+    if not selectedPack then
+        return false, 'Unknown handbrake pack.'
+    end
+
+    if selectedPack.enabled == false then
+        return false, ('Handbrake pack "%s" is not available yet.'):format(selectedPack.label)
+    end
+
+    local currentValue = readHandlingValue(vehicle, 'float', internals.HANDBRAKE_FORCE_FIELD)
+    local baseHandbrakeForce = tonumber(bucket.baseBrakes[internals.HANDBRAKE_FORCE_FIELD]) or tonumber(currentValue) or 0.0
+    local value = baseHandbrakeForce
+    local selectedPackIsBase = isBaseHandbrakePackId(selectedPack.id)
+
+    if not selectedPackIsBase then
+        local upgradeIndex, upgradeCount = getHandbrakeUpgradeProgress(selectedPack.id)
+
+        if upgradeIndex > 0 and upgradeCount > 0 then
+            local progress = upgradeIndex / upgradeCount
+            local targetHandbrakeForce = baseHandbrakeForce + math.max(0.0, configuredHandbrakeTarget)
+            value = baseHandbrakeForce + ((targetHandbrakeForce - baseHandbrakeForce) * progress)
+        end
+    end
+
+    rememberOriginalValue(vehicle, internals.HANDBRAKE_FORCE_FIELD, 'float')
+    writeHandlingValue(vehicle, 'float', internals.HANDBRAKE_FORCE_FIELD, value)
+    if not options.skipLog then
+        internals.logInfo(('Handbrakes %s: %s -> %s (pack: %s)'):format(internals.HANDBRAKE_FORCE_FIELD, formatHandlingValue(currentValue, 'float'), formatHandlingValue(value, 'float'), selectedPack.label))
+    end
+
+    bucket.handbrakePack = selectedPack.id
+    if not options.skipRefresh then
+        refreshVehicleAfterHandlingChange(vehicle)
+    end
+    vehicleManager.syncVehicleHandlingState(vehicle)
+    return true, selectedPack.label
+end
+
 function TuningPackManager.applyNitrousPack(vehicle, packId, options)
     options = options or {}
     local internals = PerformanceTuning._internals
@@ -1624,6 +1766,7 @@ function TuningPackManager.applySynchronizedTuneState(vehicle, state, options)
         bucket.tireCompoundPack = TuningPackManager.resolveTireCompoundPackId(bucket.tireCompoundCategory, bucket.tireCompoundQuality)
     end
     bucket.brakePack = state.brakePack or getBaseBrakePackId()
+    bucket.handbrakePack = state.handbrakePack or getBaseHandbrakePackId()
     bucket.nitrousLevel = state.nitrousLevel or 'stock'
     bucket.steeringLockMode = TuningPackManager.normalizeSteeringLockMode(state.steeringLockMode)
     bucket.revLimiterEnabled = state.revLimiterEnabled == true
@@ -1635,6 +1778,7 @@ function TuningPackManager.applySynchronizedTuneState(vehicle, state, options)
     bucket.antirollBiasFront = internals.clampAntirollBiasFrontValue(state.antirollBiasFront or bucket.baseAntiroll[internals.ANTIROLL_BIAS_FRONT_FIELD] or 0.5)
     bucket.suspensionRaise = internals.clampSuspensionRaiseValue(state.suspensionRaise or bucket.baseSuspension.fSuspensionRaise or 0.0)
     bucket.suspensionBiasFront = internals.clampSuspensionBiasFrontValue(state.suspensionBiasFront or bucket.baseSuspension[internals.SUSPENSION_BIAS_FRONT_FIELD] or 0.5)
+    bucket.cgOffsetTweak = internals.clampCgOffsetValue(state.cgOffsetTweak or 0.0)
 
     local sharedOptions = {
         skipRefresh = true,
@@ -1647,6 +1791,7 @@ function TuningPackManager.applySynchronizedTuneState(vehicle, state, options)
     if not select(1, TuningPackManager.applySuspensionPack(vehicle, bucket.suspensionPack, sharedOptions)) then return false end
     if not select(1, TuningPackManager.applyTireCompoundPack(vehicle, bucket.tireCompoundPack, sharedOptions)) then return false end
     if not select(1, TuningPackManager.applyBrakePack(vehicle, bucket.brakePack, sharedOptions)) then return false end
+    if not select(1, TuningPackManager.applyHandbrakePack(vehicle, bucket.handbrakePack, sharedOptions)) then return false end
     if not select(1, TuningPackManager.applyNitrousPack(vehicle, bucket.nitrousLevel or 'stock', sharedOptions)) then return false end
     if not select(1, TuningPackManager.applySteeringLockModeTweak(vehicle, bucket.steeringLockMode or 'stock', sharedOptions)) then return false end
     if not select(1, TuningPackManager.applyNitroShotStrengthTweak(vehicle, bucket.nitrousShotStrength or 1.0, sharedOptions)) then return false end
@@ -1656,6 +1801,7 @@ function TuningPackManager.applySynchronizedTuneState(vehicle, state, options)
     if not select(1, TuningPackManager.applyAntirollBiasFrontTweak(vehicle, bucket.antirollBiasFront, sharedOptions)) then return false end
     if not select(1, TuningPackManager.applySuspensionRaiseTweak(vehicle, bucket.suspensionRaise, sharedOptions)) then return false end
     if not select(1, TuningPackManager.applySuspensionBiasFrontTweak(vehicle, bucket.suspensionBiasFront, sharedOptions)) then return false end
+    TuningPackManager.applyCgOffsetTweak(vehicle, bucket.cgOffsetTweak or 0.0, sharedOptions)
 
     internals.refreshVehicleAfterHandlingChange(vehicle)
     PerformanceTuning.VehicleManager.setLastAppliedTuneState(vehicle, PerformanceTuning.VehicleManager.serializeTuneState(bucket))
@@ -1670,6 +1816,7 @@ function TuningPackManager.applyTunePackForContext(vehicle, context, packId)
     if context == 'tireCompoundCategory' then return TuningPackManager.applyTireCompoundCategory(vehicle, packId or 'stock') end
     if context == 'tireCompoundQuality' then return TuningPackManager.applyTireCompoundQuality(vehicle, packId or 'mid_end') end
     if context == 'brakes' then return TuningPackManager.applyBrakePack(vehicle, packId or getBaseBrakePackId()) end
+    if context == 'handbrakes' then return TuningPackManager.applyHandbrakePack(vehicle, packId or getBaseHandbrakePackId()) end
     if context == 'nitrous' or context == 'nitro' then return TuningPackManager.applyNitrousPack(vehicle, packId or 'stock') end
     return false, 'Unsupported tuning context.'
 end

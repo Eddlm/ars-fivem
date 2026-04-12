@@ -5,8 +5,11 @@ TrafficControl.Config = {
         requestPrefix = 'server:',
         commandName = 'trafficserver',
     },
+    -- convar candidate: tc_default_mode — lets admins set the baseline profile (none/low/normal/high/full) via server.cfg without editing Lua
     defaultMode = 'normal',
     profiles = {
+        -- convar candidates: tc_normal_vehicle_density, tc_normal_ped_density
+        -- Servers with different performance budgets may want a lower "normal" ceiling without redefining the full profile
         normal = {
             vehicleDensity = 1.0,
             randomVehicleDensity = 1.0,
@@ -78,6 +81,7 @@ TrafficControl.Config = {
             blockPopulationPeds = false,
         },
     },
+    -- convar candidate: tc_race_traffic_density — racingsystem uses the 'low' legacy density during races; admins may want 0.0 for clean competitive sessions
     legacyModeDensity = {
         normal = 1.0,
         none = 0.0,

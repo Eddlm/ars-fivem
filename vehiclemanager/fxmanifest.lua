@@ -1,14 +1,10 @@
 fx_version 'cerulean'
 game 'gta5'
--- Startup order hint:
--- ensure ScaleformUI_Assets
--- ensure ScaleformUI_Lua
--- ensure vehiclemanager
 
 name 'vehiclemanager'
 author 'eddlm'
 description 'Standalone vehicle manager menu built on ScaleformUI_Lua with PerformanceTuning integration.'
-version '0.0.2'
+version '0.0.0'
 
 lua54 'yes'
 

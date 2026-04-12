@@ -36,7 +36,6 @@ jobs:
                 --exclude='**/AGENTS.md' \
                 --exclude='Docs/' \
                 --exclude='calltrees/' \
-                --exclude='Inactive/' \
                 --exclude='tools/' \
                 --exclude='race_index.json' \
                 --exclude='savedvehicles/*.json' \

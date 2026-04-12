@@ -112,7 +112,7 @@ local function normalizeTuningSelections(source)
     normalized.antirollBiasFront = roundToThreeDecimals(normalized.antirollBiasFront, 0.5) or 0.5
     normalized.suspensionRaise = roundToThreeDecimals(normalized.suspensionRaise, 0.0) or 0.0
     normalized.suspensionBiasFront = roundToThreeDecimals(normalized.suspensionBiasFront, 0.5) or 0.5
-
+    normalized.cgOffsetTweak = roundToThreeDecimals(normalized.cgOffsetTweak, 0.0) or 0.0
     return normalized
 end
 

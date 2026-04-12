@@ -10,6 +10,7 @@ local INTERNAL_SLIDER_RANGES = {
      gripBiasFront = { min = 0.4, max = 0.6, step = 0.005 },
     antirollBiasFront = { min = 0.0, max = 1.0, step = 0.025 },
     suspensionBiasFront = { min = 0.3, max = 0.7, step = 0.01 },
+    cgOffset = { min = -0.20, max = 0.20, step = 0.05 },
 }
 local INTERNAL_PERFORMANCE_BAR_FILL_TARGETS = {
     power = 0.60,
@@ -51,6 +52,9 @@ local INTERNAL_PERFORMANCE_BARS = {
         },
     },
     brake = {
+        target = 0.60,
+    },
+    handbrake = {
         target = 0.60,
     },
 }
@@ -138,6 +142,7 @@ local function getConfiguredPerformanceBars()
     local configuredGripQuality = configuredGrip.qualityLadder or {}
     local configuredGripCompound = configuredGrip.compoundRoadOffset or {}
     local configuredBrake = configuredBars.brake or {}
+    local configuredHandbrake = configuredBars.handbrake or {}
 
     local bars = {
         displayMode = tostring(configuredBars.displayMode or INTERNAL_PERFORMANCE_BARS.displayMode):lower(),
@@ -176,6 +181,10 @@ local function getConfiguredPerformanceBars()
             target = tonumber(configuredBrake.target)
                 or INTERNAL_PERFORMANCE_BARS.brake.target,
         },
+        handbrake = {
+            target = tonumber(configuredHandbrake.target)
+                or INTERNAL_PERFORMANCE_BARS.handbrake.target,
+        },
     }
 
     if bars.power.target <= 0.0 then
@@ -192,6 +201,9 @@ local function getConfiguredPerformanceBars()
     end
     if bars.brake.target < 0.0 then
         bars.brake.target = INTERNAL_PERFORMANCE_BARS.brake.target
+    end
+    if bars.handbrake.target < 0.0 then
+        bars.handbrake.target = INTERNAL_PERFORMANCE_BARS.handbrake.target
     end
     if bars.power.transmission.powerBonusPerUpgrade < 0.0 then
         bars.power.transmission.powerBonusPerUpgrade = INTERNAL_PERFORMANCE_BARS.power.transmission.powerBonusPerUpgrade
@@ -233,6 +245,7 @@ runtimeConfig.sliderRanges.gripBiasFront = getConfiguredSliderRange('gripBiasFro
 runtimeConfig.sliderRanges.antirollBiasFront = getConfiguredSliderRange('antirollBiasFront')
 runtimeConfig.sliderRanges.suspensionRaise = getConfiguredSliderRange('suspensionRaise')
 runtimeConfig.sliderRanges.suspensionBiasFront = getConfiguredSliderRange('suspensionBiasFront')
+runtimeConfig.sliderRanges.cgOffset = getConfiguredSliderRange('cgOffset')
 runtimeConfig.nitrous.baseDurationMs = getConfiguredNitrousValue('baseDurationMs')
 runtimeConfig.nitrous.nativePowerMultiplier = getConfiguredNitrousValue('nativePowerMultiplier')
 runtimeConfig.performancePiDistribution = getConfiguredPiDistribution()

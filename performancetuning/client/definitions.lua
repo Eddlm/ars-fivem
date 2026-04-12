@@ -39,6 +39,7 @@ PerformanceTuning.Definitions.handlingFields = {
     brakes = {
         force = 'fBrakeForce',
         biasFront = 'fBrakeBiasFront',
+        handbrakeForce = 'fHandBrakeForce',
     },
     antiroll = {
         force = 'fAntiRollBarForce',
@@ -71,6 +72,7 @@ PerformanceTuning.Definitions.suspensionFields = PerformanceTuning.Definitions.h
 PerformanceTuning.Definitions.brakeFields = {
     PerformanceTuning.Definitions.handlingFields.brakes.force,
     PerformanceTuning.Definitions.handlingFields.brakes.biasFront,
+    PerformanceTuning.Definitions.handlingFields.brakes.handbrakeForce,
 }
 PerformanceTuning.Definitions.antirollFields = {
     PerformanceTuning.Definitions.handlingFields.antiroll.force,

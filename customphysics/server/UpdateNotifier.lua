@@ -16,9 +16,6 @@ local function getCheckerConfig()
     }
 end
 
-local function shouldLogUpdateCheck()
-    return Config.verbose == true
-end
 
 local function buildHttpHeaders(config)
     local headers = {
@@ -155,12 +152,10 @@ local function performUpdateCheck()
         return false
     end
 
-    if shouldLogUpdateCheck() then
-        print(('Update check local=%s remote=%s'):format(localVersion, remoteVersion))
-    end
-
     if isRemoteVersionNewer(localVersion, remoteVersion) then
-        print(('Update available %s -> %s | Git pull or download manually https://github.com/Eddlm/ars-fivem'):format(localVersion, remoteVersion))
+        print(('Checking for updates.... %s > %s available on https://github.com/Eddlm/ars-fivem/releases'):format(localVersion, remoteVersion))
+    elseif GetConvar('ars_skip_uptodate_print', '0') ~= '1' then
+        print(('Checking for updates.... Up to date (%s)'):format(localVersion))
     end
 
     return true
@@ -173,14 +168,18 @@ RegisterCommand('cphysicsupdatecheck', function(source)
     end
 end, false)
 
-AddEventHandler('onResourceStart', function(resourceName)
-    if resourceName ~= RESOURCE_NAME then
-        return
-    end
+local checkDeadline = nil
 
-    CreateThread(function()
-        local delayMs = math.random(3 * 60 * 1000, 6 * 60 * 1000)
-        Wait(delayMs)
-        performUpdateCheck()
-    end)
+AddEventHandler('onResourceStart', function()
+    checkDeadline = GetGameTimer() + math.random(20 * 1000, 40 * 1000)
+end)
+
+CreateThread(function()
+    while true do
+        if checkDeadline and GetGameTimer() >= checkDeadline then
+            checkDeadline = nil
+            performUpdateCheck()
+        end
+        Wait(1000)
+    end
 end)

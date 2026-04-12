@@ -17,7 +17,6 @@
 ## Module Layout
 | File | Role |
 | --- | --- |
-| `shared/Config.lua` | Shared tunable values used by client, menu, and server code. |
 | `shared/shared.lua` | Shared state enum, trimming, and name-normalization helpers. |
 | `client/client.lua` | `RacingSystemUtil` helper registrations, snapshot consumption, editor session handling, race runtime, checkpoints, teleport helpers, and cleanup. |
 | `client/menu.lua` | ScaleformUI menu definitions, keybind entry points, and editor menu interaction. |
@@ -40,23 +39,3 @@
 5. `server/UpdateNotifier.lua` runs an on-start update check worker and also exposes `/rsupdatecheck` for manual checks.
 6. `server/integrity.lua` is only loaded when the server-side integrity gate decides to run it, and it performs its own delayed sweep once loaded.
 
-## Configuration Variables
-| Path | Default | What it controls |
-| --- | --- | --- |
-| `checkpointDrawDistanceMeters` | `250.0` | Distance at which checkpoints/markers are drawn. |
-| `markerTypeId` | `1` | Default GTA marker type for route checkpoints. |
-| `visualCheckpointRadiusScale` | `2.0` | Visual scaling for rendered checkpoint radius. |
-| `checkpointRadiusMinMeters` | `2.0` | Minimum checkpoint width/radius allowed in editor/runtime. |
-| `checkpointRadiusMaxMeters` | `40.0` | Maximum checkpoint width/radius allowed in editor/runtime. |
-| `minLapCount` | `1` | Minimum laps host can set. |
-| `maxLapCount` | `10` | Maximum laps host can set. |
-| `playerCanInvokeMultipleRaces` | `false` | Allows one player to host multiple active instances. |
-| `raceOwnerCanKillOwnedRace` | `false` | Allows owner to kill own race instance without admin privileges. |
-| `countdownMs` | `5000` | Countdown duration before race start. |
-| `debugLogging` | `true` | Enables server/client debug logging pathways. |
-| `adminAce` | `"racingsystem.admin"` | ACE permission required for admin actions. |
-| `lateJoinProgressLimitPercent` | `50` | Default late-join cutoff for race progress. |
-| `advanced.client.*` | see file | Client runtime tuning for checkpoint logic, markers, cones, and visuals. |
-| `advanced.server.*` | see file | Server timing/scaling/retry and extra print tuning. |
-| `advanced.menu.*` | see file | Menu title/layout/option tuning. |
-| `updateCheck.*` | see file | GitHub update check behavior and timeout settings. |

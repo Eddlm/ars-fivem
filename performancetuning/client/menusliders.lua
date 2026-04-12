@@ -177,6 +177,24 @@ function MenuSliders.getSuspensionBiasFrontLabel(value)
     return ('%.3f'):format(MenuSliders.clampSuspensionBiasFrontValue(value))
 end
 
+function MenuSliders.clampCgOffsetValue(value)
+    local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
+    return MenuSliders.clampSliderRangeValue(value, (runtimeConfig.sliderRanges or {}).cgOffset, 0.0)
+end
+
+function MenuSliders.getCgOffsetSliderIndex(value)
+    local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
+    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).cgOffset, MenuSliders.getUISliderValues('cgOffset'), 0.0)
+end
+
+function MenuSliders.getCgOffsetLabel(value)
+    local clamped = MenuSliders.clampCgOffsetValue(value)
+    if clamped > 0.0001 then
+        return ('+%.2f'):format(clamped)
+    end
+    return ('%.2f'):format(clamped)
+end
+
 function MenuSliders.clampNitroShotStrength(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
     return MenuSliders.clampSliderRangeValue(value, (runtimeConfig.sliderRanges or {}).nitrousShotStrength, 1.0)

@@ -1,13 +1,9 @@
 fx_version 'cerulean'
 game 'gta5'
--- Startup order hint:
--- ensure ScaleformUI_Assets
--- ensure ScaleformUI_Lua
--- ensure racingsystem
 
 author 'Eddlm'
 description 'Client-server Lua system for a racing system resource'
-version '0.0.8'
+version '0.0.0'
 
 lua54 'yes'
 

@@ -472,6 +472,7 @@ local function applyNativeMenuSelection(context, index)
         tireCompoundCategory = bucket.tireCompoundCategory,
         tireCompoundQuality = bucket.tireCompoundQuality,
         brakes = bucket.brakePack,
+        handbrakes = bucket.handbrakePack,
         nitrous = bucket.nitrousLevel,
         nitro = bucket.nitrousLevel,
     }

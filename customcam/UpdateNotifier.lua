@@ -18,10 +18,6 @@ local function getCheckerConfig()
     }
 end
 
--- Determines if update check logging should be enabled based on debug convar
-local function shouldLogUpdateCheck()
-    return Config.verbose == true
-end
 
 -- Builds HTTP headers for GitHub API requests, including auth if token is present
 local function buildHttpHeaders(config)
@@ -166,12 +162,10 @@ local function performUpdateCheck()
         return false
     end
 
-    if shouldLogUpdateCheck() then
-        print(('Update check local=%s remote=%s'):format(localVersion, remoteVersion))
-    end
-
     if isRemoteVersionNewer(localVersion, remoteVersion) then
-        print(('Update available %s -> %s | Git pull or download manually https://github.com/Eddlm/ars-fivem'):format(localVersion, remoteVersion))
+        print(('Checking for updates.... %s > %s available on https://github.com/Eddlm/ars-fivem/releases'):format(localVersion, remoteVersion))
+    elseif GetConvar('ars_skip_uptodate_print', '0') ~= '1' then
+        print(('Checking for updates.... Up to date (%s)'):format(localVersion))
     end
 
     return true
@@ -185,15 +179,20 @@ RegisterCommand('ccamupdatecheck', function(source)
     end
 end, false)
 
--- Automatically performs an update check after a random delay when the resource starts
-AddEventHandler('onResourceStart', function(resourceName)
-    if resourceName ~= RESOURCE_NAME then
-        return
-    end
+local checkDeadline = nil
 
-    CreateThread(function()
-        local delayMs = math.random(1 * 60 * 1000, 3 * 60 * 1000)
-        Wait(delayMs)
-        performUpdateCheck()
-    end)
+-- Resets the update check countdown whenever any resource starts, so the check
+-- fires 20-40s after the last resource finishes loading rather than immediately.
+AddEventHandler('onResourceStart', function()
+    checkDeadline = GetGameTimer() + math.random(20 * 1000, 40 * 1000)
+end)
+
+CreateThread(function()
+    while true do
+        if checkDeadline and GetGameTimer() >= checkDeadline then
+            checkDeadline = nil
+            performUpdateCheck()
+        end
+        Wait(1000)
+    end
 end)

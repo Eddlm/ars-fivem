@@ -1,18 +1,24 @@
 RacingSystem = RacingSystem or {}
 
 RacingSystem.Config = {
+    -- convar candidate: rs_checkpoint_draw_distance — lower on low-end servers to reduce draw calls; raise for long straights
     checkpointDrawDistanceMeters = 250.0,
     markerTypeId = 1,
     visualCheckpointRadiusScale = 2.0,
     checkpointRadiusMinMeters = 2.0,
     checkpointRadiusMaxMeters = 40.0,
     minLapCount = 1,
+    -- convar candidate: rs_max_lap_count — lets admins cap race length server-wide without a file edit
     maxLapCount = 10,
+    -- convar candidate: rs_player_multiple_races — useful for event servers where multiple concurrent races are desired
     playerCanInvokeMultipleRaces = false,
+    -- convar candidate: rs_owner_can_kill_race — toggle per-server without touching the file; often needed in moderated event sessions
     raceOwnerCanKillOwnedRace = false,
+    -- convar candidate: rs_countdown_seconds — event organizers often want a shorter or longer countdown depending on session type
     countdownMs = 5000,
     debugLogging = true,
     adminAce = "racingsystem.admin",
+    -- convar candidate: rs_late_join_limit_percent — allows real-time tuning of how open races stay to new joiners during a session
     lateJoinProgressLimitPercent = 50,
 
     advanced = {

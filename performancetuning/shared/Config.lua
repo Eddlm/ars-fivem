@@ -7,6 +7,7 @@ Config.sliderRanges = {
     suspensionRaise = { min = -0.300, max = 0.300, step = 0.010 },
 }
 
+-- convar candidate: pt_nitrous_base_duration_ms — event admins may want to tune burst length for balance without a file redeploy
 Config.nitrous = {
     baseDurationMs = 4000,
     nativePowerMultiplier = 0.5,
@@ -23,6 +24,8 @@ Config.performancePiDistribution = {
 
 -- Bars consider these stats as the maximum and they are filled at these points.
 -- Adjust for your overall car stats on your server, so they make sense.
+-- convar candidates: pt_bar_target_top_speed_mph, pt_bar_target_grip_g
+-- Different servers run different car sets; adjusting these makes the bars visually meaningful for the actual fleet
 Config.performanceBarFillTargets = {
     power = 1.0, --Gs
     topSpeedMph = 250.0, --MPH
@@ -62,8 +65,13 @@ Config.performanceModel = {
     brake = {
         target = 0.25,
     },
+    handbrake = {
+        target = 1.0,
+    },
 }
 
+-- convar candidates: pt_nearby_panels_enabled, pt_nearby_panels_distance, pt_nearby_panels_max
+-- Panels are a significant per-frame draw cost; admins on busy servers may want to disable or limit them at runtime
 Config.performanceNearbyPanels = {
     enabled = true,
     maxDistanceMeters = 30.0,
@@ -71,28 +79,28 @@ Config.performanceNearbyPanels = {
 }
 
 
--- These are flavor. Last upgrade is always the target mentioned above, but you can have more granular steps by adding more upgrades here
+
 Config.packDefinitions = {
     suspension = {
         { id = 'stock', label = 'Stock', enabled = true, description = 'Keeps the vehicle on its original suspension setup.' },
-        { id = 'sport', label = 'Medium', enabled = true, description = 'Brings softer cars up to a medium suspension force and rebound baseline.', minimums = { fSuspensionForce = 3.0, fSuspensionReboundDamp = 2.5 } },
-        { id = 'race', label = 'Hard', enabled = true, description = 'Brings the suspension up to a firmer track-focused force and rebound baseline.', minimums = { fSuspensionForce = 4.0, fSuspensionReboundDamp = 3.5 } },
-        { id = 'rally', label = 'Soft', enabled = true, description = 'Uses a softer off-road-biased damping setup for extra compliance.', values = { fSuspensionForce = 2.0, fSuspensionCompDamp = 3.0 } },
+        { id = 'sport', label = 'Medium', enabled = true, description = 'All-rounder, decent stiffness without grip spikes or heavy bodyroll.', values = { fSuspensionForce = 3.0, fSuspensionReboundDamp = 2.0 } },
+        { id = 'race', label = 'Hard', enabled = true, description = 'Les weight transfer, higher grip on compression, but very on-off behavior.', values = { fSuspensionForce = 4.0, fSuspensionReboundDamp = 2.0 } },
+        { id = 'rally', label = 'Soft', enabled = true, description = 'Softer overall experience, more lean, slower. No grip spikes.', values = { fSuspensionForce = 2.0, fSuspensionCompDamp = 3.0 } },
     },
         transmission = {
             { id = 'stock', label = 'Stock', enabled = true, description = 'Keeps the original gearing and shift behavior.' },
-            { id = 'tuned', label = 'Fluid Change', enabled = true, description = 'Slightly improves shift speed without changing gearing.', gearCountOffset = 0, clutchRateOffset = 2.0 },
-            { id = 'street', label = 'Clutch Disc Swap', enabled = true, description = 'Noticeably sharpens shifts for street driving.', gearCountOffset = 0, clutchRateOffset = 4.0 },
+            { id = 'tuned', label = 'Fluid Change', enabled = true, description = 'A lttle maintenance improves shit times and power delivery to something decent.', gearCountOffset = 0, clutchRateOffset = 2.0 },
+            { id = 'street', label = 'Clutch Disc Swap', enabled = true, description = 'Noticeably sharpens shifts, less hang time means more time on power.', gearCountOffset = 0, clutchRateOffset = 4.0 },
             { id = 'pro', label = 'Pressure Plate Swap', enabled = true, description = 'Further increases clutch response and shift speed.', gearCountOffset = 0, clutchRateOffset = 6.0 },
-            { id = 'race', label = 'Gearbox Swap', enabled = true, description = 'Adds a gear and delivers aggressive shift response.', gearCountOffset = 1, clutchRateOffset = 8.0 },
-            { id = 'race_gearbox', label = 'Race Gearbox', enabled = true, description = 'Maximum gearing and the quickest shift response in this set.', gearCountOffset = 2, clutchRateOffset = 10.0 },
+            { id = 'race', label = 'Gearbox Swap', enabled = true, description = 'Now this is podracing.', gearCountOffset = 1, clutchRateOffset = 8.0 },
+            { id = 'race_gearbox', label = 'Race Gearbox', enabled = true, description = 'Maximum gearing and the quickest shift response in this set.', gearCountOffset = 3, clutchRateOffset = 10.0 },
         },
     engine = {
-        { id = 'stock', label = 'Stock', enabled = true, description = 'Keeps the original engine power and top speed balance.' },
-        { id = 'stage_1', label = 'Stage 1', enabled = true, description = 'Small power increase for a mild street upgrade.' },
-        { id = 'stage_2', label = 'Stage 2', enabled = true, description = 'Moderate increase in acceleration and top-end potential.' },
-        { id = 'stage_3', label = 'Stage 3', enabled = true, description = 'Strong engine tune with a clear step up in output.' },
-        { id = 'hsw_special', label = 'HSW Special', enabled = true, description = 'Highest non-swap power step in the standard upgrade path.' },
+        { id = 'stock', label = 'Stock', enabled = true, description = 'No changes.' },
+        { id = 'stage_1', label = 'Stage 1', enabled = true, description = 'A few tweaks here and there end in a small, but noticeable power and top speed rise.' },
+        { id = 'stage_2', label = 'Stage 2', enabled = true, description = 'Proper upgrades to the power and top end.' },
+        { id = 'stage_3', label = 'Stage 3', enabled = true, description = 'Strongest you can go without going to Hao\'s.' },
+        { id = 'hsw_special', label = 'HSW Special', enabled = true, description = 'Absolute best this engine can do with upgrades.' },
     },
     tires = {
         { id = 'stock', label = 'Stock', enabled = true, description = 'Keeps the original compound and grip envelope.' },
@@ -103,6 +111,13 @@ Config.packDefinitions = {
         { id = 'race_soft', label = 'Race Soft', enabled = true, description = 'Maximum grip target in the tire set for the strongest road hold.', gripBarProgressRatio = 1.0, compoundLossMultiplier = 0.8, tractionLossMultiplier = 2.20 },
     },
     brakes = {
+        { id = 'stock', label = 'Stock', enabled = true, description = 'Keep this one close to Grip levels.' },
+        { id = 'level_1', label = 'Level 1', enabled = true, description = 'Keep this one close to Grip levels.' },
+        { id = 'level_2', label = 'Level 2', enabled = true, description = 'Keep this one close to Grip levels.' },
+        { id = 'level_3', label = 'Level 3', enabled = true, description = 'Keep this one close to Grip levels.' },
+        { id = 'level_4', label = 'Level 4', enabled = true, description = 'Keep this one close to Grip levels.' },
+    },
+    handbrakes = {
         { id = 'stock', label = 'Stock', enabled = true, description = 'Keep this one close to Grip levels.' },
         { id = 'level_1', label = 'Level 1', enabled = true, description = 'Keep this one close to Grip levels.' },
         { id = 'level_2', label = 'Level 2', enabled = true, description = 'Keep this one close to Grip levels.' },

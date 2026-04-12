@@ -48,16 +48,7 @@ end
 local function isHandbrakeHeld()
     return IsControlPressed(0, 76) or IsDisabledControlPressed(0, 76) or IsControlPressed(2, 76) or IsDisabledControlPressed(2, 76)
 end
-
--- Returns whether the current vehicle is allowed to use the custom wheelie system.
-local function isWheelieVehicleAllowed(vehicle)
-    if CustomPhysics.Config.wheeliesMuscleOnly ~= true then
-        return true
-    end
-
-    return GetVehicleClass(vehicle) == 4
-end
-
+ 
 -- Native wheelie suppression
 
 -- Applies native wheelie suppression during launch conditions when configured.
@@ -175,13 +166,14 @@ function CustomPhysicsWheelies.update(vehicle)
     local brakeActive = isBrakeHeld()
     local handbrakeActive = isHandbrakeHeld()
 
-    if CustomPhysics.Config.customWheelieEnabled == false then
+    -- Wheelies off, early exit
+    if not GetConvarBool('cp_wheelies_enabled', true) then
         storeWheelieInputs(accelerationActive, brakeActive, handbrakeActive)
         resetWheelieState()
         return
     end
 
-    if not isWheelieVehicleAllowed(vehicle) then
+    if GetConvarBool('cp_wheelies_muscle_only', true) and not GetVehicleClass(vehicle) == 4 then
         storeWheelieInputs(accelerationActive, brakeActive, handbrakeActive)
         resetWheelieState()
         return
@@ -237,7 +229,7 @@ function CustomPhysicsWheelies.update(vehicle)
     local wheelPower = getClampedDrivenWheelPower(wheelSnapshot)
     local wheelPowerNorm = CustomPhysicsUtil.clamp(wheelPower / 0.9, 0.0, 1.0)
     local driveBiasFront = GetVehicleHandlingFloat(vehicle, 'CHandlingData', 'fDriveBiasFront')
-    local rearBiasMultiplier = CustomPhysicsUtil.clamp(1.0 - driveBiasFront, 0.0, 1.0)
+    local rearBiasMultiplier = CustomPhysicsUtil.mapValue(driveBiasFront, 0.2, 0.0,0.0,1.0,true)
     local targetPitchDeg = wheelPowerNorm * 40.0
     local proportionalGain = 0.5
     local forceRampRate = 1.0
@@ -254,11 +246,6 @@ function CustomPhysicsWheelies.update(vehicle)
     end
 
     local wheelForce = wheelieForce * rearBiasMultiplier * frameTime
-    local rearForce = wheelForce * 0.5
-
-    -- Old wheelie force experiment kept here for later comparison.
-    -- ApplyForceToEntity(vehicle, 1, 0.0, 0.0, wheelForce, 0.0, frontOffset, 0.0, 0, true, true, true, false, true)
-    -- ApplyForceToEntity(vehicle, 1, 0.0, 0.0, -rearForce, 0.0, -frontOffset, 0.0, 0, true, true, true, false, true)
 
     ApplyForceToEntity(vehicle, 1, 0.0, -wheelForce, 0.0, 0.0, 0.0, frontOffset, 0, true, true, true, false, true)
     ApplyForceToEntity(vehicle, 1, 0.0, 0.0, wheelForce, 0.0, frontOffset, 0.0, 0, true, true, true, false, true)

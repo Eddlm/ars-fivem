@@ -7,7 +7,6 @@ Live vehicle tuning, PI panels, nitrous, surface grip, and state synchronization
 - Requires `ScaleformUI_Lua`.
 
 ## Module Layout
-- `shared/Config.lua` defines the user-facing config surface.
 - `client/definitions.lua` defines handling fields, pack metadata, and state bag keys.
 - `client/configruntime.lua` normalizes config into runtime-ready values.
 - `client/runtimebindings.lua` wires shared state and internals together.
@@ -37,21 +36,3 @@ Live vehicle tuning, PI panels, nitrous, surface grip, and state synchronization
 4. Use `/ptlaptimes` to inspect or clear the stored stable-lap PI records.
 5. Use `/ptupdatecheck` if you want to run the update check manually.
 
-## Configuration Variables
-| Path | Default | What it controls |
-| --- | --- | --- |
-| `sliderRanges.nitrousShotStrength` | `min=1.0 max=2.0 step=0.2` | Range for the nitrous shot strength slider. |
-| `sliderRanges.suspensionRaise` | `min=-0.300 max=0.300 step=0.010` | Range for the suspension raise slider. |
-| `nitrous.baseDurationMs` | `4000` | Base nitrous duration before strength scaling. |
-| `nitrous.nativePowerMultiplier` | `0.5` | Baseline nitrous power multiplier. |
-| `performancePiDistribution.*` | see file | Weights used to convert measured stats into PI. |
-| `performanceBarFillTargets.*` | see file | Reference values used to scale the performance bars. |
-| `performanceModel.*` | see file | Upgrade model behavior for power, top speed, grip, and brake. |
-| `performanceNearbyPanels.enabled` | `true` | Enables nearby vehicle PI panels. |
-| `performanceNearbyPanels.maxDistanceMeters` | `30.0` | Max distance for nearby panel rendering. |
-| `performanceNearbyPanels.maxPanels` | `6` | Maximum nearby panels drawn. |
-| `packDefinitions.*` | see file | Available upgrade packs and their settings. |
-| `engineSwaps.*` | see file | Engine swap presets and target models. |
-| `advanced.panel.*` | see file | UI panel sizing, placement, and scaling constants. |
-| `advanced.tuning.transmissionPowerBonusPerUpgrade` | `0.01` | Transmission power bonus scalar per upgrade step. |
-| `updateCheck.*` | see file | GitHub update check behavior, repo/path, token, and timeout settings. |

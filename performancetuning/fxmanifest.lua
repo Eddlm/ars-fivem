@@ -1,14 +1,9 @@
--- Resource manifest for the performancetuning client/server module set.
 fx_version 'cerulean'
 game 'gta5'
--- Startup order hint:
--- ensure ScaleformUI_Assets
--- ensure ScaleformUI_Lua
--- ensure performancetuning
 
 author 'Eddlm'
 description 'Live vehicle handling read/write helpers for player vehicles'
-version '0.0.2'
+version '0.0.0'
 
 dependency 'ScaleformUI_Assets'
 dependency 'ScaleformUI_Lua'

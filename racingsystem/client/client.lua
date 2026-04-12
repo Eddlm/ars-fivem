@@ -3879,6 +3879,7 @@ CreateThread(function()
                                     checkpointPassIsValid = false
                                     passContextPayload.kind = 'invalid_outside_too_far'
                                     passContextPayload.penalty = 'invalid_no_pass'
+                                -- convar candidate: rs_penalty_teleport_threshold — admins may want a more or less forgiving cut-corner threshold per server
                                 elseif outsideOffset > 10.0 then
                                     applyTeleportPenalty = true
                                     passContextPayload.kind = 'penalty_teleport'
@@ -3886,6 +3887,7 @@ CreateThread(function()
                                 elseif outsideOffset >= 1.5 then
                                     local throttleMinMeters = 1.5
                                     local throttleMaxMeters = 10.0
+                                    -- convar candidate: rs_penalty_throttle_max_ms — casual servers may prefer a softer 2000ms cap; competitive ones can leave it at 5000
                                     local throttleMinMs = 1000.0
                                     local throttleMaxMs = 5000.0
                                     local normalized = math.max(0.0, math.min(1.0, (outsideOffset - throttleMinMeters) / (throttleMaxMeters - throttleMinMeters)))

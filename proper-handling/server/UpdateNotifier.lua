@@ -1,5 +1,5 @@
 local RESOURCE_NAME = GetCurrentResourceName()
-local Config = (((PerformanceTuning or {}).Config) or {}).updateCheck or {}
+local Config = {}
 
 local function trim(value)
     local text = tostring(value or '')
@@ -10,7 +10,7 @@ local function getCheckerConfig()
     return {
         repo = tostring(Config.repo or 'Eddlm/ars-fivem'),
         branch = tostring(Config.branch or 'main'),
-        path = tostring(Config.path or 'performancetuning'),
+        path = tostring(Config.path or 'proper-handling'),
         token = trim(Config.token or ''),
         timeoutMs = math.max(1000, math.floor(tonumber(Config.timeoutMs) or 12000)),
     }
@@ -19,7 +19,7 @@ end
 
 local function buildHttpHeaders(config)
     local headers = {
-        ['User-Agent'] = 'performancetuning-update-notifier',
+        ['User-Agent'] = 'proper-handling-update-notifier',
         ['Accept'] = 'application/vnd.github+json',
     }
     if config.token ~= '' then
@@ -161,7 +161,7 @@ local function performUpdateCheck()
     return true
 end
 
-RegisterCommand('ptupdatecheck', function(source)
+RegisterCommand('phupdatecheck', function(source)
     local numericSource = tonumber(source) or 0
     if numericSource == 0 then
         performUpdateCheck()

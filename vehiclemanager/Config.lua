@@ -2,9 +2,11 @@ VehicleManager = VehicleManager or {}
 VehicleManager.Config = {
     menu = {
         keybindCommand = "+vehiclemanager_menu",
+        -- convar candidate: vm_default_key — allows server owners to set the default binding via cfg to avoid conflicts with other resources
         defaultKey = "F6",
     },
     save = {
+        -- convar candidate: vm_owner_id_prefix — servers that use a non-license primary identity (e.g. discord) can set the preferred prefix without a file edit
         ownerIdentifierPrefixes = { "license:", "license2:", "fivem:", "steam:", "discord:" },
     },
     appearance = {
@@ -90,6 +92,7 @@ VehicleManager.Config = {
             { key = "antirollBiasFront", default = 0.5, parse = function(value) return tonumber(value) or 0.5 end },
             { key = "suspensionRaise", default = 0.0, parse = function(value) return tonumber(value) or 0.0 end },
             { key = "suspensionBiasFront", default = 0.5, parse = function(value) return tonumber(value) or 0.5 end },
+            { key = "cgOffsetTweak", default = 0.0, parse = function(value) return tonumber(value) or 0.0 end },
         }
     },
     ui = {

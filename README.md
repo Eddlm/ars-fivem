@@ -61,9 +61,6 @@ Remember you do not need to install all, they don't require each other. You can 
 ### Focus on improvements and not new features.
 
 
-# Updating and Configs
-I'm still trying to figure out how to let you guys update without overriding your personal config files with the release files.
-
 # Credits / Attributions / References
 
 | Author | Content | Link |
