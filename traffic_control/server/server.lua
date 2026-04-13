@@ -42,28 +42,28 @@ local function emitDensityRequest(target, density, reason, requestKey, sourceLab
     return true
 end
 
-local function buildServerRequestKey(requestName)
-    return SERVER_REQUEST_PREFIX .. tostring(requestName or 'script')
+local function buildServerRequestKey(requestKey)
+    return SERVER_REQUEST_PREFIX .. tostring(requestKey or 'script')
 end
 
-local function buildClientRequestKey(playerSource, requestName)
-    return CLIENT_REQUEST_PREFIX .. tostring(playerSource) .. ':' .. tostring(requestName or 'script')
+local function buildClientRequestKey(playerSource, requestKey)
+    return CLIENT_REQUEST_PREFIX .. tostring(playerSource) .. ':' .. tostring(requestKey or 'script')
 end
 
-RegisterNetEvent(REQUEST_EVENT, function(density, reason, requestName)
+RegisterNetEvent(REQUEST_EVENT, function(density, reason, requestKey)
     local playerSource = tonumber(source) or 0
     if playerSource > 0 then
-        local requestKey = buildClientRequestKey(playerSource, requestName)
+        local scopedRequestKey = buildClientRequestKey(playerSource, requestKey)
         emitDensityRequest(
             playerSource,
             density,
             reason or 'client_event_request',
-            requestKey,
+            scopedRequestKey,
             REQUEST_EVENT .. ' client:' .. tostring(playerSource)
         )
         return
     end
 
-    local requestKey = buildServerRequestKey(requestName)
-    emitDensityRequest(-1, density, reason or 'server_event_request', requestKey, REQUEST_EVENT .. ' server')
+    local scopedRequestKey = buildServerRequestKey(requestKey)
+    emitDensityRequest(-1, density, reason or 'server_event_request', scopedRequestKey, REQUEST_EVENT .. ' server')
 end)

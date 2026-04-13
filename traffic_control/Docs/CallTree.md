@@ -33,7 +33,7 @@ fxmanifest.lua
 │
 ├─ client/traffic_task.lua
 │   ├─ RegisterNetEvent('traffic_control:setMode')
-│   │   └─ parseSetModeEventArgs(...) -> applyTrafficRequest(...)
+│   │   └─ applyTrafficRequest(...)
 │   │       └─ rebuildState() [lowest request or numeric default or idle]
 │   └─ CreateThread: per-frame density natives (only when effective density is numeric)
 │

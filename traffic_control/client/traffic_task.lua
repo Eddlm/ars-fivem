@@ -84,8 +84,8 @@ local function rebuildState()
     state.reason = 'idle_no_valid_default_or_requests'
 end
 
-local function applyTrafficRequest(density, reason, explicitRequestKey, fallbackRequestKey)
-    local requestKey = resolveRequestKey(explicitRequestKey, fallbackRequestKey)
+local function applyTrafficRequest(density, reason, requestKey)
+    requestKey = resolveRequestKey(requestKey, nil)
     local didApply = setRequestValue(requestKey, density, reason)
     if not didApply then
         return false
@@ -95,18 +95,8 @@ local function applyTrafficRequest(density, reason, explicitRequestKey, fallback
     return true
 end
 
-local function parseSetModeEventArgs(value, arg2, arg3)
-    if arg3 ~= nil then
-        return value, arg2, arg3
-    end
-
-    return value, nil, arg2
-end
-
-RegisterNetEvent('traffic_control:setMode', function(value, arg2, arg3)
-    local density, reason, requestKey = parseSetModeEventArgs(value, arg2, arg3)
-    local fallbackKey = GetInvokingResource() or GetCurrentResourceName()
-    applyTrafficRequest(density, reason, requestKey, fallbackKey)
+RegisterNetEvent('traffic_control:setMode', function(density, reason, requestKey)
+    applyTrafficRequest(density, reason, requestKey)
 end)
 
 CreateThread(function()
