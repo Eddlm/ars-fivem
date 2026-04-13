@@ -18,6 +18,29 @@ local function logMenuVerbose(message)
     local _ = message
 end
 
+local function setItemDescriptionRaw(item, text)
+    if item == nil then
+        return
+    end
+    item._Description = tostring(text or '')
+end
+
+local function syncMenuCurrentDescription(menu)
+    if not menu or type(menu.Visible) ~= 'function' or not menu:Visible() then
+        return
+    end
+
+    local currentItem = type(menu.CurrentItem) == 'function' and menu:CurrentItem() or nil
+    if currentItem == nil or type(currentItem.Description) ~= 'function' then
+        return
+    end
+
+    AddTextEntry("UIMenu_Current_Description", tostring(currentItem:Description() or ''))
+    if type(menu.UpdateDescription) == 'function' then
+        menu:UpdateDescription()
+    end
+end
+
 -- ─── Menu state (read by client.lua) ────────────────────────────────────────
 
 raceMenuInitialized    = false
@@ -605,13 +628,15 @@ deleteRaceMenuItem.Activated = function(menu)
         })
         deleteConfirmRaceName = nil
         deleteRaceMenuItem:Label('Delete Selected Race')
-        deleteRaceMenuItem:Description('Delete this race definition from disk.')
+        setItemDescriptionRaw(deleteRaceMenuItem, 'Delete this race definition from disk.')
+        syncMenuCurrentDescription(raceEditorMenu)
     else
         -- FIRST CLICK - Arm for deletion
         logMenuVerbose(('Armed delete confirmation for: %s'):format(raceName))
         deleteConfirmRaceName = RacingSystem.NormalizeRaceName(raceName)
         deleteRaceMenuItem:Label('Delete Selected Race (Confirm)')
-        deleteRaceMenuItem:Description(('Press again to permanently delete "%s".'):format(raceName))
+        setItemDescriptionRaw(deleteRaceMenuItem, ('Press again to permanently delete "%s".'):format(raceName))
+        syncMenuCurrentDescription(raceEditorMenu)
     end
 end
 raceEditorMenu:AddItem(deleteRaceMenuItem)
@@ -821,7 +846,8 @@ function beginEditorSessionUI()
     -- Clear any pending delete confirmation
     deleteConfirmRaceName = nil
     deleteRaceMenuItem:Label('Delete Selected Race')
-    deleteRaceMenuItem:Description('Delete this race definition from disk.')
+    setItemDescriptionRaw(deleteRaceMenuItem, 'Delete this race definition from disk.')
+    syncMenuCurrentDescription(raceEditorMenu)
 
     logMenuVerbose('beginEditorSessionUI: editor controls now enabled')
 end
@@ -843,7 +869,8 @@ function endEditorSessionUI()
     -- Clear any pending delete confirmation
     deleteConfirmRaceName = nil
     deleteRaceMenuItem:Label('Delete Selected Race')
-    deleteRaceMenuItem:Description('Delete this race definition from disk.')
+    setItemDescriptionRaw(deleteRaceMenuItem, 'Delete this race definition from disk.')
+    syncMenuCurrentDescription(raceEditorMenu)
 
     -- Return to neutral editor menu state
     if raceEditorMenu:Visible() then

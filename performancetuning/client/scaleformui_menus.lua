@@ -14,8 +14,8 @@ local MENU_DESCRIPTIONS = {
     piPanelDisplayMode = DEFAULT_MENU_DESCRIPTION,
     engine = 'Engine power and top speed.',
     transmission = DEFAULT_MENU_DESCRIPTION,
-    tireCompoundCategory = 'Tire compound family.',
-    tireCompoundQuality = 'Tire quality tier.',
+    tireCompoundCategory = 'pending',
+    tireCompoundQuality = 'Higher quality does not let you escape from the downsides.',
     nitrous = DEFAULT_MENU_DESCRIPTION,
     antirollBars = 'Roll stiffness.',
     nitrousShotStrength = 'Higher throughput at the cost of on-time.',
@@ -26,22 +26,6 @@ local MENU_DESCRIPTIONS = {
     suspensionBiasFront = 'Front-to-rear suspension balance.',
     steeringLockMode = "Alters the underlying logic so your steering is more or less aggressive.",
     cgOffset = 'Vertical center of gravity offset relative to stock.',
-}
-local LIST_OPTION_DESCRIPTIONS = {
-    tireCompoundCategory = {
-        [1] = 'Factory. Quality has no effect.',
-        [2] = "Tarmac focused, don't go off the road.",
-        [3] = 'Compromise between tarmac grip and offroad grip loss.',
-        [4] = 'Least griploss offroad, not much grip on tarmac.',
-    },
-}
-local LIST_OPTION_DESCRIPTIONS_BY_ID = {
-    tireCompoundCategory = {
-        stock = 'Factory. Quality has no effect.',
-        road = "Tarmac focused, don't go off the road.",
-        rally = 'Compromise between tarmac grip and offroad grip loss.',
-        offroad = 'Least griploss offroad, not much grip on tarmac.',
-    },
 }
 
 local function getNearestSuspensionProfileIndex(profile, value)
@@ -102,43 +86,6 @@ local function getScaleformUIState()
     return scaleformUI.state
 end
 
-local function getListOptionDescription(listKey, option, currentValue)
-    local label = type(option) == 'table' and option.label or nil
-    local description = type(option) == 'table' and option.description or nil
-    local fallbackDescriptions = LIST_OPTION_DESCRIPTIONS[listKey]
-    local fallbackDescriptionsById = LIST_OPTION_DESCRIPTIONS_BY_ID[listKey]
-    local unavailableSuffix = type(option) == 'table' and option.enabled == false and ' Unavailable on this vehicle.' or ''
-
-    if type(label) ~= 'string' or label == '' then
-        return tostring(currentValue or '')
-    end
-    if (type(description) ~= 'string' or description == '') and type(fallbackDescriptionsById) == 'table' then
-        local optionId = tostring(type(option) == 'table' and option.id or ''):lower()
-        local fallbackDescription = fallbackDescriptionsById[optionId]
-        if type(fallbackDescription) == 'string' and fallbackDescription ~= '' then
-            description = fallbackDescription
-        end
-    end
-
-    if (type(description) ~= 'string' or description == '') and type(fallbackDescriptions) == 'table' then
-        local optionIndex = type(option) == 'table' and tonumber(option.index) or nil
-        local fallbackDescription = optionIndex and fallbackDescriptions[optionIndex] or nil
-        if type(fallbackDescription) == 'string' and fallbackDescription ~= '' then
-            description = fallbackDescription
-        end
-    end
-    if type(description) ~= 'string' or description == '' then
-        description = getMenuDescription(listKey)
-    end
-    return ('%s%s'):format(description or '', unavailableSuffix)
-end
-
-local function getIndexedListOption(listKey, index)
-    local state = getScaleformUIState()
-    local options = (state.options or {})[listKey]
-    return type(options) == 'table' and options[index] or nil
-end
-
 local function getMainMenuItemByContext(state, context)
     return ({
         engine = state.items.engine,
@@ -152,14 +99,47 @@ local function getMainMenuItemByContext(state, context)
     })[context]
 end
 
-local function setListItemDescription(listItem, listKey, option, currentValue)
-    if listItem and type(listItem.Description) == 'function' then
-        listItem:Description(getListOptionDescription(listKey, option, currentValue))
+local function setItemDescriptionRaw(item, text)
+    if item == nil then
+        return
+    end
+    item._Description = tostring(text or '')
+end
+
+local function syncMenuCurrentDescription(menu)
+    if not menu or type(menu.Visible) ~= 'function' or not menu:Visible() then
+        return
+    end
+
+    local currentItem = type(menu.CurrentItem) == 'function' and menu:CurrentItem() or nil
+    if currentItem == nil or type(currentItem.Description) ~= 'function' then
+        return
+    end
+
+    AddTextEntry("UIMenu_Current_Description", tostring(currentItem:Description() or ''))
+    if type(menu.UpdateDescription) == 'function' then
+        menu:UpdateDescription()
     end
 end
 
-local function shouldUseDynamicListDescription(context)
-    return context == 'tireCompoundCategory' or context == 'tireCompoundQuality'
+local function syncCurrentlyVisibleMenuDescription()
+    local state = getScaleformUIState()
+    local menus = {
+        (state.menus or {}).main,
+        (state.menus or {}).power,
+        (state.menus or {}).tires,
+        (state.menus or {}).brakes,
+        (state.menus or {}).suspension,
+        (state.menus or {}).antiRoll,
+        (state.menus or {}).nitro,
+    }
+
+    for _, menu in ipairs(menus) do
+        if menu and type(menu.Visible) == 'function' and menu:Visible() then
+            syncMenuCurrentDescription(menu)
+            return
+        end
+    end
 end
 
 local function applyDefaultListItemDescriptions()
@@ -178,8 +158,8 @@ local function applyDefaultListItemDescriptions()
     }
 
     for _, listItem in ipairs(listItems) do
-        if listItem.item and type(listItem.item.Description) == 'function' then
-            listItem.item:Description(getMenuDescription(listItem.key))
+        if listItem.item then
+            setItemDescriptionRaw(listItem.item, getMenuDescription(listItem.key))
         end
     end
 end
@@ -201,6 +181,47 @@ local function setListItemOptions(listItem, options, currentStep)
     listItem:Index(selectedIndex)
 end
 
+local COMPOUND_DESCRIPTIONS_BY_ID = {
+    stock = 'As it comes.',
+    road = 'Comes with a hefty off road penalty.',
+    rally = 'Decent balance if you cant anticipate your main surface.',
+    offroad = 'Lower overall grip, but on-off road differences are negligible.',
+}
+local QUALITY_DESCRIPTIONS_BY_ID = {
+    low_end = 'Lowest quality: least grip and easiest breakaway.',
+    mid_end = 'Mid quality: better grip, but still clear trade-offs.',
+    high_end = 'High quality: strong grip with improved consistency.',
+    top_end = 'Top quality: best grip and most stable behavior.',
+}
+
+local function getCompoundDescriptionFromSelection(index)
+    local state = getScaleformUIState()
+    local compoundItem = state.items.tireCompoundCategory
+    if compoundItem == nil then
+        return 'pending'
+    end
+
+    local activeIndex = math.max(1, math.floor(tonumber(index) or (type(compoundItem.Index) == 'function' and compoundItem:Index()) or 1))
+    local options = (state.options or {}).tireCompoundCategory
+    local selectedOption = type(options) == 'table' and options[activeIndex] or nil
+    local optionId = tostring(type(selectedOption) == 'table' and selectedOption.id or ''):lower()
+    return COMPOUND_DESCRIPTIONS_BY_ID[optionId] or 'pending'
+end
+
+local function getQualityDescriptionFromSelection(index)
+    local state = getScaleformUIState()
+    local qualityItem = state.items.tireCompoundQuality
+    if qualityItem == nil then
+        return 'pending'
+    end
+
+    local activeIndex = math.max(1, math.floor(tonumber(index) or (type(qualityItem.Index) == 'function' and qualityItem:Index()) or 1))
+    local options = (state.options or {}).tireCompoundQuality
+    local selectedOption = type(options) == 'table' and options[activeIndex] or nil
+    local optionId = tostring(type(selectedOption) == 'table' and selectedOption.id or ''):lower()
+    return QUALITY_DESCRIPTIONS_BY_ID[optionId] or 'pending'
+end
+
 local function setTireCompoundQualityAvailability(bucket)
     local state = getScaleformUIState()
     local qualityItem = state.items.tireCompoundQuality
@@ -212,9 +233,6 @@ local function setTireCompoundQualityAvailability(bucket)
     local qualityEnabled = category ~= 'stock'
     if type(qualityItem.Enabled) == 'function' then
         qualityItem:Enabled(qualityEnabled)
-    end
-    if not qualityEnabled and type(qualityItem.Description) == 'function' then
-        qualityItem:Description('Disabled while Compound is Stock.')
     end
 end
 
@@ -247,8 +265,8 @@ local function setMenuItemsEnabled(enabled, disabledDescription)
             if type(item.Enabled) == 'function' then
                 item:Enabled(resolvedEnabled)
             end
-            if not resolvedEnabled and type(item.Description) == 'function' then
-                item:Description(disabledText)
+            if not resolvedEnabled then
+                setItemDescriptionRaw(item, disabledText)
             end
         end
     end
@@ -299,7 +317,7 @@ local function setAntirollSliderState(value)
         return
     end
     local resolvedValue = scaleformUI.clampAntirollForceValue(value)
-    item:Description(('Current: %s'):format(scaleformUI.getAntirollForceLabel(resolvedValue)))
+    setItemDescriptionRaw(item, ('Current: %s'):format(scaleformUI.getAntirollForceLabel(resolvedValue)))
     item:Index(scaleformUI.getAntirollSliderIndex(resolvedValue) - 1)
 end
 
@@ -310,7 +328,7 @@ local function setBrakeBiasSliderState(value)
         return
     end
      local resolvedValue = scaleformUI.clampBrakeBiasFrontValue(value)
-     item:Description(('Bias %.1f/%.1f'):format(resolvedValue * 100, (1.0 - resolvedValue) * 100))
+    setItemDescriptionRaw(item, ('Bias %.1f/%.1f'):format(resolvedValue * 100, (1.0 - resolvedValue) * 100))
     item:Index(scaleformUI.getBrakeBiasSliderIndex(resolvedValue) - 1)
 end
 
@@ -318,11 +336,49 @@ local function setGripBiasSliderState(value)
     local scaleformUI = PerformanceTuning.ScaleformUI
     local item = getScaleformUIState().items.gripBiasSlider
     if item == nil then
-        return
+        return nil
     end
      local resolvedValue = scaleformUI.clampGripBiasFrontValue(value)
-     item:Description(('Bias %.1f/%.1f'):format(resolvedValue * 100, (1.0 - resolvedValue) * 100))
+    local description = ('Bias %.1f/%.1f'):format(resolvedValue * 100, (1.0 - resolvedValue) * 100)
+    setItemDescriptionRaw(item, description)
     item:Index(scaleformUI.getGripBiasSliderIndex(resolvedValue) - 1)
+    return description
+end
+
+local function syncTiresCurrentItemDescription()
+    local state = getScaleformUIState()
+    local tiresMenu = (state.menus or {}).tires
+    syncMenuCurrentDescription(tiresMenu)
+end
+
+local function sweepTiresSubmenuDescriptions(gripBiasValue)
+    local scaleformUI = PerformanceTuning.ScaleformUI
+    local state = getScaleformUIState()
+    -- Force a deterministic last-to-first rewrite for Tires submenu descriptions.
+
+    local resolvedGripBiasValue = tonumber(gripBiasValue)
+    if resolvedGripBiasValue == nil then
+        local gripItem = state.items.gripBiasSlider
+        if gripItem and type(gripItem.Index) == 'function' then
+            resolvedGripBiasValue = scaleformUI.getSliderValueForIndex((gripItem:Index() or 0) + 1, scaleformUI.sliderRanges.gripBiasFront)
+        end
+    end
+    local gripItem = state.items.gripBiasSlider
+    if gripItem and resolvedGripBiasValue ~= nil then
+        setGripBiasSliderState(resolvedGripBiasValue)
+    end
+
+    local qualityItem = state.items.tireCompoundQuality
+    if qualityItem then
+        setItemDescriptionRaw(qualityItem, getQualityDescriptionFromSelection(qualityItem:Index()))
+    end
+
+    local compoundItem = state.items.tireCompoundCategory
+    if compoundItem then
+        setItemDescriptionRaw(compoundItem, getCompoundDescriptionFromSelection(compoundItem:Index()))
+    end
+
+    syncTiresCurrentItemDescription()
 end
 
 local function setAntirollBiasSliderState(value)
@@ -332,7 +388,7 @@ local function setAntirollBiasSliderState(value)
         return
     end
      local resolvedValue = scaleformUI.clampAntirollBiasFrontValue(value)
-     item:Description(('Bias %.1f/%.1f'):format(resolvedValue * 100, (1.0 - resolvedValue) * 100))
+    setItemDescriptionRaw(item, ('Bias %.1f/%.1f'):format(resolvedValue * 100, (1.0 - resolvedValue) * 100))
     item:Index(scaleformUI.getAntirollBiasSliderIndex(resolvedValue) - 1)
 end
 
@@ -351,7 +407,7 @@ local function setSuspensionRaiseSliderState(value)
     local displayedUpperLimit = tonumber(liveUpperLimit) or baseUpperLimit
     local profile = state.dynamicSliderProfiles.suspensionRaise or {}
     local resolvedValue = tonumber(value) or 0.0
-    item:Description(('Upper: %.4f | Raise: %.4f | Gap: %.4f'):format(displayedUpperLimit, resolvedValue, displayedUpperLimit - resolvedValue))
+    setItemDescriptionRaw(item, ('Upper: %.4f | Raise: %.4f | Gap: %.4f'):format(displayedUpperLimit, resolvedValue, displayedUpperLimit - resolvedValue))
     item:Index(getNearestSuspensionProfileIndex(profile, resolvedValue) - 1)
 end
 
@@ -362,7 +418,7 @@ local function setSuspensionBiasSliderState(value)
         return
     end
      local resolvedValue = scaleformUI.clampSuspensionBiasFrontValue(value)
-     item:Description(('Bias %.1f/%.1f'):format(resolvedValue * 100, (1.0 - resolvedValue) * 100))
+    setItemDescriptionRaw(item, ('Bias %.1f/%.1f'):format(resolvedValue * 100, (1.0 - resolvedValue) * 100))
     item:Index(scaleformUI.getSuspensionBiasSliderIndex(resolvedValue) - 1)
 end
 
@@ -373,7 +429,7 @@ local function setCgOffsetSliderState(value)
         return
     end
     local resolvedValue = scaleformUI.clampCgOffsetValue(value)
-    item:Description(('Current: %s'):format(scaleformUI.getCgOffsetLabel(resolvedValue)))
+    setItemDescriptionRaw(item, ('Current: %s'):format(scaleformUI.getCgOffsetLabel(resolvedValue)))
     item:Index(scaleformUI.getCgOffsetSliderIndex(resolvedValue) - 1)
 end
 
@@ -432,16 +488,6 @@ local function handleSteeringLockModeSelection(index)
     scaleformUI.refreshMenu()
 end
 
-local function previewMainMenuSelection(context, index)
-    local scaleformUI = PerformanceTuning.ScaleformUI
-    local state = getScaleformUIState()
-    local item = getMainMenuItemByContext(state, context)
-    if item and shouldUseDynamicListDescription(context) then
-        local listState = scaleformUI.buildListState(context) or {}
-        setListItemDescription(item, context, getIndexedListOption(context, index), (listState.context or {}).currentValue)
-    end
-end
-
 local function updateMainMenuListContext(context)
     local scaleformUI = PerformanceTuning.ScaleformUI
     local state = getScaleformUIState()
@@ -449,21 +495,16 @@ local function updateMainMenuListContext(context)
     if not listState then
         return
     end
-    local currentValue = ((listState or {}).context or {}).currentValue
     local currentStep = ((listState or {}).context or {}).currentStep
     local options = ((listState or {}).context or {}).options or {}
     state.options[context] = options
     local item = getMainMenuItemByContext(state, context)
     if item then
         setListItemOptions(item, options, currentStep)
-        if shouldUseDynamicListDescription(context) then
-            setListItemDescription(item, context, getIndexedListOption(context, item:Index()), currentValue)
-        end
     end
 end
 
 local function handleMainMenuSelection(context, index)
-    previewMainMenuSelection(context, index)
     PerformanceTuning.ScaleformUI.applyMenuSelection(context, index)
     updateMainMenuListContext(context)
     if context == 'tireCompoundCategory' then
@@ -474,10 +515,14 @@ local function handleMainMenuSelection(context, index)
             setTireCompoundQualityAvailability(scaleformUI.ensureTuningState(vehicle))
         end
     end
+    if context == 'tireCompoundCategory' or context == 'tireCompoundQuality' then
+        sweepTiresSubmenuDescriptions()
+    end
 end
 
 local function handleMainSliderChange(index)
     local scaleformUI = PerformanceTuning.ScaleformUI
+    local state = getScaleformUIState()
     local vehicle = scaleformUI.getCurrentVehicle()
     if not vehicle then
         return
@@ -485,6 +530,7 @@ local function handleMainSliderChange(index)
     local value = scaleformUI.getSliderValueForIndex(index + 1, scaleformUI.sliderRanges.antirollBars)
     setAntirollSliderState(value)
     scaleformUI.applyAntirollForceTweak(vehicle, value)
+    syncMenuCurrentDescription((state.menus or {}).antiRoll)
 end
 
 local function handleTweakSliderChange(item, index)
@@ -502,23 +548,27 @@ local function handleTweakSliderChange(item, index)
         local value = scaleformUI.getSliderValueForIndex(index + 1, scaleformUI.sliderRanges.brakeBiasFront)
         setBrakeBiasSliderState(value)
         scaleformUI.applyBrakeBiasFrontTweak(vehicle, value)
+        syncMenuCurrentDescription((state.menus or {}).brakes)
     elseif item == state.items.gripBiasSlider then
         local value = scaleformUI.getSliderValueForIndex(index + 1, scaleformUI.sliderRanges.gripBiasFront)
-        setGripBiasSliderState(value)
+        sweepTiresSubmenuDescriptions(value)
         scaleformUI.applyGripBiasFrontTweak(vehicle, value)
     elseif item == state.items.antirollBiasSlider then
         local value = scaleformUI.getSliderValueForIndex(index + 1, scaleformUI.sliderRanges.antirollBiasFront)
         setAntirollBiasSliderState(value)
         scaleformUI.applyAntirollBiasFrontTweak(vehicle, value)
+        syncMenuCurrentDescription((state.menus or {}).antiRoll)
     elseif item == state.items.suspensionRaiseSlider then
         local profile = state.dynamicSliderProfiles.suspensionRaise or {}
         local value = ((profile.raiseValues or {})[index + 1]) or 0.0
         setSuspensionRaiseSliderState(value)
         scaleformUI.applySuspensionRaiseTweak(vehicle, value)
+        syncMenuCurrentDescription((state.menus or {}).suspension)
     elseif item == state.items.suspensionBiasSlider then
         local value = scaleformUI.getSliderValueForIndex(index + 1, scaleformUI.sliderRanges.suspensionBiasFront)
         setSuspensionBiasSliderState(value)
         scaleformUI.applySuspensionBiasFrontTweak(vehicle, value)
+        syncMenuCurrentDescription((state.menus or {}).suspension)
     end
 end
 
@@ -648,19 +698,21 @@ function PerformanceTuning.ScaleformUI.refreshMenu()
         state.menus.main:Subtitle('~r~NO VALID CAR')
         setMenuItemsEnabled(false, vehicleError or 'Enter the driver seat to enable tuning controls.')
         restoreMenuSelection(state.menus.main, selectedMenuIndex)
+        syncCurrentlyVisibleMenuDescription()
         return true
     end
 
     setMenuItemsEnabled(true)
     applyDefaultListItemDescriptions()
-    if state.items.nitrousShotSlider and type(state.items.nitrousShotSlider.Description) == 'function' then
-        state.items.nitrousShotSlider:Description('Higher throughput at the cost of on-time')
+    if state.items.nitrousShotSlider then
+        setItemDescriptionRaw(state.items.nitrousShotSlider, 'Higher throughput at the cost of on-time')
     end
     local engineState, engineError = scaleformUI.buildListState('engine')
     if not engineState then
         state.menus.main:Subtitle('~r~NO VALID CAR')
         setMenuItemsEnabled(false, engineError or 'Enter the driver seat to enable tuning controls.')
         restoreMenuSelection(state.menus.main, selectedMenuIndex)
+        syncCurrentlyVisibleMenuDescription()
         return true
     end
 
@@ -704,8 +756,7 @@ function PerformanceTuning.ScaleformUI.refreshMenu()
     setListItemOptions(state.items.brakes, state.options.brakes, brakesState.context.currentStep)
     setListItemOptions(state.items.handbrakes, state.options.handbrakes, handbrakesState.context.currentStep)
     setListItemOptions(state.items.nitrous, state.options.nitrous, nitrousState.context.currentStep)
-    setListItemDescription(state.items.tireCompoundCategory, 'tireCompoundCategory', getIndexedListOption('tireCompoundCategory', state.items.tireCompoundCategory:Index()), tireCompoundCategoryState.context.currentValue)
-    setListItemDescription(state.items.tireCompoundQuality, 'tireCompoundQuality', getIndexedListOption('tireCompoundQuality', state.items.tireCompoundQuality:Index()), tireCompoundQualityState.context.currentValue)
+    sweepTiresSubmenuDescriptions(bucket.gripBiasFront or bucket.baseTires[scaleformUI.tireBiasFrontField] or 0.5)
     setTireCompoundQualityAvailability(bucket)
 
     if state.items.steeringLockMode then
@@ -716,7 +767,6 @@ function PerformanceTuning.ScaleformUI.refreshMenu()
     setAntirollSliderState(bucket.antirollForce)
     state.items.nitrousShotSlider:Index(scaleformUI.getNitroShotSliderIndex(bucket.nitrousShotStrength) - 1)
     setBrakeBiasSliderState(bucket.brakeBiasFront)
-    setGripBiasSliderState(bucket.gripBiasFront or bucket.baseTires[scaleformUI.tireBiasFrontField] or 0.5)
     setAntirollBiasSliderState(bucket.antirollBiasFront)
     local currentSuspensionRaise = PerformanceTuning.HandlingManager.readHandlingValue(engineState.vehicle, 'float', 'fSuspensionRaise')
     if currentSuspensionRaise == nil then
@@ -726,6 +776,7 @@ function PerformanceTuning.ScaleformUI.refreshMenu()
     setSuspensionBiasSliderState(bucket.suspensionBiasFront)
     setCgOffsetSliderState(bucket.cgOffsetTweak or 0.0)
     restoreMenuSelection(state.menus.main, selectedMenuIndex)
+    syncCurrentlyVisibleMenuDescription()
     return true
 end
 
@@ -782,13 +833,13 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     state.items.transmission = UIMenuListItem.New('Transmission', { 'Stock' }, 1, getMenuDescription('transmission'))
     state.items.suspension = UIMenuListItem.New('Suspension', { 'Stock' }, 1, getMenuDescription('suspension'))
     state.items.tireCompoundCategory = UIMenuListItem.New('Compound', { 'Stock', 'Road', 'Mixed', 'Offroad' }, 1, getMenuDescription('tireCompoundCategory'))
-    state.items.tireCompoundQuality = UIMenuListItem.New('Quality', { 'Low-End', 'Mid-End', 'High-End', 'Top-End' }, 2, getMenuDescription('tireCompoundQuality'))
+    state.items.tireCompoundQuality = UIMenuListItem.New('Quality', { 'Entry level', 'Mid-End', 'High-End', 'Top-End' }, 2, getMenuDescription('tireCompoundQuality'))
     state.items.brakes = UIMenuListItem.New('Brakes', { 'Stock' }, 1, getMenuDescription('brakes'))
     state.items.handbrakes = UIMenuListItem.New('Handbrakes', { 'Stock' }, 1, getMenuDescription('handbrakes'))
     state.items.nitrous = UIMenuListItem.New('Nitrous', { 'Stock' }, 1, getMenuDescription('nitrous'))
     state.items.antirollSlider = UIMenuSliderItem.New('Anti-Roll Bars', #state.sliderValues.antirollBars - 1, 1, scaleformUI.getAntirollSliderIndex(0.0) - 1, false)
     state.items.nitrousShotSlider = UIMenuSliderItem.New('Shot Strength', #state.sliderValues.nitrousShotStrength - 1, 1, scaleformUI.getNitroShotSliderIndex(1.0) - 1, false)
-    state.items.nitrousShotSlider:Description('Higher throughput at the cost of on-time')
+    setItemDescriptionRaw(state.items.nitrousShotSlider, 'Higher throughput at the cost of on-time')
     state.items.steeringLockMode = UIMenuListItem.New('Steering Balance', buildSteeringLockModeLabels(), 1, getMenuDescription('steeringLockMode'))
     state.items.brakeBiasSlider = UIMenuSliderItem.New('Brake Bias Front', #state.sliderValues.brakeBiasFront - 1, 1, scaleformUI.getBrakeBiasSliderIndex(0.5) - 1, false)
     state.items.gripBiasSlider = UIMenuSliderItem.New('Grip Bias Front', #state.sliderValues.gripBiasFront - 1, 1, scaleformUI.getGripBiasSliderIndex(0.5) - 1, false)
@@ -956,6 +1007,7 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
             local value = scaleformUI.getSliderValueForIndex(index + 1, scaleformUI.sliderRanges.cgOffset)
             setCgOffsetSliderState(value)
             scaleformUI.applyCgOffsetTweak(vehicle, value)
+            syncMenuCurrentDescription((state.menus or {}).suspension)
         end
     end
 

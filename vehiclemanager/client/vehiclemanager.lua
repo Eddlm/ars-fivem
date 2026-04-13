@@ -416,12 +416,31 @@ local function setItemsEnabled(items, enabled)
     end
 end
 
-local function clearItemDescription(item)
-    if item and type(item.Description) == "function" then
-        pcall(function()
-            item:Description("")
-        end)
+local function setItemDescriptionRaw(item, text)
+    if item == nil then
+        return
     end
+    item._Description = tostring(text or "")
+end
+
+local function syncMenuCurrentDescription(menu)
+    if not menu or type(menu.Visible) ~= "function" or not menu:Visible() then
+        return
+    end
+
+    local currentItem = type(menu.CurrentItem) == "function" and menu:CurrentItem() or nil
+    if currentItem == nil or type(currentItem.Description) ~= "function" then
+        return
+    end
+
+    AddTextEntry("UIMenu_Current_Description", tostring(currentItem:Description() or ""))
+    if type(menu.UpdateDescription) == "function" then
+        menu:UpdateDescription()
+    end
+end
+
+local function clearItemDescription(item)
+    setItemDescriptionRaw(item, "")
 end
 
 local function notify(message)
@@ -548,19 +567,21 @@ local function refreshPerformanceSettingsMenu()
 
     if not tuningAvailable then
         local description = "Start performancetuning to adjust these settings."
-        performancePiDisplayListItem:Description(description)
-        performanceRevLimiterListItem:Description(description)
+        setItemDescriptionRaw(performancePiDisplayListItem, description)
+        setItemDescriptionRaw(performanceRevLimiterListItem, description)
         performancePiDisplayListItem:Index(1)
         performanceRevLimiterListItem:Index(1)
+        syncMenuCurrentDescription(performanceSettingsMenu)
         return
     end
 
     if not hasVehicle then
         local description = TextConfig.noVehicleDescription or "Get into a vehicle to see options here."
-        performancePiDisplayListItem:Description(description)
-        performanceRevLimiterListItem:Description(description)
+        setItemDescriptionRaw(performancePiDisplayListItem, description)
+        setItemDescriptionRaw(performanceRevLimiterListItem, description)
         performancePiDisplayListItem:Index(1)
         performanceRevLimiterListItem:Index(1)
+        syncMenuCurrentDescription(performanceSettingsMenu)
         return
     end
 
@@ -572,9 +593,11 @@ local function refreshPerformanceSettingsMenu()
     if hasRevLimiterVehicle then
         clearItemDescription(performanceRevLimiterListItem)
     else
-        performanceRevLimiterListItem:Description(TextConfig.noVehicleDescription or "Get into a vehicle to see options here.")
+        setItemDescriptionRaw(performanceRevLimiterListItem, TextConfig.noVehicleDescription or "Get into a vehicle to see options here.")
         performanceRevLimiterListItem:Enabled(false)
     end
+
+    syncMenuCurrentDescription(performanceSettingsMenu)
 end
 
 local function rebuildPaintColorList(listItem, categoryIndex, target)
@@ -2361,6 +2384,7 @@ performanceSettingsMenu.OnListChange = function(_, item, index)
             scheduleVehicleTuningAutosave()
         end
     end
+    syncMenuCurrentDescription(performanceSettingsMenu)
 end
 
 performanceSettingsMenu.OnListSelect = function(_, item, index)
@@ -2371,6 +2395,7 @@ performanceSettingsMenu.OnListSelect = function(_, item, index)
             scheduleVehicleTuningAutosave()
         end
     end
+    syncMenuCurrentDescription(performanceSettingsMenu)
 end
 
 statsLocalMenu.OnListChange = function(_, item, index)

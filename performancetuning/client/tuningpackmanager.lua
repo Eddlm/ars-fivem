@@ -3,18 +3,17 @@ PerformanceTuning = PerformanceTuning or {}
 PerformanceTuning.TuningPackManager = PerformanceTuning.TuningPackManager or {}
 
 local TuningPackManager = PerformanceTuning.TuningPackManager
--- Canonical menu description source for Tire submenu dynamic descriptions.
 local TIRE_COMPOUND_CATEGORY_OPTIONS = {
-    { id = 'stock', label = 'Stock', description = 'Factory. Quality has no effect.' },
-    { id = 'road', label = 'Road', description = "Tarmac focused, don't go off the road." },
-    { id = 'rally', label = 'Mixed', description = 'Compromise between tarmac grip and offroad grip loss.' },
-    { id = 'offroad', label = 'Offroad', description = 'Least griploss offroad, not much grip on tarmac.' },
+    { id = 'stock', label = 'Stock' },
+    { id = 'road', label = 'Road' },
+    { id = 'rally', label = 'Mixed' },
+    { id = 'offroad', label = 'Offroad' },
 }
 local TIRE_COMPOUND_QUALITY_OPTIONS = {
-    { id = 'low_end', label = 'Low-End', description = 'Entry-level compound quality.' },
-    { id = 'mid_end', label = 'Mid-End', description = 'Balanced compound quality.' },
-    { id = 'high_end', label = 'High-End', description = 'Highest compound quality.' },
-    { id = 'top_end', label = 'Top-End', description = 'Ultimate compound quality.' },
+    { id = 'low_end', label = 'Low-End' },
+    { id = 'mid_end', label = 'Mid-End' },
+    { id = 'high_end', label = 'High-End' },
+    { id = 'top_end', label = 'Top-End' },
 }
 local TIRE_COMPOUND_TUNING_MATRIX = {
     -- Matrix is intentionally sparse so we can scale from 3x1 to 3x3 progressively.
