@@ -50,6 +50,14 @@ local Overspeed = {
 
 -- Alternative effect kept for later testing: 'ent_amb_smoke_general'
 
+-- Requests the ptfx asset on startup and retries every 500 ms until it is confirmed loaded.
+CreateThread(function()
+    while not HasNamedPtfxAssetLoaded(EngineSmoke.ptfxAsset) do
+        RequestNamedPtfxAsset(EngineSmoke.ptfxAsset)
+        Wait(500)
+    end
+end)
+
 local state = {
     offroadPowerMultiplier = 1.0,
     overspeedPowerMultiplier = 1.0,
@@ -199,10 +207,7 @@ local function ensureEngineSmokeEffect(vehicle)
     end
 
     if not HasNamedPtfxAssetLoaded(EngineSmoke.ptfxAsset) then
-        RequestNamedPtfxAsset(EngineSmoke.ptfxAsset)
-        if not HasNamedPtfxAssetLoaded(EngineSmoke.ptfxAsset) then
-            return
-        end
+        return
     end
 
     UseParticleFxAssetNextCall(EngineSmoke.ptfxAsset)
