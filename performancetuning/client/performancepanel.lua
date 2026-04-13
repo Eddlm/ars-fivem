@@ -12,22 +12,22 @@ local INTERNAL_PERFORMANCE_DEFAULTS = {
     brake = 2.50,
     flatVelToMphFactor = 145.0 / 176.0,
 }
-local SHARED_PANEL_HEIGHT_UNITS = tonumber(PanelConfig.sharedPanelHeightUnits) or 0.15
-local SHARED_PANEL_BASE_SCALE = tonumber(PanelConfig.sharedPanelBaseScale) or 0.95
-local SHARED_PANEL_MIN_SCALE = tonumber(PanelConfig.sharedPanelMinScale) or 0.72
-local SHARED_PANEL_ALPHA = math.floor(tonumber(PanelConfig.sharedPanelAlpha) or 168)
-local SHARED_PANEL_FILL_ALPHA = math.floor(tonumber(PanelConfig.sharedPanelFillAlpha) or 204)
-local SHARED_PANEL_HEADER_HEIGHT_RATIO = tonumber(PanelConfig.sharedPanelHeaderHeightRatio) or 0.15
-local SHARED_PANEL_TEXT_BASE_HEIGHT_UNITS = tonumber(PanelConfig.sharedPanelTextBaseHeightUnits) or 0.20
-local SHARED_PANEL_WIDTH_UNITS = tonumber(PanelConfig.sharedPanelWidthUnits) or 0.1875
-local DEFAULT_PANEL_HEIGHT_UNITS = tonumber(PanelConfig.defaultPanelHeightUnits) or 0.0874
-local PRIMARY_PANEL_LEFT_MARGIN = tonumber(PanelConfig.primaryPanelLeftMargin) or 0.014
-local MENU_PANEL_GAP_X = tonumber(PanelConfig.menuPanelGapX) or 0.018
-local STACKED_PANEL_GAP_Y = tonumber(PanelConfig.stackedPanelGapY) or 0.0032
-local DEFAULT_MENU_LEFT_PX = tonumber(PanelConfig.defaultMenuLeftPx) or 20.0
-local DEFAULT_MENU_WIDTH_PX = tonumber(PanelConfig.defaultMenuWidthPx) or 431.0
-local PANEL_DRAW_REQUEST_STALE_MS = math.max(0, math.floor(tonumber(PanelConfig.panelDrawRequestStaleMs) or 1000))
-local MAIN_PANEL_Y_OFFSET = tonumber(PanelConfig.mainPanelYOffset) or -0.01
+local SHARED_PANEL_HEIGHT_UNITS = PanelConfig.sharedPanelHeightUnits or 0.15
+local SHARED_PANEL_BASE_SCALE = PanelConfig.sharedPanelBaseScale or 0.95
+local SHARED_PANEL_MIN_SCALE = PanelConfig.sharedPanelMinScale or 0.72
+local SHARED_PANEL_ALPHA = math.floor(PanelConfig.sharedPanelAlpha or 168)
+local SHARED_PANEL_FILL_ALPHA = math.floor(PanelConfig.sharedPanelFillAlpha or 204)
+local SHARED_PANEL_HEADER_HEIGHT_RATIO = PanelConfig.sharedPanelHeaderHeightRatio or 0.15
+local SHARED_PANEL_TEXT_BASE_HEIGHT_UNITS = PanelConfig.sharedPanelTextBaseHeightUnits or 0.20
+local SHARED_PANEL_WIDTH_UNITS = PanelConfig.sharedPanelWidthUnits or 0.1875
+local DEFAULT_PANEL_HEIGHT_UNITS = PanelConfig.defaultPanelHeightUnits or 0.0874
+local PRIMARY_PANEL_LEFT_MARGIN = PanelConfig.primaryPanelLeftMargin or 0.014
+local MENU_PANEL_GAP_X = PanelConfig.menuPanelGapX or 0.018
+local STACKED_PANEL_GAP_Y = PanelConfig.stackedPanelGapY or 0.0032
+local DEFAULT_MENU_LEFT_PX = PanelConfig.defaultMenuLeftPx or 20.0
+local DEFAULT_MENU_WIDTH_PX = PanelConfig.defaultMenuWidthPx or 431.0
+local PANEL_DRAW_REQUEST_STALE_MS = math.max(0, math.floor(PanelConfig.panelDrawRequestStaleMs or 1000))
+local MAIN_PANEL_Y_OFFSET = PanelConfig.mainPanelYOffset or -0.01
 local getPrimaryPanelPlacement
 
 local function getNitrousUpgradeLevel(bucket)

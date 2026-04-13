@@ -3,6 +3,7 @@ PerformanceTuning = PerformanceTuning or {}
 PerformanceTuning.TuningPackManager = PerformanceTuning.TuningPackManager or {}
 
 local TuningPackManager = PerformanceTuning.TuningPackManager
+-- Canonical menu description source for Tire submenu dynamic descriptions.
 local TIRE_COMPOUND_CATEGORY_OPTIONS = {
     { id = 'stock', label = 'Stock', description = 'Factory. Quality has no effect.' },
     { id = 'road', label = 'Road', description = "Tarmac focused, don't go off the road." },

@@ -1,5 +1,5 @@
 ---@meta
----@diagnostic disable: duplicate-set-field
+---@diagnostic disable: duplicate-set-field, undefined-doc-name
 
 ---@alias Entity integer
 ---@alias Ped integer
@@ -617,3 +617,53 @@ function LoadScriptFile(resourceName, fileName) end
 
 ---@type integer
 source = source
+
+-- FiveM-specific client natives not present in the GTA native DB
+
+---@param vehicle Vehicle
+---@return number
+function GetVehicleCurrentRpm(vehicle) end
+
+---@param vehicle Vehicle
+---@return integer
+function GetVehicleCurrentGear(vehicle) end
+
+---@param vehicle Vehicle
+---@return integer
+function GetVehicleHighGear(vehicle) end
+
+---@param vehicle Vehicle
+---@return number
+function GetVehicleClutch(vehicle) end
+
+---@param vehicle Vehicle
+---@param handlingClass string
+---@param fieldName string
+---@return number
+function GetVehicleHandlingFloat(vehicle, handlingClass, fieldName) end
+
+---@param vehicle Vehicle
+---@param handlingClass string
+---@param fieldName string
+---@return integer
+function GetVehicleHandlingInt(vehicle, handlingClass, fieldName) end
+
+---@param vehicle Vehicle
+---@param handlingClass string
+---@param fieldName string
+---@param value number
+function SetVehicleHandlingFloat(vehicle, handlingClass, fieldName, value) end
+
+---@param vehicle Vehicle
+---@param handlingClass string
+---@param fieldName string
+---@param value integer
+function SetVehicleHandlingInt(vehicle, handlingClass, fieldName, value) end
+
+---@param vehicle Vehicle
+---@param wheelIndex integer
+---@return integer
+function GetVehicleWheelSurfaceMaterial(vehicle, wheelIndex) end
+
+---@param assetName string
+function UseParticleFxAssetNextCall(assetName) end

@@ -77,7 +77,7 @@ Ownership is mostly client-side for interactive state, with server-side ownershi
 - **Stop:** all threads terminate with the resource and the live state is reconstructed on the next start.
 
 ## 8) Configuration and logging behavior
-- `performancetuning` does not currently use convars for live tuning or debug verbosity.
+- `performancetuning` supports selected convars for runtime tuning inputs (for example `pt_engine_swaps` for engine swap model sourcing).
 - `UpdateNotifier.lua` reads its repo/branch/path/token/timeout from the shared `updateCheck` config, with defaults for:
   - repo: `Eddlm/ars-fivem`
   - branch: `main`

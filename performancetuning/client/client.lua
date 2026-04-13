@@ -179,7 +179,7 @@ CreateThread(function()
     while true do
         local ped = PlayerPedId()
         local vehicle = GetVehiclePedIsIn(ped, false)
-        local speedMph = (tonumber(GetEntitySpeed(vehicle)) or 0.0) * 2.2369362920544
+        local speedMph = GetEntitySpeed(vehicle) * 2.2369362920544
         local waitMs = maxRefreshIntervalMs
         if speedMph <= minRefreshSpeedMph then
             waitMs = maxRefreshIntervalMs

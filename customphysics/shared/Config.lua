@@ -17,10 +17,6 @@ CustomPhysics.Config = {
     -- convar candidate: cp_offroad_max_multiplier — tune the offroad boost ceiling for balance across different terrain servers
     offroadMaxMultiplier = 5.0,
 
-    -- Fallback value in case the car does not get a rev limiter state bag from performancetuning.
-    -- If performancetuning tune state is missing, this fallback controls whether customphysics still enforces a limiter.
-    -- convar candidate: cp_fallback_rev_limiter — allows enabling the limiter globally at startup when PT is not installed
-    fallbackRevLimiterEnabled = false,
 
     -- Powerslides
     -- convar candidate: cp_slide_speed_threshold — lower values make slides trigger earlier; useful tuning for different tire/surface setups
@@ -28,13 +24,7 @@ CustomPhysics.Config = {
     -- convar candidate: cp_slide_max_multiplier — caps the power boost during slides; competitive servers may want a tighter cap
     slideMaxMultiplier = 5.0,
     slideSpeedThresholdMetersPerSecond = 3.0,
-
-    nitrous = {
-        controlId = 73,
-        defaultOverrideLevel = 1.0,
-        defaultHudFill = 100.0,
-        debugStatusIntervalMs = 1000,
-    },
+ 
 
     materialTyreDragByIndex = {
         [0] = -0.15,

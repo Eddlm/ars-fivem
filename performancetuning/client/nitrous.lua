@@ -104,7 +104,7 @@ function Nitrous.triggerShotIfAvailable(vehicle)
     local nitrousShotStrength = math.max(tonumber(sliderRange.min) or 1.0, tonumber(nitrousState.nitrousShotStrength) or 1.0)
     local nitrousConfig = runtimeConfig.nitrous or {}
     local nitrousPower = nitrousLevelMultiplier * nitrousShotStrength * (tonumber(nitrousConfig.nativePowerMultiplier) or 0.0)
-    local nitrousDurationMs = math.max(250, math.floor((tonumber(nitrousConfig.baseDurationMs) or 4000) / nitrousShotStrength))
+    local nitrousDurationMs = math.max(250, math.floor((tonumber(nitrousConfig.baseDurationMs) or 4000) / (nitrousShotStrength*1.33)))
 
     dispatchShot(vehicle, {
         power = nitrousPower,

@@ -132,14 +132,7 @@ Config.packDefinitions = {
         { id = 'level_4', label = 'Level 4', enabled = true, description = 'Maximum nitrous strength in the current pack lineup.', powerMultiplier = 2.0 },
     },
 }
-
--- Swaps the entire engine handling fields for those of this, a true swap. Funny, or a big shortcut.
-Config.engineSwaps = {
-    { id = 'KANJOSJ', label = 'Kanjo SJ Swap', enabled = true, description = 'Uses Kanjo SJ engine values and audio for a full swap.', swapModel = 'KANJOSJ' },
-    { id = 'TYRUS', label = 'Tyrus Swap', enabled = true, description = 'Uses Tyrus engine values and audio for a full swap.', swapModel = 'TYRUS' },
-    { id = 'TAIPAN', label = 'Taipan Swap', enabled = true, description = 'Uses Taipan engine values and audio for a full swap.', swapModel = 'TAIPAN' },
-}
-
+ 
 Config.advanced = {
     panel = {
         sharedPanelHeightUnits = 0.15,

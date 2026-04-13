@@ -1,6 +1,7 @@
 -- Builds and runs the full ScaleformUI tuning menu hierarchy.
 PerformanceTuning = PerformanceTuning or {}
 PerformanceTuning.ScaleformUI = PerformanceTuning.ScaleformUI or {}
+local DEFAULT_MENU_DESCRIPTION = 'Description pending.'
 local MENU_DESCRIPTIONS = {
     power = 'Engine power and top speed.',
 
@@ -10,11 +11,14 @@ local MENU_DESCRIPTIONS = {
     suspension = 'Body control, ride height and weight transfer.',
     antiRoll = 'Roll stiffness and front-to-rear distribution.',
     nitro = 'On-demand power boost.',
+    piPanelDisplayMode = DEFAULT_MENU_DESCRIPTION,
     engine = 'Engine power and top speed.',
+    transmission = DEFAULT_MENU_DESCRIPTION,
     tireCompoundCategory = 'Tire compound family.',
     tireCompoundQuality = 'Tire quality tier.',
+    nitrous = DEFAULT_MENU_DESCRIPTION,
     antirollBars = 'Roll stiffness.',
-    nitrousShotStrength = 'Burst strength versus duration.',
+    nitrousShotStrength = 'Higher throughput at the cost of on-time.',
     brakeBiasFront = 'Front-to-rear brake balance.',
     gripBiasFront = 'Front-to-rear grip balance.',
     antirollBiasFront = 'Front-to-rear roll stiffness.',
@@ -29,14 +33,6 @@ local LIST_OPTION_DESCRIPTIONS = {
         [2] = "Tarmac focused, don't go off the road.",
         [3] = 'Compromise between tarmac grip and offroad grip loss.',
         [4] = 'Least griploss offroad, not much grip on tarmac.',
-    },
-    steeringLockMode = {
-        [1] = 'No steering adjustment.',
-        [2] = 'Neutral steering balance.',
-        [3] = 'More aggressive steering response.',
-        [4] = 'Very aggressive steering response.',
-        [5] = 'Softer, more forgiving steering.',
-        [6] = 'Very soft, very forgiving steering.',
     },
 }
 local LIST_OPTION_DESCRIPTIONS_BY_ID = {
@@ -63,7 +59,7 @@ local function getNearestSuspensionProfileIndex(profile, value)
 end
 
 local function getMenuDescription(key)
-    return MENU_DESCRIPTIONS[key] or ''
+    return MENU_DESCRIPTIONS[key] or DEFAULT_MENU_DESCRIPTION
 end
 
 local function normalizePerformanceBarsDisplayMode(mode)
@@ -116,7 +112,7 @@ local function getListOptionDescription(listKey, option, currentValue)
     if type(label) ~= 'string' or label == '' then
         return tostring(currentValue or '')
     end
-    if type(fallbackDescriptionsById) == 'table' then
+    if (type(description) ~= 'string' or description == '') and type(fallbackDescriptionsById) == 'table' then
         local optionId = tostring(type(option) == 'table' and option.id or ''):lower()
         local fallbackDescription = fallbackDescriptionsById[optionId]
         if type(fallbackDescription) == 'string' and fallbackDescription ~= '' then
@@ -124,7 +120,7 @@ local function getListOptionDescription(listKey, option, currentValue)
         end
     end
 
-    if type(fallbackDescriptions) == 'table' then
+    if (type(description) ~= 'string' or description == '') and type(fallbackDescriptions) == 'table' then
         local optionIndex = type(option) == 'table' and tonumber(option.index) or nil
         local fallbackDescription = optionIndex and fallbackDescriptions[optionIndex] or nil
         if type(fallbackDescription) == 'string' and fallbackDescription ~= '' then
@@ -159,6 +155,32 @@ end
 local function setListItemDescription(listItem, listKey, option, currentValue)
     if listItem and type(listItem.Description) == 'function' then
         listItem:Description(getListOptionDescription(listKey, option, currentValue))
+    end
+end
+
+local function shouldUseDynamicListDescription(context)
+    return context == 'tireCompoundCategory' or context == 'tireCompoundQuality'
+end
+
+local function applyDefaultListItemDescriptions()
+    local state = getScaleformUIState()
+    local listItems = {
+        { item = state.items.piPanelDisplayMode, key = 'piPanelDisplayMode' },
+        { item = state.items.engine, key = 'engine' },
+        { item = state.items.transmission, key = 'transmission' },
+        { item = state.items.suspension, key = 'suspension' },
+        { item = state.items.tireCompoundCategory, key = 'tireCompoundCategory' },
+        { item = state.items.tireCompoundQuality, key = 'tireCompoundQuality' },
+        { item = state.items.brakes, key = 'brakes' },
+        { item = state.items.handbrakes, key = 'handbrakes' },
+        { item = state.items.nitrous, key = 'nitrous' },
+        { item = state.items.steeringLockMode, key = 'steeringLockMode' },
+    }
+
+    for _, listItem in ipairs(listItems) do
+        if listItem.item and type(listItem.item.Description) == 'function' then
+            listItem.item:Description(getMenuDescription(listItem.key))
+        end
     end
 end
 
@@ -279,17 +301,6 @@ local function setAntirollSliderState(value)
     local resolvedValue = scaleformUI.clampAntirollForceValue(value)
     item:Description(('Current: %s'):format(scaleformUI.getAntirollForceLabel(resolvedValue)))
     item:Index(scaleformUI.getAntirollSliderIndex(resolvedValue) - 1)
-end
-
-local function setNitrousShotSliderState(value)
-    local scaleformUI = PerformanceTuning.ScaleformUI
-    local item = getScaleformUIState().items.nitrousShotSlider
-    if item == nil then
-        return
-    end
-    local resolvedValue = scaleformUI.clampNitroShotStrength(value)
-    item:Description(('Current: %s'):format(scaleformUI.getNitroShotStrengthLabel(resolvedValue)))
-    item:Index(scaleformUI.getNitroShotSliderIndex(resolvedValue) - 1)
 end
 
 local function setBrakeBiasSliderState(value)
@@ -425,7 +436,7 @@ local function previewMainMenuSelection(context, index)
     local scaleformUI = PerformanceTuning.ScaleformUI
     local state = getScaleformUIState()
     local item = getMainMenuItemByContext(state, context)
-    if item then
+    if item and shouldUseDynamicListDescription(context) then
         local listState = scaleformUI.buildListState(context) or {}
         setListItemDescription(item, context, getIndexedListOption(context, index), (listState.context or {}).currentValue)
     end
@@ -445,7 +456,9 @@ local function updateMainMenuListContext(context)
     local item = getMainMenuItemByContext(state, context)
     if item then
         setListItemOptions(item, options, currentStep)
-        setListItemDescription(item, context, getIndexedListOption(context, item:Index()), currentValue)
+        if shouldUseDynamicListDescription(context) then
+            setListItemDescription(item, context, getIndexedListOption(context, item:Index()), currentValue)
+        end
     end
 end
 
@@ -484,7 +497,6 @@ local function handleTweakSliderChange(item, index)
 
     if item == state.items.nitrousShotSlider then
         local value = scaleformUI.getSliderValueForIndex(index + 1, scaleformUI.sliderRanges.nitrousShotStrength)
-        setNitrousShotSliderState(value)
         scaleformUI.applyNitroShotStrengthTweak(vehicle, value)
     elseif item == state.items.brakeBiasSlider then
         local value = scaleformUI.getSliderValueForIndex(index + 1, scaleformUI.sliderRanges.brakeBiasFront)
@@ -640,6 +652,10 @@ function PerformanceTuning.ScaleformUI.refreshMenu()
     end
 
     setMenuItemsEnabled(true)
+    applyDefaultListItemDescriptions()
+    if state.items.nitrousShotSlider and type(state.items.nitrousShotSlider.Description) == 'function' then
+        state.items.nitrousShotSlider:Description('Higher throughput at the cost of on-time')
+    end
     local engineState, engineError = scaleformUI.buildListState('engine')
     if not engineState then
         state.menus.main:Subtitle('~r~NO VALID CAR')
@@ -688,24 +704,17 @@ function PerformanceTuning.ScaleformUI.refreshMenu()
     setListItemOptions(state.items.brakes, state.options.brakes, brakesState.context.currentStep)
     setListItemOptions(state.items.handbrakes, state.options.handbrakes, handbrakesState.context.currentStep)
     setListItemOptions(state.items.nitrous, state.options.nitrous, nitrousState.context.currentStep)
-    setListItemDescription(state.items.engine, 'engine', getIndexedListOption('engine', state.items.engine:Index()), engineState.context.currentValue)
-    setListItemDescription(state.items.transmission, 'transmission', getIndexedListOption('transmission', state.items.transmission:Index()), transmissionState.context.currentValue)
-    setListItemDescription(state.items.suspension, 'suspension', getIndexedListOption('suspension', state.items.suspension:Index()), suspensionState.context.currentValue)
     setListItemDescription(state.items.tireCompoundCategory, 'tireCompoundCategory', getIndexedListOption('tireCompoundCategory', state.items.tireCompoundCategory:Index()), tireCompoundCategoryState.context.currentValue)
     setListItemDescription(state.items.tireCompoundQuality, 'tireCompoundQuality', getIndexedListOption('tireCompoundQuality', state.items.tireCompoundQuality:Index()), tireCompoundQualityState.context.currentValue)
-    setListItemDescription(state.items.brakes, 'brakes', getIndexedListOption('brakes', state.items.brakes:Index()), brakesState.context.currentValue)
-    setListItemDescription(state.items.handbrakes, 'handbrakes', getIndexedListOption('handbrakes', state.items.handbrakes:Index()), handbrakesState.context.currentValue)
-    setListItemDescription(state.items.nitrous, 'nitrous', getIndexedListOption('nitrous', state.items.nitrous:Index()), nitrousState.context.currentValue)
     setTireCompoundQualityAvailability(bucket)
 
     if state.items.steeringLockMode then
         local steeringModeIndex = getSteeringLockModeIndex(bucket.steeringLockMode)
         state.items.steeringLockMode:Index(steeringModeIndex)
-        setListItemDescription(state.items.steeringLockMode, 'steeringLockMode', getIndexedListOption('steeringLockMode', steeringModeIndex), bucket.steeringLockMode)
     end
 
     setAntirollSliderState(bucket.antirollForce)
-    setNitrousShotSliderState(bucket.nitrousShotStrength)
+    state.items.nitrousShotSlider:Index(scaleformUI.getNitroShotSliderIndex(bucket.nitrousShotStrength) - 1)
     setBrakeBiasSliderState(bucket.brakeBiasFront)
     setGripBiasSliderState(bucket.gripBiasFront or bucket.baseTires[scaleformUI.tireBiasFrontField] or 0.5)
     setAntirollBiasSliderState(bucket.antirollBiasFront)
@@ -768,17 +777,18 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     state.items.openSuspension = UIMenuItem.New('Suspension', getMenuDescription('suspension'))
     state.items.openAntiRoll = UIMenuItem.New('Anti-Roll', getMenuDescription('antiRoll'))
     state.items.openNitro = UIMenuItem.New('Nitro', getMenuDescription('nitro'))
-    state.items.piPanelDisplayMode = UIMenuListItem.New('PI panel displays:', { 'PI', 'Raw numbers' }, state.piPanelDisplayModeIndex)
-    state.items.engine = UIMenuListItem.New('Engine', { 'Stock' }, 1)
-    state.items.transmission = UIMenuListItem.New('Transmission', { 'Stock' }, 1)
-    state.items.suspension = UIMenuListItem.New('Suspension', { 'Stock' }, 1)
-    state.items.tireCompoundCategory = UIMenuListItem.New('Compound', { 'Stock', 'Road', 'Mixed', 'Offroad' }, 1)
-    state.items.tireCompoundQuality = UIMenuListItem.New('Quality', { 'Low-End', 'Mid-End', 'High-End', 'Top-End' }, 2)
-    state.items.brakes = UIMenuListItem.New('Brakes', { 'Stock' }, 1)
-    state.items.handbrakes = UIMenuListItem.New('Handbrakes', { 'Stock' }, 1)
-    state.items.nitrous = UIMenuListItem.New('Nitrous', { 'Stock' }, 1)
+    state.items.piPanelDisplayMode = UIMenuListItem.New('PI panel displays:', { 'PI', 'Raw numbers' }, state.piPanelDisplayModeIndex, getMenuDescription('piPanelDisplayMode'))
+    state.items.engine = UIMenuListItem.New('Engine', { 'Stock' }, 1, getMenuDescription('engine'))
+    state.items.transmission = UIMenuListItem.New('Transmission', { 'Stock' }, 1, getMenuDescription('transmission'))
+    state.items.suspension = UIMenuListItem.New('Suspension', { 'Stock' }, 1, getMenuDescription('suspension'))
+    state.items.tireCompoundCategory = UIMenuListItem.New('Compound', { 'Stock', 'Road', 'Mixed', 'Offroad' }, 1, getMenuDescription('tireCompoundCategory'))
+    state.items.tireCompoundQuality = UIMenuListItem.New('Quality', { 'Low-End', 'Mid-End', 'High-End', 'Top-End' }, 2, getMenuDescription('tireCompoundQuality'))
+    state.items.brakes = UIMenuListItem.New('Brakes', { 'Stock' }, 1, getMenuDescription('brakes'))
+    state.items.handbrakes = UIMenuListItem.New('Handbrakes', { 'Stock' }, 1, getMenuDescription('handbrakes'))
+    state.items.nitrous = UIMenuListItem.New('Nitrous', { 'Stock' }, 1, getMenuDescription('nitrous'))
     state.items.antirollSlider = UIMenuSliderItem.New('Anti-Roll Bars', #state.sliderValues.antirollBars - 1, 1, scaleformUI.getAntirollSliderIndex(0.0) - 1, false)
     state.items.nitrousShotSlider = UIMenuSliderItem.New('Shot Strength', #state.sliderValues.nitrousShotStrength - 1, 1, scaleformUI.getNitroShotSliderIndex(1.0) - 1, false)
+    state.items.nitrousShotSlider:Description('Higher throughput at the cost of on-time')
     state.items.steeringLockMode = UIMenuListItem.New('Steering Balance', buildSteeringLockModeLabels(), 1, getMenuDescription('steeringLockMode'))
     state.items.brakeBiasSlider = UIMenuSliderItem.New('Brake Bias Front', #state.sliderValues.brakeBiasFront - 1, 1, scaleformUI.getBrakeBiasSliderIndex(0.5) - 1, false)
     state.items.gripBiasSlider = UIMenuSliderItem.New('Grip Bias Front', #state.sliderValues.gripBiasFront - 1, 1, scaleformUI.getGripBiasSliderIndex(0.5) - 1, false)

@@ -118,13 +118,13 @@ local function calculateSlideMultiplier(vehicle)
         return 1.0, slipAngle
     end
 
-    local angleStep = tonumber(CustomPhysics.Config.slideAngleStepDegrees) or 10.0
+    local angleStep = CustomPhysics.Config.slideAngleStepDegrees or 10.0
     if angleStep <= 0.0 then
         angleStep = 10.0
     end
 
     local slideMultiplier = 1.0 + (overAngle / angleStep)
-    local slideMaxMult = tonumber(CustomPhysics.Config.slideMaxMultiplier) or 10.0
+    local slideMaxMult = CustomPhysics.Config.slideMaxMultiplier or 10.0
     return CustomPhysicsUtil.clamp(slideMultiplier, 1.0, slideMaxMult), slipAngle
 end
 
@@ -222,7 +222,7 @@ local function updateOverspeedPower(vehicle, currentRpm)
     local currentSpeedMph = CustomPhysicsUtil.getVehiclePlanarSpeed(vehicle) * Units.metersPerSecondToMph
     local topSpeedFlatVel = getFlatVelocity(vehicle) or getOriginalFlatVelocity(vehicle) or 0.0
     local topSpeedMph = topSpeedFlatVel * Units.flatVelToMph
-    local activationBufferMph = tonumber(Overspeed.activationSpeedBufferMph) or 10.0
+    local activationBufferMph = Overspeed.activationSpeedBufferMph or 10.0
     local overspeedThresholdMph = topSpeedMph + math.max(0.0, activationBufferMph)
     local overspeedActive = topSpeedMph > 0.0 and currentSpeedMph >= overspeedThresholdMph and currentRpm >= 1.0
     local deltaSeconds = CustomPhysicsUtil.getDeltaSeconds()
@@ -252,7 +252,7 @@ local function getOffroadSurfaceWheelCount(vehicle, wheelCount)
 
     for wheelIndex = 0, wheelCount - 1 do
         local material = GetVehicleWheelSurfaceMaterial(vehicle, wheelIndex)
-        local drag = tonumber(dragTable[material])
+        local drag = dragTable[material]
         if drag == nil then
             drag = 0.0
         end
@@ -365,9 +365,33 @@ local function getOffroadMultiplier(snapshot, now)
     state.offroadUpdateAt = now + intervalMs
     local updateDeltaSeconds = intervalMs / 1000.0
     state.offroadTargetMultiplier = 1.0
-    local offroadMaxMultiplier = tonumber(CustomPhysics.Config.offroadMaxMultiplier) or 4.0
+    local offroadMaxMultiplier = CustomPhysics.Config.offroadMaxMultiplier or 4.0
     state.offroadTargetMultiplier = calculateOffroadTargetMultiplier(snapshot, now, offroadMaxMultiplier)
     return advanceOffroadMultiplier(updateDeltaSeconds, offroadMaxMultiplier)
+end
+
+-- Returns true when at least one driven wheel is on a drag-enabled material.
+local function hasDrivenWheelOnDragSurface(vehicle, wheelSnapshot)
+    local wheelCount = wheelSnapshot and wheelSnapshot.wheelCount or 0
+    if wheelCount <= 0 then
+        return false
+    end
+
+    local wheelPowers = wheelSnapshot.wheelPowers or {}
+    local dragTable = CustomPhysics.Config.materialTyreDragByIndex or {}
+
+    for wheelIndex = 0, wheelCount - 1 do
+        local wheelPower = wheelPowers[wheelIndex] or 0.0
+        if wheelPower > 0.0001 then
+            local material = GetVehicleWheelSurfaceMaterial(vehicle, wheelIndex)
+            local drag = dragTable[material] or 0.0
+            if drag > 0.0 then
+                return true
+            end
+        end
+    end
+
+    return false
 end
 
 -- Stability monitor
@@ -399,16 +423,21 @@ function CustomPhysicsPower.sampleStability(vehicle, now)
         ((currentVelocity.z - lastVelocity.z) * lastForward.z)
     ) / deltaSeconds
 
-    local measuredGs   = metersPerSecondSquaredToGs(rawAccel)
-    local wheelPowerGs = CustomPhysicsUtil.buildWheelPowerSnapshot(vehicle).drivenWheelPower
-    local disparityGs  = measuredGs - wheelPowerGs
+    local wheelSnapshot = CustomPhysicsUtil.buildWheelPowerSnapshot(vehicle)
+    local measuredGs = metersPerSecondSquaredToGs(rawAccel)
+    local wheelPowerGs = wheelSnapshot.drivenWheelPower or 0.0
+    local disparityGs = measuredGs - wheelPowerGs
+    local drivenWheelOnDragSurface = hasDrivenWheelOnDragSurface(vehicle, wheelSnapshot)
 
     state.lastMeasuredAccelerationGs   = measuredGs
     state.lastDrivenWheelPowerSampleGs = wheelPowerGs
     state.lastAccelerationExcessGs     = disparityGs
 
     if disparityGs > 0.25 and GetVehicleCurrentGear(vehicle) > 1 then
-        local ceiling =math.max(1.25 - (disparityGs * 9.81) / 5,0.00)
+        local ceiling = math.max(1.25 - (disparityGs * 9.81) / 5, 0.00)
+        if drivenWheelOnDragSurface then
+            ceiling = math.max(ceiling, 0.50)
+        end
 
         state.antiBoostMultiplier = ceiling
     end

@@ -26,6 +26,57 @@ local INTERNAL_BAR_FILL_TARGETS = {
 }
 local INTERNAL_BRAKE_SCALING = { barTopValueUnits = INTERNAL_BAR_FILL_TARGETS.brake }
 
+local function trimRuntimeValue(value)
+    return (tostring(value or ''):match('^%s*(.-)%s*$'))
+end
+
+local function resolveSwapModelLabel(modelHash, fallbackModelCode)
+    local displayCode = GetDisplayNameFromVehicleModel(modelHash)
+    if type(displayCode) ~= 'string' or displayCode == '' or displayCode == 'CARNOTFOUND' then
+        displayCode = tostring(fallbackModelCode or '')
+    end
+
+    if displayCode ~= '' and displayCode ~= 'CARNOTFOUND' then
+        local label = GetLabelText(displayCode)
+        if type(label) == 'string' and label ~= '' and label ~= 'NULL' then
+            return label
+        end
+        return displayCode
+    end
+
+    return tostring(fallbackModelCode or 'UNKNOWN')
+end
+
+local function getConfiguredEngineSwaps()
+    local swaps = {}
+    local seenIds = {}
+    local rawCsv = GetConvar('pt_engine_swaps', '')
+
+    for token in tostring(rawCsv or ''):gmatch('([^,]+)') do
+        local trimmedToken = trimRuntimeValue(token)
+        if trimmedToken ~= '' then
+            local normalizedModelCode = trimmedToken:upper()
+            if not seenIds[normalizedModelCode] then
+                local modelHash = GetHashKey(normalizedModelCode)
+                local isValidVehicleModel = modelHash ~= 0 and IsModelInCdimage(modelHash) and IsModelAVehicle(modelHash)
+                if isValidVehicleModel then
+                    local resolvedName = resolveSwapModelLabel(modelHash, normalizedModelCode)
+                    swaps[#swaps + 1] = {
+                        id = normalizedModelCode,
+                        swapModel = normalizedModelCode,
+                        enabled = true,
+                        label = ('%s Swap'):format(resolvedName),
+                        description = ('Uses %s engine values and audio for a full swap.'):format(resolvedName),
+                    }
+                    seenIds[normalizedModelCode] = true
+                end
+            end
+        end
+    end
+
+    return swaps
+end
+
 local function resolvePerformanceFromRuntimeConfig()
     local configured = runtimeConfig.performanceBarFillTargets or {}
     local barSegmentCount = math.max(1, math.floor(tonumber(configured.barSegmentCount) or INTERNAL_BAR_FILL_TARGETS.barSegmentCount))
@@ -104,7 +155,7 @@ internals.KNOWN_FIELD_TYPES = knownFieldTypes
 internals.SUSPENSION_PACKS = packDefinitions.suspension
 internals.TRANSMISSION_PACKS = packDefinitions.transmission
 internals.ENGINE_PACKS = packDefinitions.engine
-internals.ENGINE_SWAPS = config.engineSwaps or {}
+internals.ENGINE_SWAPS = getConfiguredEngineSwaps()
 internals.TIRE_COMPOUND_PACKS = packDefinitions.tires
 internals.BRAKE_PACKS = packDefinitions.brakes
 internals.HANDBRAKE_PACKS = packDefinitions.handbrakes or packDefinitions.brakes or {}
