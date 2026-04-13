@@ -1,5 +1,13 @@
 local RESOURCE_NAME = GetCurrentResourceName()
-local Config = (((PerformanceTuning or {}).Config) or {}).updateCheck or {}
+local STARTUP_CHECK_STATE_KEY = ('ars:updatecheck:startup_ran:%s'):format(RESOURCE_NAME)
+
+local CHECKER_DEFAULTS = {
+    repo = 'Eddlm/ars-fivem',
+    branch = 'main',
+    path = 'performancetuning',
+    token = '',
+    timeoutMs = 12000,
+}
 
 local function trim(value)
     local text = tostring(value or '')
@@ -8,23 +16,24 @@ end
 
 local function getCheckerConfig()
     return {
-        repo = tostring(Config.repo or 'Eddlm/ars-fivem'),
-        branch = tostring(Config.branch or 'main'),
-        path = tostring(Config.path or 'performancetuning'),
-        token = trim(Config.token or ''),
-        timeoutMs = math.max(1000, math.floor(tonumber(Config.timeoutMs) or 12000)),
+        repo = tostring(CHECKER_DEFAULTS.repo),
+        branch = tostring(CHECKER_DEFAULTS.branch),
+        path = tostring(CHECKER_DEFAULTS.path),
+        token = trim(CHECKER_DEFAULTS.token),
+        timeoutMs = math.max(1000, math.floor(tonumber(CHECKER_DEFAULTS.timeoutMs) or 12000)),
     }
 end
-
 
 local function buildHttpHeaders(config)
     local headers = {
         ['User-Agent'] = 'performancetuning-update-notifier',
         ['Accept'] = 'application/vnd.github+json',
     }
+
     if config.token ~= '' then
         headers['Authorization'] = ('Bearer %s'):format(config.token)
     end
+
     return headers
 end
 
@@ -33,18 +42,20 @@ local function httpRequest(url, headers, timeoutMs)
         done = false,
         status = nil,
         body = nil,
+        responseHeaders = nil,
     }
 
-    local ok = pcall(function()
-        PerformHttpRequest(url, function(statusCode, body)
+    local ok, err = pcall(function()
+        PerformHttpRequest(url, function(statusCode, body, responseHeaders)
             response.status = tonumber(statusCode)
             response.body = type(body) == 'string' and body or ''
+            response.responseHeaders = type(responseHeaders) == 'table' and responseHeaders or {}
             response.done = true
         end, 'GET', '', headers or {})
     end)
 
     if not ok then
-        return nil
+        return nil, ('HTTP request setup failed: %s'):format(tostring(err or 'unknown error'))
     end
 
     local deadline = GetGameTimer() + math.max(1000, math.floor(tonumber(timeoutMs) or 12000))
@@ -53,34 +64,43 @@ local function httpRequest(url, headers, timeoutMs)
     end
 
     if not response.done then
-        return nil
+        return nil, ('HTTP request timed out after %dms'):format(math.max(1000, math.floor(tonumber(timeoutMs) or 12000)))
     end
 
-    return response
+    return response, nil
 end
 
 local function parseVersionFromManifestText(content)
     if type(content) ~= 'string' or content == '' then
         return nil
     end
+
     local version = content:match("%f[%w_]version%f[^%w_]%s*'([^']+)'")
     if not version then
         version = content:match('%f[%w_]version%f[^%w_]%s*"([^"]+)"')
     end
+
     version = trim(version)
     if version == '' then
         return nil
     end
+
     return version
 end
 
 local function getLocalVersion()
     local localMetadataVersion = trim(GetResourceMetadata(RESOURCE_NAME, 'version', 0) or '')
     if localMetadataVersion ~= '' then
-        return localMetadataVersion
+        return localMetadataVersion, 'metadata'
     end
+
     local manifest = LoadResourceFile(RESOURCE_NAME, 'fxmanifest.lua')
-    return parseVersionFromManifestText(manifest)
+    local parsed = parseVersionFromManifestText(manifest)
+    if parsed then
+        return parsed, 'manifest'
+    end
+
+    return nil, 'missing'
 end
 
 local function getRemoteVersion(config, headers)
@@ -90,12 +110,21 @@ local function getRemoteVersion(config, headers)
         config.path
     )
 
-    local response = httpRequest(rawUrl, headers, config.timeoutMs)
-    if not response or response.status ~= 200 then
-        return nil
+    local response, requestError = httpRequest(rawUrl, headers, config.timeoutMs)
+    if not response then
+        return nil, nil, requestError
     end
 
-    return parseVersionFromManifestText(response.body)
+    if response.status ~= 200 then
+        return nil, rawUrl, ('Remote manifest fetch failed with status %s'):format(tostring(response.status))
+    end
+
+    local parsed = parseVersionFromManifestText(response.body)
+    if not parsed then
+        return nil, rawUrl, 'Remote fxmanifest.lua has no parseable version field.'
+    end
+
+    return parsed, nil
 end
 
 local function parseVersionSegments(version)
@@ -103,6 +132,7 @@ local function parseVersionSegments(version)
     if cleaned == '' then
         return nil
     end
+
     local segments = {}
     for token in cleaned:gmatch('[^%.]+') do
         local numeric = token:match('^(%d+)')
@@ -111,9 +141,11 @@ local function parseVersionSegments(version)
         end
         segments[#segments + 1] = tonumber(numeric) or 0
     end
+
     if #segments == 0 then
         return nil
     end
+
     return segments
 end
 
@@ -135,6 +167,7 @@ local function isRemoteVersionNewer(localVersion, remoteVersion)
             return false
         end
     end
+
     return false
 end
 
@@ -161,16 +194,29 @@ local function performUpdateCheck()
     return true
 end
 
-RegisterCommand('ptupdatecheck', function(source)
-    local numericSource = tonumber(source) or 0
-    if numericSource == 0 then
-        performUpdateCheck()
+local function hasStartupCheckAlreadyRun()
+    if type(GlobalState) ~= 'table' then
+        return false
     end
-end, false)
+    return GlobalState[STARTUP_CHECK_STATE_KEY] == true
+end
+
+local function markStartupCheckAsRun()
+    if type(GlobalState) ~= 'table' then
+        return
+    end
+    GlobalState[STARTUP_CHECK_STATE_KEY] = true
+end
 
 local checkDeadline = nil
 
-AddEventHandler('onResourceStart', function()
+AddEventHandler('onResourceStart', function(startedResourceName)
+    local _ = startedResourceName
+
+    if hasStartupCheckAlreadyRun() then
+        return
+    end
+
     checkDeadline = GetGameTimer() + math.random(20 * 1000, 40 * 1000)
 end)
 
@@ -178,6 +224,7 @@ CreateThread(function()
     while true do
         if checkDeadline and GetGameTimer() >= checkDeadline then
             checkDeadline = nil
+            markStartupCheckAsRun()
             performUpdateCheck()
         end
         Wait(1000)

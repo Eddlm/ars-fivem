@@ -76,12 +76,14 @@ CustomPhysics.Config = {
 
     advanced = {
         rollovers = {
-            angularXYThresholdDegrees = 180.0,
-            angularZThresholdDegrees = 180.0,
-            checkIntervalMs = 300,
-            forceHeightOffset = 4.0,
-            forceMagnitude = 1.4,
-            settleDurationMs = 500,
+            startSpeedMs         = 8.94,  -- convar: cp_rollover_start_speed (m/s, default 20 mph)
+            keepSpeedMs          = 6.71,  -- convar: cp_rollover_keep_speed  (m/s, default 15 mph)
+            angularStartDegrees  = 180.0, -- convar: cp_rollover_start_rot   (deg/s, min rotation to trigger)
+            angularKeepDegrees   = 90.0,  -- convar: cp_rollover_keep_rot    (deg/s, min rotation to keep active)
+            checkIntervalMs      = 300,
+            forceHeightOffset    = 4.0,
+            forceMagnitude       = 1.4,
+            settleDurationMs     = 500,
             initialForceMultiplier = 3.0,
         },
         wheelies = {
@@ -91,12 +93,4 @@ CustomPhysics.Config = {
         },
     },
 
-    updateCheck = {
-        verbose = false,
-        repo = 'Eddlm/ars-fivem',
-        branch = 'main',
-        path = 'customphysics',
-        token = '',
-        timeoutMs = 12000,
-    },
 }

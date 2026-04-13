@@ -109,12 +109,4 @@ VehicleManager.Config = {
         handlingStateBagKey = "performancetuning:handlingState",
         saveIdStateBagKey = "vehiclemanager:saveId",
     },
-    updateCheck = {
-        verbose = false,
-        repo = 'Eddlm/ars-fivem',
-        branch = 'main',
-        path = 'vehiclemanager',
-        token = '',
-        timeoutMs = 12000,
-    }
 }

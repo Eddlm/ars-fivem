@@ -12,8 +12,12 @@
   ],
   "diagnostics.globals": [
     "AddEventHandler",
+    "AddTextComponentString",
+    "BeginTextCommandPrint",
     "Citizen",
     "CreateThread",
+    "EndTextCommandPrint",
+    "GetConvarInt",
     "RegisterNetEvent",
     "SetTimeout",
     "TriggerClientEvent",

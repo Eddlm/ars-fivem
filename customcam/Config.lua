@@ -90,12 +90,3 @@ CustomCam.Config.Advanced = {
     hoodCamRotationZDegrees = 0.0,
     controlHintInitialDelayMs = 30000,
 }
-
-CustomCam.Config.UpdateCheck = {
-    verbose = false,
-    repo = 'Eddlm/ars-fivem',
-    branch = 'main',
-    path = 'customcam',
-    token = '',
-    timeoutMs = 12000,
-}

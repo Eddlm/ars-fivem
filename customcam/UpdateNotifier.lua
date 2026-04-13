@@ -1,54 +1,61 @@
 local RESOURCE_NAME = GetCurrentResourceName()
-local Config = (((CustomCam or {}).Config) or {}).UpdateCheck or (((CustomCam or {}).Config) or {}).updateCheck or {}
+local STARTUP_CHECK_STATE_KEY = ('ars:updatecheck:startup_ran:%s'):format(RESOURCE_NAME)
 
--- Trims whitespace from the beginning and end of a string
+local CHECKER_DEFAULTS = {
+    repo = 'Eddlm/ars-fivem',
+    branch = 'main',
+    path = 'customcam',
+    token = '',
+    timeoutMs = 12000,
+}
+
 local function trim(value)
     local text = tostring(value or '')
     return (text:match('^%s*(.-)%s*$') or '')
 end
 
--- Reads a convar value with a fallback, trimming whitespace
 local function getCheckerConfig()
     return {
-        repo = tostring(Config.repo or 'Eddlm/ars-fivem'),
-        branch = tostring(Config.branch or 'main'),
-        path = tostring(Config.path or 'customcam'),
-        token = trim(Config.token or ''),
-        timeoutMs = math.max(1000, math.floor(tonumber(Config.timeoutMs) or 12000)),
+        repo = tostring(CHECKER_DEFAULTS.repo),
+        branch = tostring(CHECKER_DEFAULTS.branch),
+        path = tostring(CHECKER_DEFAULTS.path),
+        token = trim(CHECKER_DEFAULTS.token),
+        timeoutMs = math.max(1000, math.floor(tonumber(CHECKER_DEFAULTS.timeoutMs) or 12000)),
     }
 end
 
-
--- Builds HTTP headers for GitHub API requests, including auth if token is present
 local function buildHttpHeaders(config)
     local headers = {
         ['User-Agent'] = 'customcam-update-notifier',
         ['Accept'] = 'application/vnd.github+json',
     }
+
     if config.token ~= '' then
         headers['Authorization'] = ('Bearer %s'):format(config.token)
     end
+
     return headers
 end
 
--- Performs an HTTP GET request with timeout handling
 local function httpRequest(url, headers, timeoutMs)
     local response = {
         done = false,
         status = nil,
         body = nil,
+        responseHeaders = nil,
     }
 
-    local ok = pcall(function()
-        PerformHttpRequest(url, function(statusCode, body)
+    local ok, err = pcall(function()
+        PerformHttpRequest(url, function(statusCode, body, responseHeaders)
             response.status = tonumber(statusCode)
             response.body = type(body) == 'string' and body or ''
+            response.responseHeaders = type(responseHeaders) == 'table' and responseHeaders or {}
             response.done = true
         end, 'GET', '', headers or {})
     end)
 
     if not ok then
-        return nil
+        return nil, ('HTTP request setup failed: %s'):format(tostring(err or 'unknown error'))
     end
 
     local deadline = GetGameTimer() + math.max(1000, math.floor(tonumber(timeoutMs) or 12000))
@@ -57,39 +64,45 @@ local function httpRequest(url, headers, timeoutMs)
     end
 
     if not response.done then
-        return nil
+        return nil, ('HTTP request timed out after %dms'):format(math.max(1000, math.floor(tonumber(timeoutMs) or 12000)))
     end
 
-    return response
+    return response, nil
 end
 
--- Extracts version string from fxmanifest.lua content (looks for version = 'x.y.z' or version = "x.y.z")
 local function parseVersionFromManifestText(content)
     if type(content) ~= 'string' or content == '' then
         return nil
     end
+
     local version = content:match("%f[%w_]version%f[^%w_]%s*'([^']+)'")
     if not version then
         version = content:match('%f[%w_]version%f[^%w_]%s*"([^"]+)"')
     end
+
     version = trim(version)
     if version == '' then
         return nil
     end
+
     return version
 end
 
--- Gets the local version from resource metadata or fxmanifest.lua
 local function getLocalVersion()
     local localMetadataVersion = trim(GetResourceMetadata(RESOURCE_NAME, 'version', 0) or '')
     if localMetadataVersion ~= '' then
-        return localMetadataVersion
+        return localMetadataVersion, 'metadata'
     end
+
     local manifest = LoadResourceFile(RESOURCE_NAME, 'fxmanifest.lua')
-    return parseVersionFromManifestText(manifest)
+    local parsed = parseVersionFromManifestText(manifest)
+    if parsed then
+        return parsed, 'manifest'
+    end
+
+    return nil, 'missing'
 end
 
--- Fetches the remote version from GitHub raw fxmanifest.lua
 local function getRemoteVersion(config, headers)
     local rawUrl = ('https://raw.githubusercontent.com/%s/%s/%s/fxmanifest.lua'):format(
         config.repo,
@@ -97,20 +110,29 @@ local function getRemoteVersion(config, headers)
         config.path
     )
 
-    local response = httpRequest(rawUrl, headers, config.timeoutMs)
-    if not response or response.status ~= 200 then
-        return nil
+    local response, requestError = httpRequest(rawUrl, headers, config.timeoutMs)
+    if not response then
+        return nil, nil, requestError
     end
 
-    return parseVersionFromManifestText(response.body)
+    if response.status ~= 200 then
+        return nil, rawUrl, ('Remote manifest fetch failed with status %s'):format(tostring(response.status))
+    end
+
+    local parsed = parseVersionFromManifestText(response.body)
+    if not parsed then
+        return nil, rawUrl, 'Remote fxmanifest.lua has no parseable version field.'
+    end
+
+    return parsed, nil
 end
 
--- Parses a version string into numeric segments (e.g., '1.2.3' -> {1, 2, 3})
 local function parseVersionSegments(version)
     local cleaned = trim(version)
     if cleaned == '' then
         return nil
     end
+
     local segments = {}
     for token in cleaned:gmatch('[^%.]+') do
         local numeric = token:match('^(%d+)')
@@ -119,13 +141,14 @@ local function parseVersionSegments(version)
         end
         segments[#segments + 1] = tonumber(numeric) or 0
     end
+
     if #segments == 0 then
         return nil
     end
+
     return segments
 end
 
--- Compares two version strings to determine if remote is newer than local
 local function isRemoteVersionNewer(localVersion, remoteVersion)
     local localSegments = parseVersionSegments(localVersion)
     local remoteSegments = parseVersionSegments(remoteVersion)
@@ -144,10 +167,10 @@ local function isRemoteVersionNewer(localVersion, remoteVersion)
             return false
         end
     end
+
     return false
 end
 
--- Performs the actual update check: gets local and remote versions, logs if debug enabled, prints update available message
 local function performUpdateCheck()
     local config = getCheckerConfig()
     local headers = buildHttpHeaders(config)
@@ -171,19 +194,29 @@ local function performUpdateCheck()
     return true
 end
 
--- Registers the /ccamupdatecheck command to manually trigger an update check
-RegisterCommand('ccamupdatecheck', function(source)
-    local numericSource = tonumber(source) or 0
-    if numericSource == 0 then
-        performUpdateCheck()
+local function hasStartupCheckAlreadyRun()
+    if type(GlobalState) ~= 'table' then
+        return false
     end
-end, false)
+    return GlobalState[STARTUP_CHECK_STATE_KEY] == true
+end
+
+local function markStartupCheckAsRun()
+    if type(GlobalState) ~= 'table' then
+        return
+    end
+    GlobalState[STARTUP_CHECK_STATE_KEY] = true
+end
 
 local checkDeadline = nil
 
--- Resets the update check countdown whenever any resource starts, so the check
--- fires 20-40s after the last resource finishes loading rather than immediately.
-AddEventHandler('onResourceStart', function()
+AddEventHandler('onResourceStart', function(startedResourceName)
+    local _ = startedResourceName
+
+    if hasStartupCheckAlreadyRun() then
+        return
+    end
+
     checkDeadline = GetGameTimer() + math.random(20 * 1000, 40 * 1000)
 end)
 
@@ -191,6 +224,7 @@ CreateThread(function()
     while true do
         if checkDeadline and GetGameTimer() >= checkDeadline then
             checkDeadline = nil
+            markStartupCheckAsRun()
             performUpdateCheck()
         end
         Wait(1000)

@@ -21,3 +21,12 @@ client_scripts {
 }
 
 server_script 'server/UpdateNotifier.lua'
+
+convar_policy {
+    read = {
+        'cp_rollover_start_speed',
+        'cp_rollover_keep_speed',
+        'cp_rollover_start_rot',
+        'cp_rollover_keep_rot',
+    }
+}

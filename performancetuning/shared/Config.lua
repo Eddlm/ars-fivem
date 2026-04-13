@@ -157,11 +157,3 @@ Config.advanced = {
     },
 }
 
-Config.updateCheck = {
-    verbose = false,
-    repo = 'Eddlm/ars-fivem',
-    branch = 'main',
-    path = 'performancetuning',
-    token = '',
-    timeoutMs = 12000,
-}

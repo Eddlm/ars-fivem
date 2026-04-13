@@ -63,12 +63,4 @@ RacingSystem.Config = {
         },
     },
 
-    updateCheck = {
-        verbose = false,
-        repo = 'Eddlm/ars-fivem',
-        branch = 'main',
-        path = 'racingsystem',
-        token = '',
-        timeoutMs = 12000,
-    },
 }

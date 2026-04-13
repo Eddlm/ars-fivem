@@ -55,6 +55,8 @@ local state = {
     overspeedPowerMultiplier = 1.0,
     offroadTargetMultiplier = 1.0,
     antiBoostMultiplier = 1.0,
+    antiBoostGearGuardUntil = 0,
+    antiBoostLastGear = 0,
     lastPlanarSpeed = 0.0,
     lastStabilityVelocity = nil,
     lastStabilityForward = nil,
@@ -102,9 +104,7 @@ end
 -- General power-stack helpers
 
 -- Computes the slide multiplier from slip angle relative to the handling traction baseline.
-local function calculateSlideMultiplier(vehicle)
-    local forward = GetEntityForwardVector(vehicle)
-    local velocity = GetEntityVelocity(vehicle)
+local function calculateSlideMultiplier(vehicle, forward, velocity)
     local slipAngle, planarSpeed = CustomPhysicsUtil.getPlanarAngleDegrees(forward, velocity)
 
     if planarSpeed < (CustomPhysics.Config.slideSpeedThresholdMetersPerSecond or 3.0) then
@@ -397,6 +397,24 @@ end
 -- Stability monitor
 -- Samples forward acceleration and wheel power every tick, shows both and their disparity as a subtitle.
 
+local AntiBoost = {
+    disparityThreshold = 0.33,
+    slideAngleGuardDegrees = 10.0,
+    gearGuardMs = 500,
+    -- ceiling = (1 + disparityThreshold) - (disparityGs * gsCalibration)
+    gsCalibration = 9.81 * 2,
+    ceilingMin = -0.1,
+    dragSurfaceCeilingMin = 0.8,
+}
+
+-- Returns true when the anti-boost ceiling should be applied given the current conditions.
+local function shouldApplyAntiBoost(disparityGs, slideAngle, gear, now)
+    return disparityGs > AntiBoost.disparityThreshold
+        and gear > 1
+        and now >= state.antiBoostGearGuardUntil
+        and slideAngle <= AntiBoost.slideAngleGuardDegrees
+end
+
 function CustomPhysicsPower.sampleStability(vehicle, now)
     if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
         return
@@ -412,38 +430,48 @@ function CustomPhysicsPower.sampleStability(vehicle, now)
         return
     end
 
-    local deltaSeconds  = math.max((now - state.lastStabilitySampleAt) / 1000.0, 0.000001)
-    local lastVelocity  = state.lastStabilityVelocity or currentVelocity
+    local deltaSeconds = math.max((now - state.lastStabilitySampleAt) / 1000.0, 0.000001)
+    local lastVelocity = state.lastStabilityVelocity or currentVelocity
     -- Use the forward vector cached at the start of the interval so the projection
     -- reflects the car's heading when the velocity delta began, not where it ended up.
-    local lastForward   = state.lastStabilityForward or currentForward
+    local lastForward  = state.lastStabilityForward or currentForward
     local rawAccel = (
         ((currentVelocity.x - lastVelocity.x) * lastForward.x) +
         ((currentVelocity.y - lastVelocity.y) * lastForward.y) +
         ((currentVelocity.z - lastVelocity.z) * lastForward.z)
     ) / deltaSeconds
 
-    local wheelSnapshot = CustomPhysicsUtil.buildWheelPowerSnapshot(vehicle)
-    local measuredGs = metersPerSecondSquaredToGs(rawAccel)
-    local wheelPowerGs = wheelSnapshot.drivenWheelPower or 0.0
-    local disparityGs = measuredGs - wheelPowerGs
+    local wheelSnapshot          = CustomPhysicsUtil.buildWheelPowerSnapshot(vehicle)
+    local measuredGs             = metersPerSecondSquaredToGs(rawAccel)
+    local wheelPowerGs           = wheelSnapshot.drivenWheelPower or 0.0
+    local disparityGs            = measuredGs - wheelPowerGs
     local drivenWheelOnDragSurface = hasDrivenWheelOnDragSurface(vehicle, wheelSnapshot)
 
     state.lastMeasuredAccelerationGs   = measuredGs
     state.lastDrivenWheelPowerSampleGs = wheelPowerGs
     state.lastAccelerationExcessGs     = disparityGs
 
-    if disparityGs > 0.25 and GetVehicleCurrentGear(vehicle) > 1 then
-        local ceiling = math.max(1.25 - (disparityGs * 9.81) / 5, 0.00)
-        if drivenWheelOnDragSurface then
-            ceiling = math.max(ceiling, 0.50)
-        end
+    local currentGear = GetVehicleCurrentGear(vehicle)
+    if currentGear ~= state.antiBoostLastGear then
+        state.antiBoostLastGear       = currentGear
+        state.antiBoostGearGuardUntil = now + AntiBoost.gearGuardMs
+    end
 
+    -- Reuse the forward/velocity already read above for the slide angle check.
+    local slideAngle = select(1, CustomPhysicsUtil.getPlanarAngleDegrees(currentForward, currentVelocity))
+
+    if shouldApplyAntiBoost(disparityGs, slideAngle, currentGear, now) then
+        local ceiling = math.max(
+            (1 + AntiBoost.disparityThreshold) - (disparityGs * AntiBoost.gsCalibration),
+            AntiBoost.ceilingMin
+        )
+        if drivenWheelOnDragSurface then
+            ceiling = math.max(ceiling, AntiBoost.dragSurfaceCeilingMin)
+        end
         state.antiBoostMultiplier = ceiling
     end
-    state.lastDisparityGs = disparityGs
 
-
+    state.lastDisparityGs       = disparityGs
     state.lastStabilityVelocity = currentVelocity
     state.lastStabilityForward  = currentForward
     state.lastStabilitySampleAt = now
@@ -451,12 +479,7 @@ end
 
 -- Advances the anti-boost multiplier toward 1.0 at 1.0 per second.
 function CustomPhysicsPower.recoverAntiBoost(deltaSeconds)
-    state.antiBoostMultiplier = math.min(1.0, state.antiBoostMultiplier + deltaSeconds)
-end
-
--- Rev limiter enforcement has moved to performancetuning/nitrous.lua.
--- performancetuning owns the rev limiter state and feature; no dependency on customphysics needed.
-local function updateRpmLimiter()
+    state.antiBoostMultiplier = math.min(1.0, state.antiBoostMultiplier + (deltaSeconds*3))
 end
 
 -- Public subsystem API
@@ -464,23 +487,40 @@ end
 -- Builds the full cheat-power multiplier stack for the current update.
 local function updatePowerMultiplierStack(vehicle, now)
     local snapshot = buildVehicleUpdateSnapshot(vehicle)
-    local slideMultiplier = calculateSlideMultiplier(vehicle)
+    local forward  = GetEntityForwardVector(vehicle)
+    local velocity = GetEntityVelocity(vehicle)
+    local slideMultiplier, _ = calculateSlideMultiplier(vehicle, forward, velocity)
     local offroadMultiplier = getOffroadMultiplier(snapshot, now)
     SetVehicleCheatPowerIncrease(vehicle, slideMultiplier * offroadMultiplier * state.overspeedPowerMultiplier * state.antiBoostMultiplier)
+
+    if GetConvarInt('cPhysicsExtraPrints', 0) > 0 then
+        local atFull = state.antiBoostMultiplier >= 1.0
+        local r, g, b = 255, atFull and 255 or 0, atFull and 255 or 0
+        SetTextFont(0)
+        SetTextScale(1.2, 1.2)
+        SetTextColour(r, g, b, 255)
+        SetTextCentre(true)
+        SetTextDropshadow(50, 0, 0, 0, 255)
+        BeginTextCommandDisplayText('STRING')
+        AddTextComponentString(('%.1f'):format(state.antiBoostMultiplier))
+        EndTextCommandDisplayText(0.5, 0.333)
+    end
 end
 
 -- Runs all power-related subsystems for the current vehicle update.
 function CustomPhysicsPower.update(vehicle, now)
-    updateRpmLimiter()
     updateOverspeedPower(vehicle, GetVehicleCurrentRpm(vehicle))
     updatePowerMultiplierStack(vehicle, now)
 end
 
 function CustomPhysicsPower.getDebugSnapshot()
     return {
-        measuredAccelerationGs = state.lastMeasuredAccelerationGs or 0.0,
-        drivenWheelPowerGs = state.lastDrivenWheelPowerSampleGs or 0.0,
-        accelerationExcessGs = state.lastAccelerationExcessGs or 0.0,
+        measuredAccelerationGs  = state.lastMeasuredAccelerationGs or 0.0,
+        drivenWheelPowerGs      = state.lastDrivenWheelPowerSampleGs or 0.0,
+        accelerationExcessGs    = state.lastAccelerationExcessGs or 0.0,
+        offroadPowerMultiplier  = state.offroadPowerMultiplier or 1.0,
+        overspeedPowerMultiplier = state.overspeedPowerMultiplier or 1.0,
+        antiBoostMultiplier     = state.antiBoostMultiplier or 1.0,
     }
 end
 

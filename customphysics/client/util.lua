@@ -84,6 +84,33 @@ function CustomPhysicsUtil.getVehiclePlanarSpeed(vehicle)
     return math.sqrt((velocityX * velocityX) + (velocityY * velocityY))
 end
 
+-- Vehicle snapshot helpers
+
+-- Returns the full 3D speed of an entity as a scalar.
+function CustomPhysicsUtil.getEntitySpeed3D(vehicle)
+    return GetEntitySpeed(vehicle)
+end
+
+-- Collects the common per-frame vehicle reads used across power, wheelies, and rollover subsystems.
+function CustomPhysicsUtil.buildVehicleSnapshot(vehicle)
+    local forward  = GetEntityForwardVector(vehicle)
+    local velocity = GetEntityVelocity(vehicle)
+    local vx, vy  = velocity.x, velocity.y
+    local planarSpeed = math.sqrt((vx * vx) + (vy * vy))
+
+    return {
+        forward  = forward,
+        velocity = velocity,
+        speed    = planarSpeed,
+        speed3D  = GetEntitySpeed(vehicle),
+        gear     = GetVehicleCurrentGear(vehicle),
+        rpm      = GetVehicleCurrentRpm(vehicle),
+        inAir    = IsEntityInAir(vehicle),
+        onWheels = IsVehicleOnAllWheels(vehicle),
+        wheels   = CustomPhysicsUtil.buildWheelPowerSnapshot(vehicle),
+    }
+end
+
 -- Wheel power helpers
 
 -- Collects wheel count, per-wheel power, and total driven wheel power for one vehicle snapshot.

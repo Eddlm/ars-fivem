@@ -215,6 +215,20 @@ local HANDLING_STATE_BAG_KEY = tostring(UIConfig.handlingStateBagKey or "perform
 local SAVE_ID_STATE_BAG_KEY = tostring(UIConfig.saveIdStateBagKey or "vehiclemanager:saveId")
 local scheduleVehicleTuningAutosave
 
+AddStateBagChangeHandler(TUNE_STATE_BAG_KEY, nil, function(bagName, key, value)
+    local vehicle = getCurrentVehicle(false)
+    if not vehicle then return end
+    if GetEntityFromStateBagName(bagName) ~= vehicle then return end
+    scheduleVehicleTuningAutosave()
+end)
+
+AddStateBagChangeHandler(HANDLING_STATE_BAG_KEY, nil, function(bagName, key, value)
+    local vehicle = getCurrentVehicle(false)
+    if not vehicle then return end
+    if GetEntityFromStateBagName(bagName) ~= vehicle then return end
+    scheduleVehicleTuningAutosave()
+end)
+
 local paintCategories = {}
 for index = 1, #(AppearanceConfig.paintCategories or {}) do
     local category = (AppearanceConfig.paintCategories or {})[index]
@@ -2421,7 +2435,9 @@ vehicleMainMenu.OnMenuChanged = function(_, newmenu, forward)
     end
 end
 
-RegisterNetEvent("performancetuning:menuClosed", function()
+AddEventHandler("performancetuning:menuClosed", function()
+    scheduleVehicleTuningAutosave()
+
     if not returnToCustomizeAfterPerformanceTuningClose then
         return
     end

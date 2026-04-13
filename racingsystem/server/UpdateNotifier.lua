@@ -1,5 +1,13 @@
 local RESOURCE_NAME = GetCurrentResourceName()
-local Config = (((RacingSystem or {}).Config) or {}).updateCheck or (((RacingSystem or {}).Config) or {}).UpdateCheck or {}
+local STARTUP_CHECK_STATE_KEY = ('ars:updatecheck:startup_ran:%s'):format(RESOURCE_NAME)
+
+local CHECKER_DEFAULTS = {
+    repo = 'Eddlm/ars-fivem',
+    branch = 'main',
+    path = 'racingsystem',
+    token = '',
+    timeoutMs = 12000,
+}
 
 local function trim(value)
     local text = tostring(value or '')
@@ -8,14 +16,13 @@ end
 
 local function getCheckerConfig()
     return {
-        repo = tostring(Config.repo or 'Eddlm/ars-fivem'),
-        branch = tostring(Config.branch or 'main'),
-        path = tostring(Config.path or 'racingsystem'),
-        token = trim(Config.token or ''),
-        timeoutMs = math.max(1000, math.floor(tonumber(Config.timeoutMs) or 12000)),
+        repo = tostring(CHECKER_DEFAULTS.repo),
+        branch = tostring(CHECKER_DEFAULTS.branch),
+        path = tostring(CHECKER_DEFAULTS.path),
+        token = trim(CHECKER_DEFAULTS.token),
+        timeoutMs = math.max(1000, math.floor(tonumber(CHECKER_DEFAULTS.timeoutMs) or 12000)),
     }
 end
-
 
 local function buildHttpHeaders(config)
     local headers = {
@@ -187,16 +194,29 @@ local function performUpdateCheck()
     return true
 end
 
-RegisterCommand('rsupdatecheck', function(source)
-    local numericSource = tonumber(source) or 0
-    if numericSource == 0 then
-        performUpdateCheck()
+local function hasStartupCheckAlreadyRun()
+    if type(GlobalState) ~= 'table' then
+        return false
     end
-end, false)
+    return GlobalState[STARTUP_CHECK_STATE_KEY] == true
+end
+
+local function markStartupCheckAsRun()
+    if type(GlobalState) ~= 'table' then
+        return
+    end
+    GlobalState[STARTUP_CHECK_STATE_KEY] = true
+end
 
 local checkDeadline = nil
 
-AddEventHandler('onResourceStart', function()
+AddEventHandler('onResourceStart', function(startedResourceName)
+    local _ = startedResourceName
+
+    if hasStartupCheckAlreadyRun() then
+        return
+    end
+
     checkDeadline = GetGameTimer() + math.random(20 * 1000, 40 * 1000)
 end)
 
@@ -204,6 +224,7 @@ CreateThread(function()
     while true do
         if checkDeadline and GetGameTimer() >= checkDeadline then
             checkDeadline = nil
+            markStartupCheckAsRun()
             performUpdateCheck()
         end
         Wait(1000)
