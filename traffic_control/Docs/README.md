@@ -6,12 +6,29 @@
 
 ## Interactions
 - `racingsystem` can request temporary traffic density while race participants are active.
-- Other resources can also request/clear density through event or exports using request keys.
+- Other resources can request/clear density through server events using request names.
 
 ## How To Use
 1. Start `traffic_control`.
-2. Set startup baseline density with `setr tControlDefault <number>` (for example `0.0` or `1.0`).
-3. From client scripts, use `traffic_control:setMode` with a numeric density and a stable request key; pass `nil` to clear that request.
-4. From client scripts, use the `SetTrafficMode`, `SetTrafficDensity`, or `GetTrafficState` exports when you want a direct API instead of an event.
-5. From server scripts, use the `SetServerTrafficMode`, `SetServerTrafficDensity`, or `ClearServerTrafficRequest` exports to broadcast a keyed request to all clients.
+2. Optional baseline density: `setr tControlDefault <number>` (for example `0.0` or `1.0`).
+3. From client scripts:
+   - `TriggerServerEvent('traffic_control:requestDensity', density, reason, requestName)`
+   - Clear by sending `density = nil` with the same `requestName`.
+4. From server scripts:
+   - `TriggerEvent('traffic_control:requestDensity', density, reason, requestName)`
+   - Clear by sending `density = nil` with the same `requestName`.
+5. Request keying on server:
+   - Client-origin key: `client:<playerSource>:<requestName>`
+   - Server-origin key: `server:<requestName>` (prefix configurable).
+6. Optional request log printing:
+   - `setr tControlPrintRequests "true"`
+   - Allowed values: `true`, `false`.
+
+## Runtime Rules
+- Requests are numeric-only (numeric strings are accepted).
+- Non-numeric non-`nil` values are ignored and do not mutate existing request state.
+- `nil` clears the specified key.
+- Effective density is always the lowest active keyed request.
+- If no requests are active, `tControlDefault` is used only when numeric; otherwise, runtime is idle.
+- If `tControlPrintRequests` is `true`, request set/clear/reject activity is printed to the server console.
 

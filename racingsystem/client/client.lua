@@ -1964,7 +1964,7 @@ local function applyJoinedInstanceTrafficMode()
     if not joinedInstance then
         if currentTrafficDensity ~= nil then
             currentTrafficDensity = nil
-            TriggerEvent('traffic_control:setMode', nil, RACE_TRAFFIC_REQUEST_KEY)
+            TriggerServerEvent('traffic_control:requestDensity', nil, 'Traffic control lifted', RACE_TRAFFIC_REQUEST_KEY)
         end
         return
     end
@@ -1975,7 +1975,7 @@ local function applyJoinedInstanceTrafficMode()
     end
 
     currentTrafficDensity = targetDensity
-    TriggerEvent('traffic_control:setMode', targetDensity, RACE_TRAFFIC_REQUEST_KEY)
+    TriggerServerEvent('traffic_control:requestDensity', targetDensity, 'Traffic control for race', RACE_TRAFFIC_REQUEST_KEY)
 end
 
 local function getOwnedRaceInstance()
@@ -3181,7 +3181,7 @@ AddEventHandler('racingsystem:leaveRace', function()
     RacingSystemUtil.ClearCountdownVisual()
     RacingSystemUtil.ClearRaceLeaderboardVisual()
     currentTrafficDensity = nil
-    TriggerEvent('traffic_control:setMode', nil, RACE_TRAFFIC_REQUEST_KEY)
+    TriggerServerEvent('traffic_control:requestDensity', nil, 'racingsystem_clear', RACE_TRAFFIC_REQUEST_KEY)
 
     -- Async notify server
     TriggerServerEvent('racingsystem:leaveRace')
@@ -4045,7 +4045,7 @@ AddEventHandler('onClientResourceStop', function(resourceName)
     localEntrantIdentity.entrantId = nil
     finishCueShownByInstanceId = {}
     currentTrafficDensity = nil
-    TriggerEvent('traffic_control:setMode', nil, RACE_TRAFFIC_REQUEST_KEY)
+    TriggerServerEvent('traffic_control:requestDensity', nil, 'racingsystem_clear', RACE_TRAFFIC_REQUEST_KEY)
     clearPowerPenaltyVehicleOverride()
     clearFutureCheckpointBlips()
     clearStartLineBlip()

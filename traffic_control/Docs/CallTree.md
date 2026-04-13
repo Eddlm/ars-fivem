@@ -1,27 +1,25 @@
 # traffic_control Resource Call Tree
 
-**Purpose** – Enforce ambient traffic and population behavior using numeric density requests and a default baseline profile.
+**Purpose** – Enforce ambient traffic density using keyed numeric requests and lowest-value priority.
 
 ---
 
 ## Entry Points
 | File | Trigger | What it does |
 |---|---|---|
-| `fxmanifest.lua` | Resource load | Declares `shared/Config.lua`, `client/client.lua`, `client/traffic_task.lua`, and `server/server.lua`. |
-| `shared/Config.lua` | Shared script load | Defines `TrafficControl.Config` defaults/profiles and server tunables. |
-| `client/client.lua` | Client script load | Exposes compatibility alias `TrafficControlConfig` from `TrafficControl.Config`. |
-| `client/traffic_task.lua` | Client script load | Initializes traffic state, registers event/exports, starts enforcement threads. |
-| `server/server.lua` | Server script load | Exposes server exports that emit client requests. |
+| `fxmanifest.lua` | Resource load | Declares `shared/Config.lua`, `client/traffic_task.lua`, and `server/server.lua`. |
+| `shared/Config.lua` | Shared script load | Defines `TrafficControl.Config` server/update-check tunables. |
+| `client/traffic_task.lua` | Client script load | Maintains local keyed state and applies per-frame density natives. |
+| `server/server.lua` | Server script load | Accepts request events and routes them to client runtime via broadcast/targeted events. |
 
 ---
 
 ## Module Overview
 | Module | Responsibility |
 |---|---|
-| `shared/Config.lua` | Static config table for modes/profiles/server tunables. |
-| `client/client.lua` | Compatibility alias setup for config table access. |
-| `client/traffic_task.lua` | Request resolution, profile building, event handling, per-frame density enforcement. |
-| `server/server.lua` | Server-side request routing via exports. |
+| `shared/Config.lua` | Static config table for server prefix and update checker options. |
+| `client/traffic_task.lua` | Keyed request ingestion, lowest-request selection, default fallback resolution, per-frame density enforcement. |
+| `server/server.lua` | Server-side request routing via the `requestDensity` event (`nil` clears). |
 
 ---
 
@@ -33,40 +31,33 @@ fxmanifest.lua
 ├─ shared/Config.lua
 │   └─ TrafficControl.Config
 │
-├─ client/client.lua
-│   └─ TrafficControlConfig compatibility alias
-│
 ├─ client/traffic_task.lua
 │   ├─ RegisterNetEvent('traffic_control:setMode')
-│   │   └─ setMultiplier(...) / applyDensity(...)
-│   │       └─ updateActiveState() -> applyPersistentControls(...)
-│   ├─ exports('SetTrafficMode')
-│   ├─ exports('SetTrafficDensity')
-│   ├─ exports('GetTrafficState')
-│   ├─ AddEventHandler('populationPedCreating') -> CancelEvent() when blockPopulationPeds=true
-│   ├─ CreateThread: default mode + per-frame density natives
-│   └─ CreateThread: periodic persistent native controls
+│   │   └─ parseSetModeEventArgs(...) -> applyTrafficRequest(...)
+│   │       └─ rebuildState() [lowest request or numeric default or idle]
+│   └─ CreateThread: per-frame density natives (only when effective density is numeric)
 │
 └─ server/server.lua
-    ├─ exports('SetServerTrafficMode') -> emitTrafficRequest(...)
-    ├─ exports('SetServerTrafficDensity') -> emitTrafficRequest(...)
-    └─ exports('ClearServerTrafficRequest') -> clearTrafficRequest(...)
+    ├─ RegisterNetEvent('traffic_control:requestDensity')
+    │   └─ emitDensityRequest(...) [numeric sets, nil clears]
 ```
 
 ---
 
 ## Key Runtime Flow
-1. `traffic_task.lua` applies configured default mode (`normal` by default) on client start.
-2. Server or other resources emit mode/density requests through server exports.
-3. Client stores request by key, picks the newest active explicit request, and updates `trafficState`.
-4. If no explicit requests remain, client falls back to the configured default profile (dormant baseline).
-5. Per-frame thread applies density multipliers.
-6. 1-second thread reapplies persistent controls (boats/cops/garbage/parked count).
-7. Population ped creation can be blocked per profile.
+1. Scripts send request events to server (`traffic_control:requestDensity`).
+2. Server builds request keys and routes traffic updates:
+   - client-origin requests target only that client,
+   - server-origin requests broadcast to all clients.
+3. Client runtime stores each key with a numeric value, or clears key when `density=nil`.
+4. Client picks the lowest active keyed value as effective density.
+5. If no keys are active, client reads `tControlDefault` and uses it only if numeric.
+6. If both request set and default are invalid/empty, client stays idle.
+7. Per-frame thread applies traffic multipliers only when effective density is numeric.
 
 ---
 
 ## Accuracy Notes
 - Active execution is client-side; server acts as broadcaster/orchestrator.
-- Request ownership uses keys (resource or explicit request key) so multiple request sources can coexist.
-- Runtime currently does not emit routine console debug prints for request flow.
+- Request ownership uses keys (resource fallback or explicit request key) so multiple request sources can coexist safely.
+- Request conflict policy is deterministic: lowest numeric request always wins.

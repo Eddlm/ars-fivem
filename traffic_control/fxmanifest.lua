@@ -8,7 +8,6 @@ version '0.0.0'
 shared_script 'shared/Config.lua'
 
 client_scripts {
-    'client/client.lua',
     'client/traffic_task.lua',
 }
 
