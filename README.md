@@ -8,14 +8,14 @@
 # TL;DR
 Its a system focused on better driving and racing, that's it. It has modules focusing on each aspect:
 
-| Module | Hotkey / Command | Requirements | Docs | What it does |
+| Module | Hotkey / Command | Requirements | Readme | What it does |
 | --- | --- | --- | --- | --- |
-| `racingsystem` | `F7` (`+racemenu`) | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | [README](racingsystem/Docs/README.md) | Implements checkpoint races and a race editor to plop your checkpoints. Also loads GTAO Races. |
-| `performancetuning` | `F6` (`+ptmenu`), not bound if you got vehmanager. | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | [README](performancetuning/Docs/README.md) | A live handling editor, but this one pretends to be a tuning menu and has a PI system. |
-| `vehiclemanager` | `F6` (`+vehiclemanager_menu`) | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | [README](vehiclemanager/Docs/README.md) | QoL menu to save and load your cars. Its wired to the Performance Tuning menu too, so you don't need one hotkey for each thing. |
-| `customphysics` | See readme for behavior triggers. | None | [README](customphysics/Docs/README.md) | Proper wheelies, proper powerslides, true speeding offroad, hollywood rollovers if you screw up.  A physics pack. |
-| `customcam` | Camera toggle control (`INPUT_NEXT_CAMERA`) | None | [README](customcam/Docs/README.md) | WAY more freeform chase camera. Really lets you see the physics. |
-| `traffic_control` | Server only. `setr tControlDefault X.X` | None | [README](traffic_control/Docs/README.md) | Enforces levels of traffic, can be asked by other scripts to lower it, Racing System uses it. |
+| `racingsystem` | `F7` (`+racemenu`) | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | [README](racingsystem/README.md) | Implements checkpoint races and a race editor to plop your checkpoints. Also loads GTAO Races. |
+| `performancetuning` | `F6` (`+ptmenu`), not bound if you got vehmanager. | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | [README](performancetuning/README.md) | A live handling editor, but this one pretends to be a tuning menu and has a PI system. |
+| `vehiclemanager` | `F6` (`+vehiclemanager_menu`) | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | [README](vehiclemanager/README.md) | QoL menu to save and load your cars. Its wired to the Performance Tuning menu too, so you don't need one hotkey for each thing. |
+| `customphysics` | See readme for behavior triggers. | None | [README](customphysics/README.md) | Proper wheelies, proper powerslides, true speeding offroad, hollywood rollovers if you screw up.  A physics pack. |
+| `customcam` | Camera toggle control (`INPUT_NEXT_CAMERA`) | None | [README](customcam/README.md) | WAY more freeform chase camera. Really lets you see the physics. |
+| `traffic_control` | Server only. `setr tControlDefault X.X` | None | [README](traffic_control/README.md) | Enforces levels of traffic, can be asked by other scripts to lower it, Racing System uses it. |
 
 Shiz's complicated, ensure you check out their readmes to know what the thing actually does, and convars.
 
