@@ -1007,7 +1007,7 @@ end
 RegisterCommand('+ptmenu', function()
     PerformanceTuning.ScaleformUI.openMainMenu()
 end, false)
-local ptmenuDefaultKey = GetResourceState('vehiclemanager') == 'started' and '' or 'F5'
+local ptmenuDefaultKey = GetResourceState('vehiclemanager') == 'started' and '' or 'F6'
 if ptmenuDefaultKey == '' then
     print('[performancetuning] Vehicle Manager found, +ptmenu will not be bound to a key.')
 else

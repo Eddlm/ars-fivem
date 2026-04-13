@@ -11,12 +11,13 @@ Its a system focused on better driving and racing, that's it. It has modules foc
 | Module | Hotkey / Command | Requirements | Docs | What it does |
 | --- | --- | --- | --- | --- |
 | `racingsystem` | `F7` (`+racemenu`) | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | [README](racingsystem/Docs/README.md) | Implements checkpoint races and a race editor to plop your checkpoints. Also loads GTAO Races. |
-| `performancetuning` | `F5` (`+ptmenu`), not bound if you got vehmanager. | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | [README](performancetuning/Docs/README.md) | A live handling editor, but this one pretends to be a tuning menu and has a PI system. |
-| `vehiclemanager` | `F5` (`+vehiclemanager_menu`) | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | [README](vehiclemanager/Docs/README.md) | QoL menu to save and load your cars. Its wired to the Performance Tuning menu too, so you don't need one hotkey for each thing. |
+| `performancetuning` | `F6` (`+ptmenu`), not bound if you got vehmanager. | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | [README](performancetuning/Docs/README.md) | A live handling editor, but this one pretends to be a tuning menu and has a PI system. |
+| `vehiclemanager` | `F6` (`+vehiclemanager_menu`) | [ScaleformUI](https://github.com/manups4e/ScaleformUI/releases) | [README](vehiclemanager/Docs/README.md) | QoL menu to save and load your cars. Its wired to the Performance Tuning menu too, so you don't need one hotkey for each thing. |
 | `customphysics` | See readme for behavior triggers. | None | [README](customphysics/Docs/README.md) | Proper wheelies, proper powerslides, true speeding offroad, hollywood rollovers if you screw up.  A physics pack. |
 | `customcam` | Camera toggle control (`INPUT_NEXT_CAMERA`) | None | [README](customcam/Docs/README.md) | WAY more freeform chase camera. Really lets you see the physics. |
 | `traffic_control` | Server only. `setr tControlDefault X.X` | None | [README](traffic_control/Docs/README.md) | Enforces levels of traffic, can be asked by other scripts to lower it, Racing System uses it. |
 
+Shiz's complicated, ensure you check out their readmes to know what the thing actually does, and convars.
 
 
 ### Interfunctionality
@@ -24,14 +25,13 @@ Its a system focused on better driving and racing, that's it. It has modules foc
 | Resource | Benefits from |  Behavior |
 | --- | --- | --- |
 | `racingsystem` | `performancetunint` | PI maximum option repects PT instead of vanilla stats. |
-| `performancetuning`| `vehiclemanager`,`customphysics` | Can be opened through `vehiclemanager` instead. Needs `customphysics` to apply Nitro |
+| `performancetuning`| `vehiclemanager`,`customphysics` | Can be opened through `vehiclemanager` instead and will unbind its hotkey if found.|
 | `vehiclemanager` |`performancetuning`| Saved cars with it retain `performancetuning` tweaks. |
-| `customcam` | |None. |
-| `customphysics`  | `performancetuning`| Reads `performancetuning` state for rev limiter and top-speed baseline when available |
+| `customcam` | |None yet. |
+| `customphysics`  | `performancetuning`| None yet. |
 
 ###  Installation
 From releases, drop the [ars-fivem] folder in `server-data\resources`. 
-
 
 ### Load Order
 
@@ -39,14 +39,13 @@ From releases, drop the [ars-fivem] folder in `server-data\resources`.
 ensure ScaleformUI_Assets
 ensure ScaleformUI_Lua
 
-ensure racingsystem
-ensure performancetuning
-ensure vehiclemanager
+ensure racingsystem --requires Scaleform
+ensure performancetuning --requires Scaleform
+ensure vehiclemanager --requires Scaleform
 ensure customcam
 ensure customphysics
 ```
 
-Remember you do not need to install all, they don't require each other. You can just install racingsystem or customphysics or whatever.
 
 ### Extras
 [Proper Handling](https://github.com/Eddlm/TheNewHandlingProject) goes well with this pack and may be folded into it.
@@ -55,12 +54,9 @@ Remember you do not need to install all, they don't require each other. You can 
 
 | Github | Discord | FiveM Server |
 | --- | --- | --- |
-| Use the [issues](https://github.com/Eddlm/ars-fivem/issues) system, **NOT** pull requests. | I am available on [The Nation]() and [Vanillaworks]()#handling-help | Join [Server](https://servers.fivem.net/servers/detail/2ryx47), tour the features, complain. |
+| I prefer the [issues](https://github.com/Eddlm/ars-fivem/issues) system over pull requests. | I am available on [The Nation]() and [Vanillaworks]()#handling-help | Join the  [Dev server](https://servers.fivem.net/servers/detail/2ryx47), tour the features, complain. |
 
-
-### Focus on improvements and not new features.
-
-
+ 
 # Credits / Attributions / References
 
 | Author | Content | Link |
