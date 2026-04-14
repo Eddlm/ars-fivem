@@ -28,3 +28,10 @@ If one of those root-level files should become active, the manifest needs to be 
 
 - This resource depends only on normal FiveM/GTA handling-meta support.
 - The runtime behavior is strictly "load handling data from `data/handling_*.meta`".
+
+## Used Convars
+
+- `ars_skip_uptodate_print`
+  - Read via: `GetConvar`
+  - Effective default: `'0'`
+  - Example: `setr ars_skip_uptodate_print 1`

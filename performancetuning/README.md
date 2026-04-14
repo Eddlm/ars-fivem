@@ -40,3 +40,15 @@ This 'balance' is for allowing some fun while letting players race without spamm
 # Persistence
 
 The Vehicle Manager module is the only able to store all these upgrades for your cars. It is separate because I expect people may want to implement their own save system for their servers after this is out.
+
+## Used Convars
+
+- `ars_skip_uptodate_print`
+  - Read via: `GetConvar`
+  - Effective default: `'0'`
+  - Example: `setr ars_skip_uptodate_print 1`
+
+- `pt_engine_swaps`
+  - Read via: `GetConvar`
+  - Effective default: `''` (empty CSV)
+  - Example: `setr pt_engine_swaps "dominator,gauntlet3,comet,vagner,nero"`
