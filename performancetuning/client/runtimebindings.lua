@@ -155,6 +155,7 @@ internals.KNOWN_FIELD_TYPES = knownFieldTypes
 internals.SUSPENSION_PACKS = packDefinitions.suspension
 internals.TRANSMISSION_PACKS = packDefinitions.transmission
 internals.ENGINE_PACKS = packDefinitions.engine
+internals.getConfiguredEngineSwaps = getConfiguredEngineSwaps
 internals.ENGINE_SWAPS = getConfiguredEngineSwaps()
 internals.TIRE_COMPOUND_PACKS = packDefinitions.tires
 internals.BRAKE_PACKS = packDefinitions.brakes

@@ -1,6 +1,3 @@
-# customcam
+# Custom Cam
 
-Resource readme entrypoint for `customcam`.
-
-## Docs
-Docs staged for rebuild in stage 1. Detailed documentation content will be restored in stage 2.
+Implements a more free-form or drone style camera to follow the vehicle, with a bit extra logic to keep it useful and not just fancy.

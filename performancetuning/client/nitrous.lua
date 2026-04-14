@@ -5,6 +5,10 @@ PerformanceTuning.Nitrous = PerformanceTuning.Nitrous or {}
 
 local Nitrous = PerformanceTuning.Nitrous
 
+local NitrousVisuals = {
+    ptfxAsset = 'veh_xs_vehicle_mods',
+}
+
 local function getNitrousLevelMultiplier(nitrousLevel)
     local packs = (PerformanceTuning._internals or {}).NITROUS_PACKS or {}
     for _, pack in ipairs(packs) do
@@ -18,6 +22,32 @@ end
 
 function Nitrous.wasControlJustPressed()
     return IsControlJustPressed(0, 73) or IsControlJustPressed(1, 73) or IsControlJustPressed(2, 73)
+end
+
+local function requestNitrousPtfxAsset()
+    if HasNamedPtfxAssetLoaded(NitrousVisuals.ptfxAsset) then
+        return
+    end
+
+    RequestNamedPtfxAsset(NitrousVisuals.ptfxAsset)
+end
+
+local function showSubtitle(text, durationMs)
+    BeginTextCommandPrint('STRING')
+    AddTextComponentSubstringPlayerName(tostring(text or ''))
+    EndTextCommandPrint(math.max(0, math.floor(tonumber(durationMs) or 1000)), true)
+end
+
+local function getMaxNitrousShots(nitrousConfig)
+    return math.max(1, math.floor(tonumber((nitrousConfig or {}).shotsPerRefill) or 3))
+end
+
+local function getNitrousShotCooldownMs(nitrousConfig)
+    return math.max(0, math.floor(tonumber((nitrousConfig or {}).shotCooldownMs) or 40000))
+end
+
+local function getAvailableShots(nitrousState, maxShots)
+    return math.max(0, math.min(maxShots, math.floor(tonumber((nitrousState or {}).nitrousAvailableCharge) or maxShots)))
 end
 
 -- Shot state
@@ -82,8 +112,7 @@ end
 local function canTriggerShot(nitrousState, nitrousLevelMultiplier, now)
     return nitrousState ~= nil
         and nitrousLevelMultiplier > 0.0
-        and nitrousState.nitrousActiveUntil <= now
-        and (nitrousState.nitrousAvailableCharge or 0.0) > 0.0
+        and (tonumber(nitrousState.nitrousActiveUntil) or 0) <= now
 end
 
 function Nitrous.triggerShotIfAvailable(vehicle)
@@ -100,9 +129,24 @@ function Nitrous.triggerShotIfAvailable(vehicle)
         return
     end
 
+    local nitrousConfig = runtimeConfig.nitrous or {}
+    local maxShots = getMaxNitrousShots(nitrousConfig)
+    local availableShots = getAvailableShots(nitrousState, maxShots)
+    if availableShots <= 0 then
+        showSubtitle(('~o~No nitro shots remaining.'), 2000)
+        return
+    end
+
+    local cooldownUntil = math.max(0, math.floor(tonumber(nitrousState.nitrousCooldownUntil) or 0))
+    if now < cooldownUntil then
+        local remainingSeconds = math.max(1, math.ceil((cooldownUntil - now) / 1000.0))
+        showSubtitle(('~o~Engine is too hot.\n ~w~Wait %ss.'):format(remainingSeconds), 2000)
+        return
+    end
+
     local sliderRange = (runtimeConfig.sliderRanges or {}).nitrousShotStrength or {}
     local nitrousShotStrength = math.max(tonumber(sliderRange.min) or 1.0, tonumber(nitrousState.nitrousShotStrength) or 1.0)
-    local nitrousConfig = runtimeConfig.nitrous or {}
+    local shotCooldownMs = getNitrousShotCooldownMs(nitrousConfig)
     local nitrousPower = nitrousLevelMultiplier * nitrousShotStrength * (tonumber(nitrousConfig.nativePowerMultiplier) or 0.0)
     local nitrousDurationMs = math.max(250, math.floor((tonumber(nitrousConfig.baseDurationMs) or 4000) / (nitrousShotStrength*1.33)))
 
@@ -113,14 +157,17 @@ function Nitrous.triggerShotIfAvailable(vehicle)
         hudFill = 100.0,
         disableSound = false,
     })
-    nitrousState.nitrousAvailableCharge = 0.0
+    nitrousState.nitrousAvailableCharge = math.max(0, availableShots - 1)
     nitrousState.nitrousDurationMs = nitrousDurationMs
     nitrousState.nitrousActiveUntil = now + nitrousDurationMs
+    nitrousState.nitrousCooldownUntil = now + shotCooldownMs
     nitrousState.nitrousAvailableNotified = false
+    showSubtitle(('~b~%s~w~ shots remaining.'):format(nitrousState.nitrousAvailableCharge), 2000)
 end
 
 function Nitrous.refillAvailability(vehicle, now)
     local bindings = PerformanceTuning.ClientBindings or {}
+    local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
     if not PerformanceTuning.VehicleManager.isVehicleEntityValid(vehicle) then
         return
     end
@@ -135,12 +182,13 @@ function Nitrous.refillAvailability(vehicle, now)
         return
     end
 
-    if nitrousState.nitrousActiveUntil > now then
+    if (tonumber(nitrousState.nitrousActiveUntil) or 0) > now then
         return
     end
 
-    local hadFullCharge = (tonumber(nitrousState.nitrousAvailableCharge) or 0.0) >= 1.0
-    nitrousState.nitrousAvailableCharge = 1.0
+    local maxShots = getMaxNitrousShots((runtimeConfig or {}).nitrous or {})
+    local hadFullCharge = getAvailableShots(nitrousState, maxShots) >= maxShots
+    nitrousState.nitrousAvailableCharge = maxShots
 
     if not hadFullCharge and not nitrousState.nitrousAvailableNotified then
         nitrousState.nitrousAvailableNotified = true
@@ -183,6 +231,7 @@ CreateThread(function()
         local vehicle = vehicleManager.getCurrentVehicle and vehicleManager.getCurrentVehicle() or nil
         if vehicle then
             if Nitrous.wasControlJustPressed() then
+                requestNitrousPtfxAsset()
                 Nitrous.triggerShotIfAvailable(vehicle)
             end
             updateRevLimiter(vehicle, GetGameTimer())

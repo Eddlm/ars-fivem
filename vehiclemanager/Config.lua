@@ -76,6 +76,7 @@ VehicleManager.Config = {
         },
         TUNING_SELECTION_SCHEMA = {
             { key = "enginePack", default = "stock", parse = function(value) return type(value) == "string" and value or "stock" end },
+            { key = "engineSwapPack", default = "stock", parse = function(value) return type(value) == "string" and value or "stock" end },
             { key = "transmissionPack", default = "stock", parse = function(value) return type(value) == "string" and value or "stock" end },
             { key = "suspensionPack", default = "stock", parse = function(value) return type(value) == "string" and value or "stock" end },
             { key = "tireCompoundPack", default = "stock", parse = function(value) return type(value) == "string" and value or "stock" end },

@@ -13,6 +13,7 @@ local MENU_DESCRIPTIONS = {
     nitro = 'On-demand power boost.',
     piPanelDisplayMode = DEFAULT_MENU_DESCRIPTION,
     engine = 'Engine power and top speed.',
+    engineSwap = 'Swap baseline engine profile and audio.',
     transmission = DEFAULT_MENU_DESCRIPTION,
     tireCompoundCategory = 'pending',
     tireCompoundQuality = 'Higher quality does not let you escape from the downsides.',
@@ -89,6 +90,7 @@ end
 local function getMainMenuItemByContext(state, context)
     return ({
         engine = state.items.engine,
+        engineSwap = state.items.engineSwap,
         transmission = state.items.transmission,
         suspension = state.items.suspension,
         tireCompoundCategory = state.items.tireCompoundCategory,
@@ -147,6 +149,7 @@ local function applyDefaultListItemDescriptions()
     local listItems = {
         { item = state.items.piPanelDisplayMode, key = 'piPanelDisplayMode' },
         { item = state.items.engine, key = 'engine' },
+        { item = state.items.engineSwap, key = 'engineSwap' },
         { item = state.items.transmission, key = 'transmission' },
         { item = state.items.suspension, key = 'suspension' },
         { item = state.items.tireCompoundCategory, key = 'tireCompoundCategory' },
@@ -254,7 +257,7 @@ local function setMenuItemsEnabled(enabled, disabledDescription)
     local disabledText = tostring(disabledDescription or 'Enter the driver seat to enable tuning controls.')
     local itemOrder = {
         'openPower', 'openTires', 'openBrakes', 'openSuspension', 'openAntiRoll', 'openNitro', 'piPanelDisplayMode',
-        'engine', 'transmission', 'tireCompoundCategory', 'tireCompoundQuality', 'brakes', 'handbrakes', 'suspension',
+        'engine', 'engineSwap', 'transmission', 'tireCompoundCategory', 'tireCompoundQuality', 'brakes', 'handbrakes', 'suspension',
         'nitrous', 'nitrousShotSlider', 'steeringLockMode',
         'brakeBiasSlider', 'gripBiasSlider', 'antirollSlider', 'antirollBiasSlider', 'suspensionRaiseSlider', 'suspensionBiasSlider', 'cgOffsetSlider',
     }
@@ -717,6 +720,7 @@ function PerformanceTuning.ScaleformUI.refreshMenu()
     end
 
     local transmissionState = scaleformUI.buildListState('transmission')
+    local engineSwapState = scaleformUI.buildListState('engineSwap')
     local suspensionState = scaleformUI.buildListState('suspension')
     local tireCompoundCategoryState = scaleformUI.buildListState('tireCompoundCategory')
     local tireCompoundQualityState = scaleformUI.buildListState('tireCompoundQuality')
@@ -727,6 +731,7 @@ function PerformanceTuning.ScaleformUI.refreshMenu()
     refreshSuspensionRaiseSliderRange(engineState.vehicle)
 
     state.options.engine = engineState.context.options or {}
+    state.options.engineSwap = engineSwapState.context.options or {}
     state.options.transmission = transmissionState.context.options or {}
     state.options.suspension = suspensionState.context.options or {}
     state.options.tireCompoundCategory = tireCompoundCategoryState.context.options or {}
@@ -749,6 +754,7 @@ function PerformanceTuning.ScaleformUI.refreshMenu()
     end
 
     setListItemOptions(state.items.engine, state.options.engine, engineState.context.currentStep)
+    setListItemOptions(state.items.engineSwap, state.options.engineSwap, engineSwapState.context.currentStep)
     setListItemOptions(state.items.transmission, state.options.transmission, transmissionState.context.currentStep)
     setListItemOptions(state.items.suspension, state.options.suspension, suspensionState.context.currentStep)
     setListItemOptions(state.items.tireCompoundCategory, state.options.tireCompoundCategory, tireCompoundCategoryState.context.currentStep)
@@ -830,6 +836,7 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     state.items.openNitro = UIMenuItem.New('Nitro', getMenuDescription('nitro'))
     state.items.piPanelDisplayMode = UIMenuListItem.New('PI panel displays:', { 'PI', 'Raw numbers' }, state.piPanelDisplayModeIndex, getMenuDescription('piPanelDisplayMode'))
     state.items.engine = UIMenuListItem.New('Engine', { 'Stock' }, 1, getMenuDescription('engine'))
+    state.items.engineSwap = UIMenuListItem.New('Engine Swap', { 'Stock' }, 1, getMenuDescription('engineSwap'))
     state.items.transmission = UIMenuListItem.New('Transmission', { 'Stock' }, 1, getMenuDescription('transmission'))
     state.items.suspension = UIMenuListItem.New('Suspension', { 'Stock' }, 1, getMenuDescription('suspension'))
     state.items.tireCompoundCategory = UIMenuListItem.New('Compound', { 'Stock', 'Road', 'Mixed', 'Offroad' }, 1, getMenuDescription('tireCompoundCategory'))
@@ -857,6 +864,7 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     state.menus.main:AddItem(state.items.piPanelDisplayMode)
 
     state.menus.power:AddItem(state.items.engine)
+    state.menus.power:AddItem(state.items.engineSwap)
     state.menus.power:AddItem(state.items.transmission)
 
     state.menus.tires:AddItem(state.items.tireCompoundCategory)
@@ -951,6 +959,8 @@ function PerformanceTuning.ScaleformUI.initializeMenu()
     state.menus.power.OnListChange = function(_, item, index)
         if item == state.items.engine then
             handleMainMenuSelection('engine', index)
+        elseif item == state.items.engineSwap then
+            handleMainMenuSelection('engineSwap', index)
         elseif item == state.items.transmission then
             handleMainMenuSelection('transmission', index)
         end

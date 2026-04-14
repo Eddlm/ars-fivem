@@ -134,26 +134,15 @@ local function getPackLabel(packs, packId, fallback)
     return fallback or 'Stock'
 end
 
-local function getEngineCombinedPacks()
+local function getEngineSwapPacks()
     local internals = PerformanceTuning._internals or {}
-    local combined = {}
-    local enginePacks = internals.ENGINE_PACKS or {}
-    local engineSwaps = internals.ENGINE_SWAPS or {}
-
-    for index = 1, #enginePacks do
-        local pack = enginePacks[index]
-        if type(pack) == 'table' then
-            combined[#combined + 1] = pack
+    if type(internals.getConfiguredEngineSwaps) == 'function' then
+        local refreshed = internals.getConfiguredEngineSwaps()
+        if type(refreshed) == 'table' then
+            internals.ENGINE_SWAPS = refreshed
         end
     end
-    for index = 1, #engineSwaps do
-        local swap = engineSwaps[index]
-        if type(swap) == 'table' then
-            combined[#combined + 1] = swap
-        end
-    end
-
-    return combined
+    return internals.ENGINE_SWAPS or {}
 end
 
 local function getBaseEnginePackId()
@@ -258,20 +247,40 @@ function TuningPackManager.normalizeEnginePackId(packId)
         return basePackId
     end
 
+    local packs = PerformanceTuning._internals.ENGINE_PACKS or {}
+    for _, pack in ipairs(packs) do
+        if type(pack) == 'table' and tostring(pack.id or '') == normalized then
+            return pack.id
+        end
+    end
+
+    return basePackId
+end
+
+function TuningPackManager.normalizeEngineSwapPackId(packId)
+    local normalized = tostring(packId or getBaseEnginePackId())
+    local basePackId = getBaseEnginePackId()
+    if normalized == '' then
+        return basePackId
+    end
+
+    if normalized:lower() == 'stock' then
+        return basePackId
+    end
+
     if normalized:sub(-5):lower() == '_swap' then
         normalized = normalized:sub(1, -6)
     end
 
     local upperModel = normalized:upper()
-    local internals = PerformanceTuning._internals or {}
-    for _, swap in ipairs(internals.ENGINE_SWAPS or {}) do
+    for _, swap in ipairs(getEngineSwapPacks()) do
         local swapId = tostring((type(swap) == 'table' and swap.id) or ''):upper()
         if swapId ~= '' and swapId == upperModel then
             return swap.id
         end
     end
 
-    return normalized
+    return basePackId
 end
 
 function TuningPackManager.normalizeSuspensionPackId(packId)
@@ -299,11 +308,53 @@ function TuningPackManager.getTransmissionPackLabel(packId)
 end
 
 function TuningPackManager.buildEnginePackOptions(selectedPackId)
-    return buildPackOptions(getEngineCombinedPacks(), TuningPackManager.normalizeEnginePackId(selectedPackId))
+    return buildPackOptions(PerformanceTuning._internals.ENGINE_PACKS, TuningPackManager.normalizeEnginePackId(selectedPackId))
 end
 
 function TuningPackManager.getEnginePackLabel(packId)
-    return getPackLabel(getEngineCombinedPacks(), TuningPackManager.normalizeEnginePackId(packId), 'Stock')
+    return getPackLabel(PerformanceTuning._internals.ENGINE_PACKS, TuningPackManager.normalizeEnginePackId(packId), 'Stock')
+end
+
+function TuningPackManager.buildEngineSwapPackOptions(selectedPackId)
+    local options = {}
+    local basePackId = getBaseEnginePackId()
+    local selectedId = TuningPackManager.normalizeEngineSwapPackId(selectedPackId)
+    local baseLabel = TuningPackManager.getEnginePackLabel(basePackId)
+    options[1] = {
+        index = 1,
+        id = basePackId,
+        label = baseLabel,
+        description = 'Keeps this vehicle on its original engine and audio profile.',
+        selected = selectedId == basePackId,
+        enabled = true,
+    }
+
+    local swaps = getEngineSwapPacks()
+    for index = 1, #swaps do
+        local swap = swaps[index]
+        if type(swap) == 'table' then
+            options[#options + 1] = {
+                index = #options + 1,
+                id = swap.id,
+                label = swap.label,
+                description = swap.description,
+                selected = swap.id == selectedId,
+                enabled = swap.enabled ~= false,
+            }
+        end
+    end
+
+    return options
+end
+
+function TuningPackManager.getEngineSwapPackLabel(packId)
+    local selectedId = TuningPackManager.normalizeEngineSwapPackId(packId)
+    local basePackId = getBaseEnginePackId()
+    if selectedId == basePackId then
+        return TuningPackManager.getEnginePackLabel(basePackId)
+    end
+
+    return getPackLabel(getEngineSwapPacks(), selectedId, 'Stock')
 end
 
 function TuningPackManager.buildTireCompoundPackOptions(selectedPackId, baseTireMax)
@@ -504,6 +555,18 @@ function TuningPackManager.getContextDetails(bucket, context)
             currentStep = bucket.enginePack,
             optionType = 'pack',
             options = TuningPackManager.buildEnginePackOptions(bucket.enginePack),
+        }
+    end
+
+    if context == 'engineSwap' then
+        return {
+            key = 'engineSwap',
+            title = 'ENGINE SWAP',
+            fieldName = table.concat(internals.ENGINE_FIELDS, ', '),
+            currentValue = TuningPackManager.getEngineSwapPackLabel(bucket.engineSwapPack),
+            currentStep = bucket.engineSwapPack,
+            optionType = 'pack',
+            options = TuningPackManager.buildEngineSwapPackOptions(bucket.engineSwapPack),
         }
     end
 
@@ -1282,94 +1345,105 @@ function TuningPackManager.applyTransmissionPack(vehicle, packId, options)
     return true, selectedPack.label
 end
 
-function TuningPackManager.applyEnginePack(vehicle, packId, options)
-    options = options or {}
-    local internals = PerformanceTuning._internals
-    local refreshVehicleAfterHandlingChange = internals.refreshVehicleAfterHandlingChange
-    local vehicleManager = PerformanceTuning.VehicleManager
-    local bucket = vehicleManager.ensureTuningState(vehicle)
-    local selectedPack
-    local previousPackWasSwap = false
-    local appliedEngineBasePower = tonumber(bucket.baseEngine[internals.POWER_FIELD]) or 0.0
-    local appliedEngineBaseTopSpeed = tonumber(bucket.baseEngine[internals.TOP_SPEED_FIELD]) or 0.0
-    local normalizedPackId = TuningPackManager.normalizeEnginePackId(packId)
-    local normalizedCurrentEnginePack = TuningPackManager.normalizeEnginePackId(bucket.enginePack)
-    local engineCombinedPacks = getEngineCombinedPacks()
+local function resolveEngineStagePack(packId)
+    local normalizedId = TuningPackManager.normalizeEnginePackId(packId)
+    local packs = PerformanceTuning._internals.ENGINE_PACKS or {}
+    for _, pack in ipairs(packs) do
+        if type(pack) == 'table' and pack.id == normalizedId then
+            return pack
+        end
+    end
+
+    return nil
+end
+
+local function resolveEngineSwapPack(packId)
+    local normalizedId = TuningPackManager.normalizeEngineSwapPackId(packId)
+    local basePackId = getBaseEnginePackId()
+    if normalizedId == basePackId then
+        return nil
+    end
+
+    local swaps = getEngineSwapPacks()
+    for _, swap in ipairs(swaps) do
+        if type(swap) == 'table' and tostring(swap.id or '') == normalizedId then
+            return swap
+        end
+    end
+
+    return nil
+end
+
+local function getConfiguredEnginePowerTarget()
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
     local configuredBars = runtimeConfig.performanceModel or runtimeConfig.performanceBars or {}
     local configuredPowerBar = configuredBars.power or {}
-    local performance = internals.Performance or {}
+    local performance = (PerformanceTuning._internals or {}).Performance or {}
     local configuredPowerTarget = tonumber(configuredPowerBar.target)
         or tonumber((runtimeConfig.performanceBarFillTargets or {}).power)
         or (((performance.barSegmentCount or 20) / math.max(0.0001, tonumber(performance.powerBarScaleFactor) or 1.0)))
         or 0.60
-
-    for _, pack in ipairs(engineCombinedPacks) do
-        local resolvedSwapModel = tostring(pack.swapModel or pack.id or ''):upper()
-        local isSwapPack = resolvedSwapModel ~= '' and not isBaseEnginePackId(pack.id) and type(pack.swapModel) == 'string'
-        if pack.id == normalizedPackId then
-            selectedPack = pack
-        end
-
-        if pack.id == normalizedCurrentEnginePack and isSwapPack then
-            previousPackWasSwap = true
-        end
+    if configuredPowerTarget <= 0.0 then
+        configuredPowerTarget = 0.60
     end
 
-    if not selectedPack then
+    return configuredPowerTarget
+end
+
+local function applySelectedEngineComposition(vehicle, bucket, options)
+    options = options or {}
+    local internals = PerformanceTuning._internals
+    local stockBasePower = tonumber(bucket.baseEngine[internals.POWER_FIELD]) or 0.0
+    local stockBaseTopSpeed = tonumber(bucket.baseEngine[internals.TOP_SPEED_FIELD]) or 0.0
+    local appliedEngineBasePower = stockBasePower
+    local appliedEngineBaseTopSpeed = stockBaseTopSpeed
+    local selectedStagePack = resolveEngineStagePack(bucket.enginePack)
+    local selectedSwapPack = resolveEngineSwapPack(bucket.engineSwapPack)
+    local targetAudioName = nil
+
+    if not selectedStagePack then
         return false, 'Unknown engine pack.'
     end
 
-    if selectedPack.enabled == false then
-        return false, ('Engine pack "%s" is not available yet.'):format(selectedPack.label)
+    if selectedStagePack.enabled == false then
+        return false, ('Engine pack "%s" is not available yet.'):format(selectedStagePack.label)
     end
 
-    local swapValues = nil
-    local targetAudioName = nil
-    local selectedSwapModel = tostring(selectedPack.swapModel or selectedPack.id or ''):upper()
-    local selectedPackIsBase = isBaseEnginePackId(selectedPack.id)
-    local selectedPackIsSwap = selectedSwapModel ~= '' and not selectedPackIsBase and type(selectedPack.swapModel) == 'string'
-    if selectedPackIsSwap then
+    if selectedSwapPack and selectedSwapPack.enabled == false then
+        return false, ('Engine swap "%s" is not available yet.'):format(selectedSwapPack.label)
+    end
+
+    if selectedSwapPack then
+        local selectedSwapModel = tostring(selectedSwapPack.swapModel or selectedSwapPack.id or ''):upper()
         local resolvedSwapValues, errorMessage = TuningPackManager.resolveEngineSwapValues(selectedSwapModel)
         if not resolvedSwapValues then
             return false, errorMessage
         end
-        swapValues = resolvedSwapValues
+
+        appliedEngineBasePower = tonumber(resolvedSwapValues[internals.POWER_FIELD]) or stockBasePower
+        local swapTopSpeed = tonumber(resolvedSwapValues[internals.TOP_SPEED_FIELD])
+        if swapTopSpeed ~= nil and swapTopSpeed > 0.0 then
+            appliedEngineBaseTopSpeed = swapTopSpeed
+        elseif stockBasePower > 0.0 and appliedEngineBasePower > 0.0 then
+            appliedEngineBaseTopSpeed = stockBaseTopSpeed * (appliedEngineBasePower / stockBasePower)
+        else
+            appliedEngineBaseTopSpeed = stockBaseTopSpeed
+        end
         targetAudioName = selectedSwapModel
-    elseif previousPackWasSwap then
+    else
         targetAudioName = internals.getVehicleModelAudioName(vehicle)
     end
 
-    local stockBasePower = tonumber(bucket.baseEngine[internals.POWER_FIELD]) or 0.0
-    local stockBaseTopSpeed = tonumber(bucket.baseEngine[internals.TOP_SPEED_FIELD]) or 0.0
-    if not selectedPackIsBase then
-        if swapValues then
-            appliedEngineBasePower = tonumber(swapValues[internals.POWER_FIELD]) or stockBasePower
-            local swapTopSpeed = tonumber(swapValues[internals.TOP_SPEED_FIELD])
-            if swapTopSpeed ~= nil and swapTopSpeed > 0.0 then
-                appliedEngineBaseTopSpeed = swapTopSpeed
-            elseif stockBasePower > 0.0 and appliedEngineBasePower > 0.0 then
-                appliedEngineBaseTopSpeed = stockBaseTopSpeed * (appliedEngineBasePower / stockBasePower)
-            else
-                appliedEngineBaseTopSpeed = stockBaseTopSpeed
+    if not isBaseEnginePackId(selectedStagePack.id) then
+        local selectedLevel, maxLevel = getEngineUpgradeProgress(selectedStagePack.id)
+        local powerTarget = getConfiguredEnginePowerTarget()
+        if selectedLevel > 0 and maxLevel > 0 and appliedEngineBasePower > 0.0 then
+            local progress = selectedLevel / maxLevel
+            local stagePower = appliedEngineBasePower + (powerTarget * progress)
+            if appliedEngineBasePower > 0.0 and stagePower > 0.0 then
+                appliedEngineBaseTopSpeed = appliedEngineBaseTopSpeed * (stagePower / appliedEngineBasePower)
             end
-        else
-            local selectedLevel, maxLevel = getEngineUpgradeProgress(selectedPack.id)
-            local powerTarget = configuredPowerTarget
-            if powerTarget <= 0.0 then
-                powerTarget = 0.60
-            end
-            if selectedLevel > 0 and maxLevel > 0 and stockBasePower > 0.0 then
-                local progress = selectedLevel / maxLevel
-                appliedEngineBasePower = stockBasePower + (powerTarget * progress)
-            else
-                appliedEngineBasePower = stockBasePower
-            end
-            if stockBasePower > 0.0 and appliedEngineBasePower > 0.0 then
-                appliedEngineBaseTopSpeed = stockBaseTopSpeed * (appliedEngineBasePower / stockBasePower)
-            else
-                appliedEngineBaseTopSpeed = stockBaseTopSpeed
-            end
+            appliedEngineBasePower = stagePower
         end
     end
 
@@ -1378,24 +1452,61 @@ function TuningPackManager.applyEnginePack(vehicle, packId, options)
     end
 
     if not options.skipLog then
-        internals.logInfo(('Engine baseline composed (pack: %s): power=%.4f, topSpeed=%.4f'):format(
-            selectedPack.label,
+        local swapLabel = selectedSwapPack and selectedSwapPack.label or TuningPackManager.getEngineSwapPackLabel(getBaseEnginePackId())
+        internals.logInfo(('Engine baseline composed (stage: %s, swap: %s): power=%.4f, topSpeed=%.4f'):format(
+            selectedStagePack.label,
+            swapLabel,
             tonumber(appliedEngineBasePower) or 0.0,
             tonumber(appliedEngineBaseTopSpeed) or 0.0
         ))
     end
 
-    bucket.enginePack = TuningPackManager.normalizeEnginePackId(selectedPack.id)
     applyComposedDriveForce(vehicle, bucket, {
         skipLog = options.skipLog == true,
         engineBaselinePower = appliedEngineBasePower,
         engineBaselineTopSpeed = appliedEngineBaseTopSpeed,
     })
+
+    return true
+end
+
+function TuningPackManager.applyEnginePack(vehicle, packId, options)
+    options = options or {}
+    local internals = PerformanceTuning._internals
+    local refreshVehicleAfterHandlingChange = internals.refreshVehicleAfterHandlingChange
+    local vehicleManager = PerformanceTuning.VehicleManager
+    local bucket = vehicleManager.ensureTuningState(vehicle)
+    bucket.enginePack = TuningPackManager.normalizeEnginePackId(packId)
+    bucket.engineSwapPack = TuningPackManager.normalizeEngineSwapPackId(bucket.engineSwapPack)
+    local ok, errorMessage = applySelectedEngineComposition(vehicle, bucket, options)
+    if not ok then
+        return false, errorMessage
+    end
+
     if not options.skipRefresh then
         refreshVehicleAfterHandlingChange(vehicle)
     end
     vehicleManager.syncVehicleHandlingState(vehicle)
-    return true, selectedPack.label
+    return true, TuningPackManager.getEnginePackLabel(bucket.enginePack)
+end
+
+function TuningPackManager.applyEngineSwapPack(vehicle, packId, options)
+    options = options or {}
+    local refreshVehicleAfterHandlingChange = (PerformanceTuning._internals or {}).refreshVehicleAfterHandlingChange
+    local vehicleManager = PerformanceTuning.VehicleManager
+    local bucket = vehicleManager.ensureTuningState(vehicle)
+    bucket.enginePack = TuningPackManager.normalizeEnginePackId(bucket.enginePack)
+    bucket.engineSwapPack = TuningPackManager.normalizeEngineSwapPackId(packId)
+    local ok, errorMessage = applySelectedEngineComposition(vehicle, bucket, options)
+    if not ok then
+        return false, errorMessage
+    end
+
+    if not options.skipRefresh then
+        refreshVehicleAfterHandlingChange(vehicle)
+    end
+    vehicleManager.syncVehicleHandlingState(vehicle)
+    return true, TuningPackManager.getEngineSwapPackLabel(bucket.engineSwapPack)
 end
 
 function TuningPackManager.applyTireCompoundPack(vehicle, packId, options)
@@ -1691,6 +1802,8 @@ function TuningPackManager.applyNitrousPack(vehicle, packId, options)
     local internals = PerformanceTuning._internals
     local vehicleManager = PerformanceTuning.VehicleManager
     local bucket = vehicleManager.ensureTuningState(vehicle)
+    local nitrousConfig = internals.NitrousConfig or {}
+    local maxNitrousShots = math.max(1, math.floor(tonumber(nitrousConfig.shotsPerRefill) or 3))
     local selectedPack
 
     for _, pack in ipairs(internals.NITROUS_PACKS) do
@@ -1711,21 +1824,22 @@ function TuningPackManager.applyNitrousPack(vehicle, packId, options)
     bucket.nitrousLevel = selectedPack.id
     local selectedMultiplier = tonumber(selectedPack.powerMultiplier) or 0.0
     if selectedMultiplier <= 0.0 then
-        bucket.nitrousAvailableCharge = 0.0
+        bucket.nitrousAvailableCharge = 0
         bucket.nitrousActiveUntil = 0
+        bucket.nitrousCooldownUntil = 0
         bucket.nitrousDurationMs = internals.NitrousConfig.baseDurationMs
         bucket.nitrousAvailableNotified = true
         internals.clearCustomPhysicsNitrousShot(vehicle)
     else
         if options.preserveCharge then
-            bucket.nitrousAvailableCharge = math.min(1.0, math.max(0.0, tonumber(bucket.nitrousAvailableCharge) or 1.0))
-            bucket.nitrousAvailableNotified = bucket.nitrousAvailableCharge >= 1.0
+            bucket.nitrousAvailableCharge = math.max(0, math.min(maxNitrousShots, math.floor(tonumber(bucket.nitrousAvailableCharge) or maxNitrousShots)))
+            bucket.nitrousCooldownUntil = math.max(0, math.floor(tonumber(bucket.nitrousCooldownUntil) or 0))
+            bucket.nitrousAvailableNotified = bucket.nitrousAvailableCharge >= maxNitrousShots
         else
-            bucket.nitrousAvailableCharge = 1.0
+            bucket.nitrousAvailableCharge = maxNitrousShots
             bucket.nitrousAvailableNotified = true
-        end
-        if not options.preserveCharge then
             bucket.nitrousActiveUntil = 0
+            bucket.nitrousCooldownUntil = 0
         end
         bucket.nitrousDurationMs = math.max(250, math.floor(internals.NitrousConfig.baseDurationMs / (bucket.nitrousShotStrength or 1.0)))
     end
@@ -1749,6 +1863,7 @@ function TuningPackManager.applySynchronizedTuneState(vehicle, state, options)
 
     local bucket = PerformanceTuning.VehicleManager.ensureTuningState(vehicle)
     bucket.enginePack = TuningPackManager.normalizeEnginePackId(state.enginePack or getBaseEnginePackId())
+    bucket.engineSwapPack = TuningPackManager.normalizeEngineSwapPackId(state.engineSwapPack or getBaseEnginePackId())
     bucket.transmissionPack = state.transmissionPack or 'stock'
     bucket.suspensionPack = internals.normalizeSuspensionPackId(state.suspensionPack)
     bucket.tireCompoundCategory = TuningPackManager.normalizeTireCompoundCategory(state.tireCompoundCategory)
@@ -1810,6 +1925,7 @@ end
 
 function TuningPackManager.applyTunePackForContext(vehicle, context, packId)
     if context == 'engine' then return TuningPackManager.applyEnginePack(vehicle, packId or getBaseEnginePackId()) end
+    if context == 'engineSwap' then return TuningPackManager.applyEngineSwapPack(vehicle, packId or getBaseEnginePackId()) end
     if context == 'transmission' then return TuningPackManager.applyTransmissionPack(vehicle, packId or 'stock') end
     if context == 'suspension' then return TuningPackManager.applySuspensionPack(vehicle, packId or 'stock') end
     if context == 'tires' then return TuningPackManager.applyTireCompoundPack(vehicle, packId or 'stock') end

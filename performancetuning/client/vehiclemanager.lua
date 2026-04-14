@@ -74,9 +74,11 @@ function VehicleManager.getTuningBucket(vehicle, createIfMissing)
 
     local bucket = state.tuningStateByVehicle[key]
     if not bucket and createIfMissing then
-        local nitrousConfig = PerformanceTuning._internals.NitrousConfig
+        local nitrousConfig = PerformanceTuning._internals.NitrousConfig or {}
+        local maxNitrousShots = math.max(1, math.floor(tonumber(nitrousConfig.shotsPerRefill) or 3))
         bucket = {
             enginePack = 'stock',
+            engineSwapPack = 'stock',
             transmissionPack = 'stock',
             suspensionPack = 'stock',
             tireCompoundPack = 'stock',
@@ -86,9 +88,10 @@ function VehicleManager.getTuningBucket(vehicle, createIfMissing)
             handbrakePack = 'stock',
             nitrousLevel = 'stock',
             steeringLockMode = 'stock',
-            nitrousAvailableCharge = 1.0,
+            nitrousAvailableCharge = maxNitrousShots,
             nitrousActiveUntil = 0,
-            nitrousDurationMs = nitrousConfig.baseDurationMs,
+            nitrousCooldownUntil = 0,
+            nitrousDurationMs = math.max(250, math.floor(tonumber(nitrousConfig.baseDurationMs) or 4000)),
             nitrousShotStrength = 1.0,
             nitrousAvailableNotified = true,
             revLimiterEnabled = false,
@@ -170,6 +173,7 @@ function VehicleManager.serializeTuneState(bucket)
     local normalizeSteeringLockMode = internals.normalizeSteeringLockMode
     return {
         enginePack = bucket.enginePack or 'stock',
+        engineSwapPack = bucket.engineSwapPack or 'stock',
         transmissionPack = bucket.transmissionPack or 'stock',
         suspensionPack = (bucket.suspensionPack == 'street' and 'sport') or (bucket.suspensionPack or 'stock'),
         tireCompoundPack = bucket.tireCompoundPack or 'stock',
@@ -334,6 +338,7 @@ function VehicleManager.tuneStatesEqual(a, b)
     end
 
     if a.enginePack ~= b.enginePack
+        or (a.engineSwapPack or 'stock') ~= (b.engineSwapPack or 'stock')
         or a.transmissionPack ~= b.transmissionPack
         or a.suspensionPack ~= b.suspensionPack
         or a.tireCompoundPack ~= b.tireCompoundPack
@@ -520,6 +525,8 @@ end
 function VehicleManager.ensureTuningState(vehicle)
     local internals = PerformanceTuning._internals
     local bucket = VehicleManager.getTuningBucket(vehicle, true)
+    local nitrousConfig = internals.NitrousConfig or {}
+    local maxNitrousShots = math.max(1, math.floor(tonumber(nitrousConfig.shotsPerRefill) or 3))
     VehicleManager.trackVehicle(vehicle)
     VehicleManager.applyPersistedHandlingBaseState(vehicle, bucket)
 
@@ -537,6 +544,9 @@ function VehicleManager.ensureTuningState(vehicle)
 
     if bucket.steeringLockMode == nil then
         bucket.steeringLockMode = 'stock'
+    end
+    if bucket.engineSwapPack == nil then
+        bucket.engineSwapPack = 'stock'
     end
     if bucket.tireCompoundCategory == nil then
         bucket.tireCompoundCategory = 'stock'
@@ -616,6 +626,12 @@ function VehicleManager.ensureTuningState(vehicle)
         for _, fieldName in ipairs(internals.ANTIROLL_FIELDS) do
             bucket.baseAntiroll[fieldName] = PerformanceTuning.HandlingManager.readHandlingValue(vehicle, 'float', fieldName)
         end
+    end
+
+    bucket.nitrousAvailableCharge = math.max(0, math.min(maxNitrousShots, math.floor(tonumber(bucket.nitrousAvailableCharge) or maxNitrousShots)))
+    bucket.nitrousCooldownUntil = math.max(0, math.floor(tonumber(bucket.nitrousCooldownUntil) or 0))
+    if bucket.nitrousAvailableNotified == nil then
+        bucket.nitrousAvailableNotified = bucket.nitrousAvailableCharge >= maxNitrousShots
     end
 
     return bucket

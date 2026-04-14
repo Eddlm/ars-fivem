@@ -411,6 +411,7 @@ local function buildNativeListState(context)
         displayName = getVehicleDisplayName(vehicle),
         summary = {
             engine = PerformanceTuning.TuningPackManager.getEnginePackLabel(bucket.enginePack),
+            engineSwap = PerformanceTuning.TuningPackManager.getEngineSwapPackLabel(bucket.engineSwapPack),
             transmission = PerformanceTuning.TuningPackManager.getTransmissionPackLabel(bucket.transmissionPack),
             suspension = PerformanceTuning.TuningPackManager.getSuspensionPackLabel(bucket.suspensionPack),
             tires = ('%s / %s'):format(
@@ -466,6 +467,7 @@ local function applyNativeMenuSelection(context, index)
     local bucket = PerformanceTuning.VehicleManager.ensureTuningState(vehicle)
     local selectionByContext = {
         engine = bucket.enginePack,
+        engineSwap = bucket.engineSwapPack,
         transmission = bucket.transmissionPack,
         suspension = bucket.suspensionPack,
         tires = bucket.tireCompoundPack,

@@ -11,6 +11,8 @@ Config.sliderRanges = {
 Config.nitrous = {
     baseDurationMs = 4000,
     nativePowerMultiplier = 0.5,
+    shotsPerRefill = 3,
+    shotCooldownMs = 4000,
 }
 
 -- This piece of madness is used to scale raw stats like 

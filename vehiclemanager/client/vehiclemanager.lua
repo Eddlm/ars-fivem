@@ -213,20 +213,25 @@ local pendingOverwriteSaveId = nil
 local TUNE_STATE_BAG_KEY = tostring(UIConfig.tuneStateBagKey or "performancetuning:tuneState")
 local HANDLING_STATE_BAG_KEY = tostring(UIConfig.handlingStateBagKey or "performancetuning:handlingState")
 local SAVE_ID_STATE_BAG_KEY = tostring(UIConfig.saveIdStateBagKey or "vehiclemanager:saveId")
+local getCurrentVehicle
 local scheduleVehicleTuningAutosave
 
 AddStateBagChangeHandler(TUNE_STATE_BAG_KEY, nil, function(bagName, key, value)
     local vehicle = getCurrentVehicle(false)
     if not vehicle then return end
     if GetEntityFromStateBagName(bagName) ~= vehicle then return end
-    scheduleVehicleTuningAutosave()
+    if scheduleVehicleTuningAutosave then
+        scheduleVehicleTuningAutosave()
+    end
 end)
 
 AddStateBagChangeHandler(HANDLING_STATE_BAG_KEY, nil, function(bagName, key, value)
     local vehicle = getCurrentVehicle(false)
     if not vehicle then return end
     if GetEntityFromStateBagName(bagName) ~= vehicle then return end
-    scheduleVehicleTuningAutosave()
+    if scheduleVehicleTuningAutosave then
+        scheduleVehicleTuningAutosave()
+    end
 end)
 
 local paintCategories = {}
@@ -375,7 +380,7 @@ end
 
 wheelCategoryListItem.Items = wheelCategoryLabels
 
-local function getCurrentVehicle(requireDriver)
+getCurrentVehicle = function(requireDriver)
     local ped = PlayerPedId()
     if not DoesEntityExist(ped) then
         return nil

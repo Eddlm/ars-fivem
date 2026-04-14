@@ -89,7 +89,14 @@ end
 local function getConfiguredNitrousValue(key)
     local configuredNitrous = config.nitrous or {}
     local configuredValue = tonumber(configuredNitrous[key])
-    local fallbackValue = key == 'baseDurationMs' and 4000 or 0.5
+    local fallbackValue = 0.5
+    if key == 'baseDurationMs' then
+        fallbackValue = 4000
+    elseif key == 'shotsPerRefill' then
+        fallbackValue = 3
+    elseif key == 'shotCooldownMs' then
+        fallbackValue = 40000
+    end
 
     if configuredValue == nil then
         return fallbackValue
@@ -101,6 +108,14 @@ local function getConfiguredNitrousValue(key)
 
     if key == 'nativePowerMultiplier' then
         return math.max(0.0, configuredValue)
+    end
+
+    if key == 'shotsPerRefill' then
+        return math.max(1, math.floor(configuredValue))
+    end
+
+    if key == 'shotCooldownMs' then
+        return math.max(0, math.floor(configuredValue))
     end
 
     return configuredValue
@@ -248,6 +263,8 @@ runtimeConfig.sliderRanges.suspensionBiasFront = getConfiguredSliderRange('suspe
 runtimeConfig.sliderRanges.cgOffset = getConfiguredSliderRange('cgOffset')
 runtimeConfig.nitrous.baseDurationMs = getConfiguredNitrousValue('baseDurationMs')
 runtimeConfig.nitrous.nativePowerMultiplier = getConfiguredNitrousValue('nativePowerMultiplier')
+runtimeConfig.nitrous.shotsPerRefill = getConfiguredNitrousValue('shotsPerRefill')
+runtimeConfig.nitrous.shotCooldownMs = getConfiguredNitrousValue('shotCooldownMs')
 runtimeConfig.performancePiDistribution = getConfiguredPiDistribution()
 runtimeConfig.performancePiMultipliers = runtimeConfig.performancePiDistribution
 runtimeConfig.performanceModel = getConfiguredPerformanceBars()
