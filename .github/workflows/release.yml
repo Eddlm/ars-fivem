@@ -26,20 +26,25 @@ jobs:
               MODULE_STAGING="$STAGING/$module"
               mkdir -p "$MODULE_STAGING"
 
-              rsync -a \
-                --exclude='.git/' \
-                --exclude='.gitignore' \
-                --exclude='.gitattributes' \
-                --exclude='.luarc.json' \
-                --exclude='.claude/' \
-                --exclude='CLAUDE.md' \
-                --exclude='**/AGENTS.md' \
-                --exclude='Docs/' \
-                --exclude='calltrees/' \
-                --exclude='tools/' \
-                --exclude='race_index.json' \
-                --exclude='savedvehicles/*.json' \
-                "$module/" "$MODULE_STAGING/"
+              RSYNC_EXCLUDES=(
+                "--exclude=.git/"
+                "--exclude=.gitignore"
+                "--exclude=.gitattributes"
+                "--exclude=.luarc.json"
+                "--exclude=.claude/"
+                "--exclude=CLAUDE.md"
+                "--exclude=**/AGENTS.md"
+                "--exclude=Docs/"
+                "--exclude=calltrees/"
+                "--exclude=tools/"
+                "--exclude=savedvehicles/*.json"
+              )
+
+              if [ "$module" = "racingsystem" ]; then
+                RSYNC_EXCLUDES+=("--exclude=race_index.json")
+              fi
+
+              rsync -a "${RSYNC_EXCLUDES[@]}" "$module/" "$MODULE_STAGING/"
 
               if [ "$module" = "racingsystem" ]; then
                 mkdir -p "$MODULE_STAGING/CustomRaces"
