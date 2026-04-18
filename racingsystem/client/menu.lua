@@ -2,6 +2,23 @@
 -- Static per-state menu architecture
 -- No dynamic item mutation, no runtime adding/removing items
 
+RacingSystem = RacingSystem or {}
+RacingSystem.Menu = RacingSystem.Menu or {}
+RacingSystem.Client = RacingSystem.Client or {}
+
+RacingSystem.Client.latestSnapshot = RacingSystem.Client.latestSnapshot or {
+    definitions = {},
+    instances = {},
+    viewer = {},
+}
+RacingSystem.Client.editorState = RacingSystem.Client.editorState or {
+    active = false,
+    name = '',
+    selectedName = '',
+    checkpoints = {},
+    grabbedCheckpointIndex = nil,
+}
+
 local MenuConfig = (((RacingSystem or {}).Config or {}).advanced or {}).menu or {}
 local MENU_TITLE    = tostring(MenuConfig.title or 'Race Control')
 local MENU_SUBTITLE = tostring(MenuConfig.subtitle or '~b~RACINGSYSTEM')
@@ -41,22 +58,22 @@ local function syncMenuCurrentDescription(menu)
     end
 end
 
--- ─── Menu state (read by client.lua) ────────────────────────────────────────
+-- ─── RacingSystem.Menu state (read by client.lua) ────────────────────────────────────────
 
-raceMenuInitialized    = false
-pendingSelectRaceName  = nil
-pendingEditorRaceName  = nil
-deleteConfirmRaceName  = nil
+RacingSystem.Menu.raceMenuInitialized    = false
+RacingSystem.Menu.pendingSelectRaceName  = nil
+RacingSystem.Menu.pendingEditorRaceName  = nil
+RacingSystem.Menu.deleteConfirmRaceName  = nil
 
 -- ─── Helper: determine player's current race state ─────────────────────────────
 
 local function getMenuPlayerState()
     -- Returns: 'neutral', 'staging', 'countdown', 'racing', 'finished', or 'editing'
-    if editorState.active then
+    if type(RacingSystem.Client.editorState) == 'table' and RacingSystem.Client.editorState.active then
         return 'editing'
     end
 
-    local instance = type(getJoinedRaceInstance) == 'function' and getJoinedRaceInstance() or nil
+    local instance = type(RacingSystem.Client.getJoinedRaceInstance) == 'function' and RacingSystem.Client.getJoinedRaceInstance() or nil
     if not instance then
         return 'neutral'
     end
@@ -74,7 +91,7 @@ local function getMenuPlayerState()
     return 'neutral'
 end
 
--- ─── Shared Menu Items ────────────────────────────────────────────────────────────
+-- ─── Shared RacingSystem.Menu Items ────────────────────────────────────────────────────────────
 
 -- Reset to Checkpoint
 local resetCheckpointMenuItem = UIMenuItem.New(
@@ -114,7 +131,7 @@ local killRaceMenuItem = UIMenuItem.New(
 )
 killRaceMenuItem.Activated = function(menu)
     logMenuVerbose('Kill Race Instance activated')
-    local instance = type(getJoinedRaceInstance) == 'function' and getJoinedRaceInstance() or nil
+    local instance = RacingSystem.Client.getJoinedRaceInstance()
     if instance then
         TriggerServerEvent('racingsystem:killRace', instance.name)
     end
@@ -197,8 +214,8 @@ local joinRaceItem = UIMenuItem.New(
 activeRacesSubmenu:AddItem(joinRaceItem)
 
 activeRacesItem.Activated = function(menu)
-    local instances = type(latestSnapshot) == 'table' and type(latestSnapshot.instances) == 'table'
-        and latestSnapshot.instances or {}
+    local instances = type(RacingSystem.Client.latestSnapshot) == 'table' and type(RacingSystem.Client.latestSnapshot.instances) == 'table'
+        and RacingSystem.Client.latestSnapshot.instances or {}
 
     local raceLabels = {}
     for i, instance in ipairs(instances) do
@@ -214,8 +231,8 @@ activeRacesItem.Activated = function(menu)
 end
 
 joinRaceItem.Activated = function(menu)
-    local instances = type(latestSnapshot) == 'table' and type(latestSnapshot.instances) == 'table'
-        and latestSnapshot.instances or {}
+    local instances = type(RacingSystem.Client.latestSnapshot) == 'table' and type(RacingSystem.Client.latestSnapshot.instances) == 'table'
+        and RacingSystem.Client.latestSnapshot.instances or {}
     local selectedIndex = tonumber(activeRaceListItem:Index()) or 1
 
     logMenuVerbose(('Join activated: selectedIndex=%d, totalInstances=%d'):format(selectedIndex, #instances))
@@ -224,7 +241,7 @@ joinRaceItem.Activated = function(menu)
 
     if not selectedInstance then
         logMenuVerbose('Selected instance is nil')
-        RacingSystemUtil.NotifyPlayer('No active race selected.', true)
+        RacingSystem.Client.Util.NotifyPlayer('No active race selected.', true)
         return
     end
 
@@ -286,11 +303,11 @@ importGTAOUrlItem.Activated = function(menu)
 end
 
 hostItem.Activated = function(menu)
-    -- Refresh the race list from latestSnapshot.definitions before opening submenu
-    logMenuVerbose(('Host submenu activated, latestSnapshot type: %s'):format(type(latestSnapshot)))
+    -- Refresh the race list from RacingSystem.Client.latestSnapshot.definitions before opening submenu
+    logMenuVerbose(('Host submenu activated, RacingSystem.Client.latestSnapshot type: %s'):format(type(RacingSystem.Client.latestSnapshot)))
 
-    local definitions = type(latestSnapshot) == 'table' and type(latestSnapshot.definitions) == 'table'
-        and latestSnapshot.definitions or {}
+    local definitions = type(RacingSystem.Client.latestSnapshot) == 'table' and type(RacingSystem.Client.latestSnapshot.definitions) == 'table'
+        and RacingSystem.Client.latestSnapshot.definitions or {}
 
     logMenuVerbose(('Found %d definitions'):format(#definitions))
 
@@ -310,8 +327,8 @@ hostItem.Activated = function(menu)
     raceListItem.Items = raceLabels
 
     local selectedIndex = 1
-    if #definitions > 0 and pendingSelectRaceName and pendingSelectRaceName ~= '' then
-        local pendingNormalized = RacingSystem.NormalizeRaceName(pendingSelectRaceName)
+    if #definitions > 0 and RacingSystem.Menu.pendingSelectRaceName and RacingSystem.Menu.pendingSelectRaceName ~= '' then
+        local pendingNormalized = RacingSystem.NormalizeRaceName(RacingSystem.Menu.pendingSelectRaceName)
         for i, definition in ipairs(definitions) do
             local normalizedName = RacingSystem.NormalizeRaceName(definition.name)
             local normalizedLookupName = RacingSystem.NormalizeRaceName(definition.lookupName)
@@ -326,14 +343,14 @@ hostItem.Activated = function(menu)
     end
 
     raceListItem:Index(selectedIndex)
-    pendingSelectRaceName = nil
+    RacingSystem.Menu.pendingSelectRaceName = nil
 
     menu:SwitchTo(hostSubmenu, 1, true)
 end
 
 acceptItem.Activated = function(menu)
-    local definitions = type(latestSnapshot) == 'table' and type(latestSnapshot.definitions) == 'table'
-        and latestSnapshot.definitions or {}
+    local definitions = type(RacingSystem.Client.latestSnapshot) == 'table' and type(RacingSystem.Client.latestSnapshot.definitions) == 'table'
+        and RacingSystem.Client.latestSnapshot.definitions or {}
     local selectedIndex = tonumber(raceListItem:Index()) or 1
 
     logMenuVerbose(('Accept activated: selectedIndex=%d, totalDefinitions=%d'):format(selectedIndex, #definitions))
@@ -342,7 +359,7 @@ acceptItem.Activated = function(menu)
 
     if not selectedDefinition then
         logMenuVerbose('Selected definition is nil')
-        RacingSystemUtil.NotifyPlayer('No race selected.', true)
+        RacingSystem.Client.Util.NotifyPlayer('No race selected.', true)
         return
     end
 
@@ -468,8 +485,8 @@ local editExistingRaceItems = {}
 
 -- Populate Edit Existing submenu with indexed races
 local function refreshEditExistingRaces()
-    local definitions = type(latestSnapshot) == 'table' and type(latestSnapshot.definitions) == 'table'
-        and latestSnapshot.definitions or {}
+    local definitions = type(RacingSystem.Client.latestSnapshot) == 'table' and type(RacingSystem.Client.latestSnapshot.definitions) == 'table'
+        and RacingSystem.Client.latestSnapshot.definitions or {}
 
     -- Recreate submenu to clear old items
     editExistingSubmenu = UIMenu.New('Edit Existing', 'Select a race to edit.', MENU_X, 0, true)
@@ -511,8 +528,8 @@ local function findDefinitionByEditorRaceName(raceName)
         return nil
     end
 
-    local definitions = type(latestSnapshot) == 'table' and type(latestSnapshot.definitions) == 'table'
-        and latestSnapshot.definitions or {}
+    local definitions = type(RacingSystem.Client.latestSnapshot) == 'table' and type(RacingSystem.Client.latestSnapshot.definitions) == 'table'
+        and RacingSystem.Client.latestSnapshot.definitions or {}
 
     for _, definition in ipairs(definitions) do
         local normalizedLookupName = RacingSystem.NormalizeRaceName(definition.lookupName)
@@ -548,8 +565,8 @@ local addCheckpointMenuItem = UIMenuItem.New(
 addCheckpointMenuItem:Enabled(false)
 addCheckpointMenuItem.Activated = function(menu)
     logMenuVerbose('Add Checkpoint activated')
-    if editorSessionActive and type(addCheckpointAtPlayer) == 'function' then
-        addCheckpointAtPlayer()
+    if editorSessionActive then
+        RacingSystem.Client.addCheckpointAtPlayer()
     end
 end
 raceEditorMenu:AddItem(addCheckpointMenuItem)
@@ -584,17 +601,17 @@ saveRaceMenuItem:Enabled(false)
 saveRaceMenuItem.Activated = function(menu)
     logMenuVerbose('Save Race activated')
 
-    if not editorSessionActive or not editorState or not editorState.name or #editorState.checkpoints == 0 then
+    if not editorSessionActive or not RacingSystem.Client.editorState or not RacingSystem.Client.editorState.name or #RacingSystem.Client.editorState.checkpoints == 0 then
         logMenuVerbose('Save cancelled: session not active or no checkpoints')
         return
     end
 
-    logMenuVerbose(('Saving race "%s" with %d checkpoints'):format(editorState.name, #editorState.checkpoints))
+    logMenuVerbose(('Saving race "%s" with %d checkpoints'):format(RacingSystem.Client.editorState.name, #RacingSystem.Client.editorState.checkpoints))
 
     -- Fire the save event to the server
     TriggerServerEvent('racingsystem:saveEditorRace', {
-        name = editorState.name,
-        checkpoints = editorState.checkpoints,
+        name = RacingSystem.Client.editorState.name,
+        checkpoints = RacingSystem.Client.editorState.checkpoints,
     })
 end
 raceEditorMenu:AddItem(saveRaceMenuItem)
@@ -610,13 +627,13 @@ deleteRaceMenuItem.Activated = function(menu)
         return
     end
 
-    local raceName = editorState and editorState.name or ''
+    local raceName = RacingSystem.Client.editorState and RacingSystem.Client.editorState.name or ''
     if raceName == '' then
         return
     end
 
     -- Check if armed for deletion
-    if deleteConfirmRaceName == RacingSystem.NormalizeRaceName(raceName) then
+    if RacingSystem.Menu.deleteConfirmRaceName == RacingSystem.NormalizeRaceName(raceName) then
         -- SECOND CLICK - Execute delete
         logMenuVerbose(('Confirmed delete: %s'):format(raceName))
         local selectedDefinition = findDefinitionByEditorRaceName(raceName)
@@ -626,14 +643,14 @@ deleteRaceMenuItem.Activated = function(menu)
             sourceType = selectedDefinition and selectedDefinition.sourceType or nil,
             raceId = selectedDefinition and selectedDefinition.raceId or nil,
         })
-        deleteConfirmRaceName = nil
+        RacingSystem.Menu.deleteConfirmRaceName = nil
         deleteRaceMenuItem:Label('Delete Selected Race')
         setItemDescriptionRaw(deleteRaceMenuItem, 'Delete this race definition from disk.')
         syncMenuCurrentDescription(raceEditorMenu)
     else
         -- FIRST CLICK - Arm for deletion
         logMenuVerbose(('Armed delete confirmation for: %s'):format(raceName))
-        deleteConfirmRaceName = RacingSystem.NormalizeRaceName(raceName)
+        RacingSystem.Menu.deleteConfirmRaceName = RacingSystem.NormalizeRaceName(raceName)
         deleteRaceMenuItem:Label('Delete Selected Race (Confirm)')
         setItemDescriptionRaw(deleteRaceMenuItem, ('Press again to permanently delete "%s".'):format(raceName))
         syncMenuCurrentDescription(raceEditorMenu)
@@ -649,42 +666,15 @@ local exitEditorMenuItem = UIMenuItem.New(
 exitEditorMenuItem:Enabled(false)
 exitEditorMenuItem.Activated = function(menu)
     logMenuVerbose('Exit Editor activated')
-    if editorSessionActive and type(endEditorSession) == 'function' then
-        endEditorSession()
+    if editorSessionActive then
+        RacingSystem.Client.endEditorSession()
     end
 end
 raceEditorMenu:AddItem(exitEditorMenuItem)
 
 -- Slider change handler
-local getClosestCheckpoint
-
-raceEditorMenu.OnSliderChange = function(menu, item, index)
-    if item == checkpointWidthSlider then
-        local newRadius = CHECKPOINT_WIDTH_OPTIONS[index + 1]
-        if newRadius and editorState then
-            logMenuVerbose(('Checkpoint width changed to: %.1f'):format(newRadius))
-            editorState.defaultCheckpointRadius = newRadius
-
-            -- Apply live width to selected checkpoint (single source of truth)
-            local targetIndex = editorState.grabbedCheckpointIndex
-            if (not targetIndex) and editorState.checkpoints and #editorState.checkpoints > 0 then
-                local closest = getClosestCheckpoint()
-                targetIndex = closest and closest.index or nil
-            end
-
-            if targetIndex and editorState.checkpoints[targetIndex] then
-                editorState.checkpoints[targetIndex].radius = newRadius
-                logMenuVerbose(('Updated checkpoint %d radius to: %.1f'):format(targetIndex, newRadius))
-            end
-        end
-    end
-end
-
--- Checkbox change handler
--- ─── Grab checkpoint implementation ───────────────────────────────────────
-
-getClosestCheckpoint = function()
-    if not editorState or not editorState.checkpoints or #editorState.checkpoints == 0 then
+local function getClosestCheckpoint()
+    if not RacingSystem.Client.editorState or not RacingSystem.Client.editorState.checkpoints or #RacingSystem.Client.editorState.checkpoints == 0 then
         return nil
     end
 
@@ -694,7 +684,7 @@ getClosestCheckpoint = function()
     local closest = nil
     local closestDistance = math.huge
 
-    for i, checkpoint in ipairs(editorState.checkpoints) do
+    for i, checkpoint in ipairs(RacingSystem.Client.editorState.checkpoints) do
         local checkpointCoords = vector3(checkpoint.x, checkpoint.y, checkpoint.z)
         local distance = #(playerCoords - checkpointCoords)
 
@@ -707,19 +697,39 @@ getClosestCheckpoint = function()
     return closest
 end
 
+raceEditorMenu.OnSliderChange = function(menu, item, index)
+    if item == checkpointWidthSlider then
+        local newRadius = CHECKPOINT_WIDTH_OPTIONS[index + 1]
+        if newRadius and RacingSystem.Client.editorState then
+            logMenuVerbose(('Checkpoint width changed to: %.1f'):format(newRadius))
+            RacingSystem.Client.editorState.defaultCheckpointRadius = newRadius
+
+            -- Apply live width to selected checkpoint (single source of truth)
+            local targetIndex = RacingSystem.Client.editorState.grabbedCheckpointIndex
+            if (not targetIndex) and RacingSystem.Client.editorState.checkpoints and #RacingSystem.Client.editorState.checkpoints > 0 then
+                local closest = getClosestCheckpoint()
+                targetIndex = closest and closest.index or nil
+            end
+
+            if targetIndex and RacingSystem.Client.editorState.checkpoints[targetIndex] then
+                RacingSystem.Client.editorState.checkpoints[targetIndex].radius = newRadius
+                logMenuVerbose(('Updated checkpoint %d radius to: %.1f'):format(targetIndex, newRadius))
+            end
+        end
+    end
+end
+
+-- Checkbox change handler
+-- ─── Grab checkpoint implementation ───────────────────────────────────────
+
 local function toggleGrabCheckpoint()
     if not editorSessionActive then
         return
     end
 
-    if type(toggleGrabClosestCheckpoint) ~= 'function' then
-        logMenuVerbose('toggleGrabClosestCheckpoint is not available')
-        return
-    end
-
-    local before = editorState and editorState.grabbedCheckpointIndex or nil
-    toggleGrabClosestCheckpoint()
-    local after = editorState and editorState.grabbedCheckpointIndex or nil
+    local before = RacingSystem.Client.editorState and RacingSystem.Client.editorState.grabbedCheckpointIndex or nil
+    RacingSystem.Client.toggleGrabClosestCheckpoint()
+    local after = RacingSystem.Client.editorState and RacingSystem.Client.editorState.grabbedCheckpointIndex or nil
 
     if after then
         logMenuVerbose(('Grabbed checkpoint %d'):format(after))
@@ -735,7 +745,7 @@ CreateThread(function()
     while true do
         Wait(10)
 
-        if editorSessionActive and editorState and editorState.checkpoints and #editorState.checkpoints > 0 then
+        if editorSessionActive and RacingSystem.Client.editorState and RacingSystem.Client.editorState.checkpoints and #RacingSystem.Client.editorState.checkpoints > 0 then
             local playerPed = PlayerPedId()
             local playerCoords = GetEntityCoords(playerPed)
 
@@ -758,7 +768,7 @@ raceEditorMenu.OnCheckboxChange = function(menu, item, checked)
         logMenuVerbose(('Grab Checkpoint toggled: %s'):format(checked and 'on' or 'off'))
         toggleGrabCheckpoint()
         -- Sync checkbox with actual shared selection state
-        local isGrabbed = editorState and editorState.grabbedCheckpointIndex ~= nil
+        local isGrabbed = RacingSystem.Client.editorState and RacingSystem.Client.editorState.grabbedCheckpointIndex ~= nil
         grabCheckpointCheckbox:Checked(isGrabbed)
     end
 end
@@ -769,62 +779,68 @@ raceEditorMenuItem.Activated = function(menu)
     menu:SwitchTo(raceEditorMenu, 1, true)
 end
 
-raceMenuInitialized = true
+RacingSystem.Menu.raceMenuInitialized = true
 
 -- ─── Public interface (called by client.lua) ─────────────────────────────────
 
-function isRaceMenuVisible()
+function RacingSystem.Menu.isRaceMenuVisible()
     return neutralMenu:Visible() or stagingMenu:Visible() or racingMenu:Visible()
 end
 
-function openRaceMenu()
-    if MenuHandler:IsAnyMenuOpen() then
-        MenuHandler:CloseAndClearHistory()
-        return
-    end
-
-    local playerState = getMenuPlayerState()
-    local instance = type(getJoinedRaceInstance) == 'function' and getJoinedRaceInstance() or nil
-    local isHost = instance and instance.owner == GetPlayerServerId(PlayerId())
-
-    logMenuVerbose(('openRaceMenu: playerState=%s, isHost=%s'):format(playerState, isHost))
-
-    -- Update dynamic states before opening
-    startCountdownMenuItem:Enabled(playerState == 'staging' and isHost)
-
-    local viewerIsAdmin = type(latestSnapshot) == 'table'
-        and type(latestSnapshot.viewer) == 'table'
-        and latestSnapshot.viewer.isAdmin == true
-    killRaceMenuItem:Enabled(isHost or viewerIsAdmin)
-
-    -- Open the correct menu for current state
+local function setVisibleStateMenu(playerState)
     -- Editing state intentionally routes to neutral so Race Editor stays reachable.
     if playerState == 'neutral' or playerState == 'editing' then
         neutralMenu:Visible(true)
     elseif playerState == 'racing' then
         racingMenu:Visible(true)
     else
-        -- staging, countdown, finished all use staging menu
         stagingMenu:Visible(true)
     end
 end
 
-function refreshEditorMenu(state)
+function RacingSystem.Menu.refreshRaceMenu()
+    local playerState = getMenuPlayerState()
+    local instance = type(RacingSystem.Client.getJoinedRaceInstance) == 'function' and RacingSystem.Client.getJoinedRaceInstance() or nil
+    local isHost = instance and instance.owner == GetPlayerServerId(PlayerId())
+
+    startCountdownMenuItem:Enabled(playerState == 'staging' and isHost)
+
+    local viewerIsAdmin = type(RacingSystem.Client.latestSnapshot.viewer) == 'table'
+        and RacingSystem.Client.latestSnapshot.viewer.isAdmin == true
+    killRaceMenuItem:Enabled(isHost or viewerIsAdmin)
+
+    if RacingSystem.Menu.isRaceMenuVisible() then
+        setVisibleStateMenu(playerState)
+    end
+end
+
+function RacingSystem.Menu.openRaceMenu()
+    if MenuHandler:IsAnyMenuOpen() then
+        MenuHandler:CloseAndClearHistory()
+        return
+    end
+
+    local playerState = getMenuPlayerState()
+    logMenuVerbose(('openRaceMenu: playerState=%s'):format(playerState))
+    setVisibleStateMenu(playerState)
+end
+
+function RacingSystem.Menu.refreshEditorMenu(_)
     -- Called when editor session changes (loaded, saved, deleted)
     logMenuVerbose('refreshEditorMenu called')
     refreshEditExistingRaces()
 
-    local isGrabbed = editorState and editorState.grabbedCheckpointIndex ~= nil
+    local isGrabbed = RacingSystem.Client.editorState and RacingSystem.Client.editorState.grabbedCheckpointIndex ~= nil
     grabCheckpointCheckbox:Checked(isGrabbed)
 end
 
-function buildMenuState()
+function RacingSystem.Menu.buildMenuState()
     return {
         editorSessionActive = editorSessionActive,
     }
 end
 
-function beginEditorSessionUI()
+function RacingSystem.Menu.beginEditorSessionUI()
     -- Called when editor session is activated
     logMenuVerbose('beginEditorSessionUI: editor session started')
     editorSessionActive = true
@@ -840,11 +856,11 @@ function beginEditorSessionUI()
     deleteRaceMenuItem:Enabled(true)
 
     -- Sync checkbox state from shared selection state
-    local isGrabbed = editorState and editorState.grabbedCheckpointIndex ~= nil
+    local isGrabbed = RacingSystem.Client.editorState and RacingSystem.Client.editorState.grabbedCheckpointIndex ~= nil
     grabCheckpointCheckbox:Checked(isGrabbed)
 
     -- Clear any pending delete confirmation
-    deleteConfirmRaceName = nil
+    RacingSystem.Menu.deleteConfirmRaceName = nil
     deleteRaceMenuItem:Label('Delete Selected Race')
     setItemDescriptionRaw(deleteRaceMenuItem, 'Delete this race definition from disk.')
     syncMenuCurrentDescription(raceEditorMenu)
@@ -852,7 +868,7 @@ function beginEditorSessionUI()
     logMenuVerbose('beginEditorSessionUI: editor controls now enabled')
 end
 
-function endEditorSessionUI()
+function RacingSystem.Menu.endEditorSessionUI()
     -- Called when editor session is ended
     logMenuVerbose('endEditorSessionUI: editor session ended')
     editorSessionActive = false
@@ -867,7 +883,7 @@ function endEditorSessionUI()
     exitEditorMenuItem:Enabled(false)
 
     -- Clear any pending delete confirmation
-    deleteConfirmRaceName = nil
+    RacingSystem.Menu.deleteConfirmRaceName = nil
     deleteRaceMenuItem:Label('Delete Selected Race')
     setItemDescriptionRaw(deleteRaceMenuItem, 'Delete this race definition from disk.')
     syncMenuCurrentDescription(raceEditorMenu)
@@ -881,10 +897,11 @@ end
 -- ─── Keybind ─────────────────────────────────────────────────────────────────
 
 RegisterCommand('+racemenu', function()
-    openRaceMenu()
+    RacingSystem.Menu.openRaceMenu()
 end, false)
 
-RegisterCommand('-racemenu', function()
-end, false)
+RegisterCommand('-racemenu', function() end, false)
 
 RegisterKeyMapping('+racemenu', 'Open race control menu', 'keyboard', 'F7')
+
+

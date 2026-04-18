@@ -1,9 +1,6 @@
--- Normalizes shared/user config into the runtime config used by client modules.
+-- Normalizes shared/user (PerformanceTuning.Config or {}) into the runtime (PerformanceTuning.Config or {}) used by client modules.
 PerformanceTuning = PerformanceTuning or {}
-
-local definitions = PerformanceTuning.Definitions or {}
-local runtimeConfig = definitions.runtimeConfig or {}
-local config = PerformanceTuning.Config or {}
+local runtimeConfig = (PerformanceTuning.Definitions or {}).runtimeConfig or {}
 local INTERNAL_SLIDER_RANGES = {
     antirollBars = { min = 0.0, max = 2.0, step = 0.1 },
     brakeBiasFront = { min = 0.3, max = 0.7, step = 0.05 },
@@ -60,7 +57,7 @@ local INTERNAL_PERFORMANCE_BARS = {
 }
 
 local function getConfiguredSliderRange(key)
-    local configuredRanges = config.sliderRanges or {}
+    local configuredRanges = (PerformanceTuning.Config or {}).sliderRanges or {}
     local configured = configuredRanges[key] or {}
     local fallback = INTERNAL_SLIDER_RANGES[key] or { min = 0.0, max = 1.0, step = 0.1 }
     local minValue = tonumber(configured.min)
@@ -87,7 +84,7 @@ local function getConfiguredSliderRange(key)
 end
 
 local function getConfiguredNitrousValue(key)
-    local configuredNitrous = config.nitrous or {}
+    local configuredNitrous = (PerformanceTuning.Config or {}).nitrous or {}
     local configuredValue = tonumber(configuredNitrous[key])
     local fallbackValue = 0.5
     if key == 'baseDurationMs' then
@@ -122,7 +119,7 @@ local function getConfiguredNitrousValue(key)
 end
 
 local function getConfiguredPerformanceBarFillTargets()
-    local configuredTargets = config.performanceBarFillTargets or {}
+    local configuredTargets = (PerformanceTuning.Config or {}).performanceBarFillTargets or {}
     local defaults = INTERNAL_PERFORMANCE_BAR_FILL_TARGETS
     local targets = {
         power = tonumber(configuredTargets.power) or defaults.power,
@@ -148,7 +145,7 @@ local function getConfiguredPerformanceBarFillTargets()
 end
 
 local function getConfiguredPerformanceBars()
-    local configuredBars = config.performanceModel or config.performanceBars or {}
+    local configuredBars = (PerformanceTuning.Config or {}).performanceModel or (PerformanceTuning.Config or {}).performanceBars or {}
     local configuredPower = configuredBars.power or {}
     local configuredPowerTransmission = configuredPower.transmission or {}
     local configuredPowerNitrous = configuredPower.nitrous or {}
@@ -163,7 +160,7 @@ local function getConfiguredPerformanceBars()
         displayMode = tostring(configuredBars.displayMode or INTERNAL_PERFORMANCE_BARS.displayMode):lower(),
         power = {
             target = tonumber(configuredPower.target)
-                or tonumber((config.performanceBarFillTargets or {}).power)
+                or tonumber(((PerformanceTuning.Config or {}).performanceBarFillTargets or {}).power)
                 or INTERNAL_PERFORMANCE_BARS.power.target,
             transmission = {
                 powerBonusPerUpgrade = tonumber(configuredPowerTransmission.powerBonusPerUpgrade)
@@ -230,8 +227,8 @@ local function getConfiguredPerformanceBars()
 end
 
 local function getConfiguredPiDistribution()
-    local configuredDistribution = config.performancePiDistribution or {}
-    local legacyMultipliers = config.performancePiMultipliers or {}
+    local configuredDistribution = (PerformanceTuning.Config or {}).performancePiDistribution or {}
+    local legacyMultipliers = (PerformanceTuning.Config or {}).performancePiMultipliers or {}
     local raw = {
         power = tonumber(configuredDistribution.power),
         topSpeed = tonumber(configuredDistribution.topSpeed),
@@ -270,6 +267,8 @@ runtimeConfig.performancePiMultipliers = runtimeConfig.performancePiDistribution
 runtimeConfig.performanceModel = getConfiguredPerformanceBars()
 runtimeConfig.performanceBars = runtimeConfig.performanceModel
 runtimeConfig.performanceBarFillTargets = getConfiguredPerformanceBarFillTargets()
-runtimeConfig.performanceNearbyPanels = config.performanceNearbyPanels or {}
+runtimeConfig.performanceNearbyPanels = (PerformanceTuning.Config or {}).performanceNearbyPanels or {}
 
 PerformanceTuning.RuntimeConfig = runtimeConfig
+
+

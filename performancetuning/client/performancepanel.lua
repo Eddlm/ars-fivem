@@ -1,8 +1,6 @@
 -- Computes and draws the live performance index panel and its frame loop.
 PerformanceTuning = PerformanceTuning or {}
 PerformanceTuning.PerformancePanel = PerformanceTuning.PerformancePanel or {}
-
-local PerformancePanel = PerformanceTuning.PerformancePanel
 local PanelConfig = ((((PerformanceTuning or {}).Config or {}).advanced or {}).panel or {})
 local INTERNAL_PERFORMANCE_DEFAULTS = {
     barSegmentCount = 20,
@@ -28,7 +26,6 @@ local DEFAULT_MENU_LEFT_PX = PanelConfig.defaultMenuLeftPx or 20.0
 local DEFAULT_MENU_WIDTH_PX = PanelConfig.defaultMenuWidthPx or 431.0
 local PANEL_DRAW_REQUEST_STALE_MS = math.max(0, math.floor(PanelConfig.panelDrawRequestStaleMs or 1000))
 local MAIN_PANEL_Y_OFFSET = PanelConfig.mainPanelYOffset or -0.01
-local getPrimaryPanelPlacement
 
 local function getNitrousUpgradeLevel(bucket)
     local packs = ((PerformanceTuning.Config or {}).packDefinitions or {}).nitrous or {}
@@ -68,7 +65,7 @@ local function getNitrousPowerBonusValue(bucket, runtimeConfig, performance)
 end
 
 local function getDisplayState()
-    local state = PerformancePanel.state or {}
+    local state = PerformanceTuning.PerformancePanel.state or {}
     if type(state.panelStatesByKey) ~= 'table' then
         state.panelStatesByKey = {}
     end
@@ -106,11 +103,11 @@ local function getDisplayState()
     if type(state.keepPersonalPiPanelSources) ~= 'table' then
         state.keepPersonalPiPanelSources = {}
     end
-    PerformancePanel.state = state
+    PerformanceTuning.PerformancePanel.state = state
     return state
 end
 
-function PerformancePanel.setPanelDrawRequest(source, requestKey, vehicle, options, settings)
+function PerformanceTuning.PerformancePanel.setPanelDrawRequest(source, requestKey, vehicle, options, settings)
     local sourceId = tostring(source or 'unknown')
     local key = tostring(requestKey or 'default')
     local state = getDisplayState()
@@ -143,7 +140,7 @@ function PerformancePanel.setPanelDrawRequest(source, requestKey, vehicle, optio
     return true
 end
 
-function PerformancePanel.clearPanelDrawRequest(source, requestKey)
+function PerformanceTuning.PerformancePanel.clearPanelDrawRequest(source, requestKey)
     local sourceId = tostring(source or 'unknown')
     local key = tostring(requestKey or 'default')
     local state = getDisplayState()
@@ -238,7 +235,7 @@ local function drawPanelDrawRequests(now)
             drawOptions.stateKey = ('request:%s:%s'):format(tostring(request.source), tostring(request.key))
         end
 
-        if PerformancePanel.drawPanelInstance(request.vehicle, drawOptions) then
+        if PerformanceTuning.PerformancePanel.drawPanelInstance(request.vehicle, drawOptions) then
             drawnCount = drawnCount + 1
         end
 
@@ -248,13 +245,13 @@ local function drawPanelDrawRequests(now)
     return drawnCount
 end
 
-function PerformancePanel.setKeepPersonalPiPanelActive(source, isActive)
+function PerformanceTuning.PerformancePanel.setKeepPersonalPiPanelActive(source, isActive)
     local state = getDisplayState()
     local sourceKey = tostring(source or 'unknown')
     state.keepPersonalPiPanelSources[sourceKey] = isActive == true
 end
 
-function PerformancePanel.isKeepPersonalPiPanelActive()
+function PerformanceTuning.PerformancePanel.isKeepPersonalPiPanelActive()
     local sources = (getDisplayState() or {}).keepPersonalPiPanelSources or {}
     for _, value in pairs(sources) do
         if value == true then
@@ -374,7 +371,7 @@ local function getSharedPanelWidth()
     return SHARED_PANEL_WIDTH_UNITS
 end
 
-function PerformancePanel.resetDisplayState()
+function PerformanceTuning.PerformancePanel.resetDisplayState()
     local state = getDisplayState()
     state.visible = false
     state.panelStatesByKey = {}
@@ -397,7 +394,7 @@ local function getBrakeValueForPi(vehicle, brakeForce)
     return (tonumber(brakeForce) or 0.0) * wheelCount
 end
 
-function PerformancePanel.computeBrakeBarProgressForVehicle(vehicle, brakeForce)
+function PerformanceTuning.PerformancePanel.computeBrakeBarProgressForVehicle(vehicle, brakeForce)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
     local barFillTargets = (runtimeConfig or {}).performanceBarFillTargets or {}
     local brakeTopValueUnits = tonumber(barFillTargets.brake) or INTERNAL_PERFORMANCE_DEFAULTS.brake
@@ -849,50 +846,7 @@ local function buildPersonalPanelRequestSettings()
     }
 end
 
-local function refreshManagedPanelDrawRequests(now)
-    local state = getDisplayState()
-    local controller = state.panelController or {}
-    state.panelController = controller
-    local refreshIntervalMs = math.max(1, math.floor(tonumber(controller.refreshIntervalMs) or 300))
-    if now < (tonumber(controller.nextRefreshAt) or 0) then
-        return
-    end
-    controller.nextRefreshAt = now + refreshIntervalMs
-
-    local scaleformUIState = (((PerformanceTuning or {}).ScaleformUI or {}).state or {})
-    local anyMenuOpen = isAnyMenuOpen(scaleformUIState)
-    local compareNearbyEnabled = getPiDisplayModeIndex() == 2
-    local currentVehicle = getPersonalPanelVehicle()
-    if anyMenuOpen and not compareNearbyEnabled and PerformanceTuning.VehicleManager.isVehicleEntityValid(currentVehicle) then
-        local panelScale = SHARED_PANEL_BASE_SCALE
-        local panelHeightUnits = SHARED_PANEL_HEIGHT_UNITS * panelScale
-        local safeZone = GetSafeZoneSize()
-        local safeInset = (1.0 - safeZone) * 0.5
-        local placementLeftX, placementY = getPrimaryPanelPlacement(
-            getSharedPanelWidth(),
-            SHARED_PANEL_HEIGHT_UNITS,
-            safeInset,
-            state
-        )
-        PerformancePanel.setPanelDrawRequest(
-            'main_loop',
-            'personal',
-            currentVehicle,
-            {
-                stateKey = 'menu:current',
-                panelScale = panelScale,
-                panelHeightUnits = panelHeightUnits,
-                panelLeftX = placementLeftX,
-                panelY = placementY,
-            },
-            buildPersonalPanelRequestSettings()
-        )
-    else
-        PerformancePanel.clearPanelDrawRequest('main_loop', 'personal')
-    end
-end
-
-getPrimaryPanelPlacement = function(panelWidth, panelHeight, safeInset, displayState)
+local function getPrimaryPanelPlacement(panelWidth, panelHeight, safeInset, displayState)
     local scaleformUIState = (((PerformanceTuning or {}).ScaleformUI or {}).state or {})
     local menuOpen = isAnyMenuOpen(scaleformUIState)
     local rightDockLeftX = (1.0 - safeInset) - panelWidth - 0.01
@@ -920,6 +874,49 @@ getPrimaryPanelPlacement = function(panelWidth, panelHeight, safeInset, displayS
 
     local preferredCenterY = safeInset + (panelHeight * 0.5) + MAIN_PANEL_Y_OFFSET
     return clampPanelToSafeZone(preferredLeftX, preferredCenterY, panelWidth, panelHeight, safeInset)
+end
+
+local function refreshManagedPanelDrawRequests(now)
+    local state = getDisplayState()
+    local controller = state.panelController or {}
+    state.panelController = controller
+    local refreshIntervalMs = math.max(1, math.floor(tonumber(controller.refreshIntervalMs) or 300))
+    if now < (tonumber(controller.nextRefreshAt) or 0) then
+        return
+    end
+    controller.nextRefreshAt = now + refreshIntervalMs
+
+    local scaleformUIState = (((PerformanceTuning or {}).ScaleformUI or {}).state or {})
+    local anyMenuOpen = isAnyMenuOpen(scaleformUIState)
+    local compareNearbyEnabled = getPiDisplayModeIndex() == 2
+    local currentVehicle = getPersonalPanelVehicle()
+    if anyMenuOpen and not compareNearbyEnabled and PerformanceTuning.VehicleManager.isVehicleEntityValid(currentVehicle) then
+        local panelScale = SHARED_PANEL_BASE_SCALE
+        local panelHeightUnits = SHARED_PANEL_HEIGHT_UNITS * panelScale
+        local safeZone = GetSafeZoneSize()
+        local safeInset = (1.0 - safeZone) * 0.5
+        local placementLeftX, placementY = getPrimaryPanelPlacement(
+            getSharedPanelWidth(),
+            SHARED_PANEL_HEIGHT_UNITS,
+            safeInset,
+            state
+        )
+        PerformanceTuning.PerformancePanel.setPanelDrawRequest(
+            'main_loop',
+            'personal',
+            currentVehicle,
+            {
+                stateKey = 'menu:current',
+                panelScale = panelScale,
+                panelHeightUnits = panelHeightUnits,
+                panelLeftX = placementLeftX,
+                panelY = placementY,
+            },
+            buildPersonalPanelRequestSettings()
+        )
+    else
+        PerformanceTuning.PerformancePanel.clearPanelDrawRequest('main_loop', 'personal')
+    end
 end
 
 local function buildSharedPanelDrawOptions(panelLeftX, panelY, panelScale)
@@ -971,7 +968,7 @@ local function expandRect(leftX, rightX, topY, bottomY, paddingX, paddingY)
 end
 
 local function drawPanelInstanceInternal(vehicle, displayState, stateKey, options, runtimeConfig)
-    local panelMetrics = PerformancePanel.buildMetrics(vehicle, options)
+    local panelMetrics = PerformanceTuning.PerformancePanel.buildMetrics(vehicle, options)
     if not panelMetrics then
         return false
     end
@@ -1143,7 +1140,7 @@ local function getFlatVelTopSpeedMph(vehicle)
     return flatVel * mphFactor
 end
 
-function PerformancePanel.buildPerformanceIndex(vehicle, bucket, options)
+function PerformanceTuning.PerformancePanel.buildPerformanceIndex(vehicle, bucket, options)
     local bindings = PerformanceTuning.ClientBindings or {}
     local definitions = PerformanceTuning.Definitions or {}
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
@@ -1189,7 +1186,7 @@ function PerformancePanel.buildPerformanceIndex(vehicle, bucket, options)
         gripProgress = clampUnit(gripProgressForPi)
         currentBrakeProgress = clampUnit(brakeProgressForPi)
     else
-        currentBrakeProgress = PerformancePanel.computeBrakeBarProgressForVehicle(vehicle, brakeForce)
+        currentBrakeProgress = PerformanceTuning.PerformancePanel.computeBrakeBarProgressForVehicle(vehicle, brakeForce)
         powerProgress = scaleMetricProgress(currentPower, performance.powerBarScaleFactor, performance.barSegmentCount)
         topSpeedProgress = scaleMetricProgress(currentTopSpeed, performance.topSpeedBarScaleFactor, performance.barSegmentCount)
         local gripProgressFromMax = scaleMetricProgress(currentGrip, performance.gripBarScaleFactor, performance.barSegmentCount)
@@ -1246,7 +1243,7 @@ function PerformancePanel.buildPerformanceIndex(vehicle, bucket, options)
     }
 end
 
-function PerformancePanel.buildMetrics(vehicle, options)
+function PerformanceTuning.PerformancePanel.buildMetrics(vehicle, options)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
     local definitions = PerformanceTuning.Definitions or {}
     local bindings = PerformanceTuning.ClientBindings or {}
@@ -1259,14 +1256,14 @@ function PerformancePanel.buildMetrics(vehicle, options)
         return nil
     end
 
-    local performanceIndex = PerformancePanel.buildPerformanceIndex(vehicle, nil, options)
+    local performanceIndex = PerformanceTuning.PerformancePanel.buildPerformanceIndex(vehicle, nil, options)
     local categories = performanceIndex and performanceIndex.categories or {}
     local powerFill = (categories[1] or {}).progress or 0.0
     local speedFill = (categories[2] or {}).progress or 0.0
     local gripFill = (categories[3] or {}).progress or 0.0
     local brakeForce = GetVehicleHandlingFloat(vehicle, definitions.handlingClass, brakeFields.force) or 0.0
     local brakeValueForPi = getBrakeValueForPi(vehicle, brakeForce)
-    local brakeFill = PerformancePanel.computeBrakeBarProgressForVehicle(vehicle, brakeForce)
+    local brakeFill = PerformanceTuning.PerformancePanel.computeBrakeBarProgressForVehicle(vehicle, brakeForce)
     local piScales = getPiScales(runtimeConfig)
     local powerValue = readHandlingValue and readHandlingValue(vehicle, 'float', engineFields.power) or 0.0
     local speedValue = getFlatVelTopSpeedMph(vehicle)
@@ -1295,7 +1292,7 @@ function PerformancePanel.buildMetrics(vehicle, options)
     }
 end
 
-function PerformancePanel.drawPanelInstance(vehicle, options)
+function PerformanceTuning.PerformancePanel.drawPanelInstance(vehicle, options)
     if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
         return false
     end
@@ -1316,7 +1313,7 @@ function PerformancePanel.drawPanelInstance(vehicle, options)
     return didDraw
 end
 
-function PerformancePanel.drawPanel(vehicle, options)
+function PerformanceTuning.PerformancePanel.drawPanel(vehicle, options)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
     local state = getDisplayState()
     local scaleformUIState = (((PerformanceTuning or {}).ScaleformUI or {}).state or {})
@@ -1343,7 +1340,7 @@ function PerformancePanel.drawPanel(vehicle, options)
     local primaryMetrics = nil
     local comparisonVehicle = nil
     if validPrimaryVehicle then
-        primaryMetrics = PerformancePanel.buildMetrics(primaryVehicle)
+        primaryMetrics = PerformanceTuning.PerformancePanel.buildMetrics(primaryVehicle)
     end
 
     if validPrimaryVehicle and (not drawNearbyOnly or drawOptions.allowLastDrivenPrimary ~= false) then
@@ -1587,7 +1584,7 @@ CreateThread(function()
         if compareNearbyEnabled and anyMenuOpen then
             local currentVehicle = getPersonalPanelVehicle()
             if PerformanceTuning.VehicleManager.isVehicleEntityValid(currentVehicle) then
-                menuComparisonDrawn = PerformancePanel.drawPanel(currentVehicle, {
+                menuComparisonDrawn = PerformanceTuning.PerformancePanel.drawPanel(currentVehicle, {
                     forceWhileMenuOpen = true,
                 }) == true
             end
@@ -1595,7 +1592,7 @@ CreateThread(function()
 
         local persistentNearbyModeActive = compareNearbyEnabled and requestedPanelsDrawn == 0 and not menuComparisonDrawn and not anyMenuOpen
         if persistentNearbyModeActive then
-            PerformancePanel.drawPanel(nil, { drawNearbyOnly = true })
+            PerformanceTuning.PerformancePanel.drawPanel(nil, { drawNearbyOnly = true })
         end
 
         local externalPanelActive = (tonumber(state.externalKeepAliveUntil) or 0) > GetGameTimer()
@@ -1606,3 +1603,4 @@ CreateThread(function()
         Wait(0)
     end
 end)
+

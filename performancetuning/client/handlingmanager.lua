@@ -2,9 +2,7 @@
 PerformanceTuning = PerformanceTuning or {}
 PerformanceTuning.HandlingManager = PerformanceTuning.HandlingManager or {}
 
-local HandlingManager = PerformanceTuning.HandlingManager
-
-function HandlingManager.normalizeFieldName(fieldName)
+function PerformanceTuning.HandlingManager.normalizeFieldName(fieldName)
     local trim = PerformanceTuning._internals.trim
     local normalized = trim(fieldName)
     if normalized == '' then
@@ -14,7 +12,7 @@ function HandlingManager.normalizeFieldName(fieldName)
     return normalized
 end
 
-function HandlingManager.normalizeFieldType(fieldType, fieldName)
+function PerformanceTuning.HandlingManager.normalizeFieldType(fieldType, fieldName)
     local internals = PerformanceTuning._internals
     local trim = internals.trim
     local startsWith = internals.startsWith
@@ -47,7 +45,7 @@ function HandlingManager.normalizeFieldType(fieldType, fieldName)
     return 'float'
 end
 
-function HandlingManager.readHandlingValue(vehicle, fieldType, fieldName)
+function PerformanceTuning.HandlingManager.readHandlingValue(vehicle, fieldType, fieldName)
     local handlingClass = PerformanceTuning._internals.HANDLING_CLASS
     if fieldType == 'float' then
         return GetVehicleHandlingFloat(vehicle, handlingClass, fieldName)
@@ -64,7 +62,7 @@ function HandlingManager.readHandlingValue(vehicle, fieldType, fieldName)
     return nil
 end
 
-function HandlingManager.writeHandlingValue(vehicle, fieldType, fieldName, value)
+function PerformanceTuning.HandlingManager.writeHandlingValue(vehicle, fieldType, fieldName, value)
     local handlingClass = PerformanceTuning._internals.HANDLING_CLASS
     if fieldType == 'float' then
         SetVehicleHandlingFloat(vehicle, handlingClass, fieldName, value)
@@ -84,7 +82,7 @@ function HandlingManager.writeHandlingValue(vehicle, fieldType, fieldName, value
     return false
 end
 
-function HandlingManager.parseScalarNumber(rawValue, integerOnly)
+function PerformanceTuning.HandlingManager.parseScalarNumber(rawValue, integerOnly)
     local parsed = tonumber(rawValue)
     if not PerformanceTuning._internals.isFiniteNumber(parsed) then
         return nil
@@ -97,7 +95,7 @@ function HandlingManager.parseScalarNumber(rawValue, integerOnly)
     return parsed
 end
 
-function HandlingManager.parseVectorValue(rawValues)
+function PerformanceTuning.HandlingManager.parseVectorValue(rawValues)
     local joined = table.concat(rawValues, ' ')
     local components = {}
 
@@ -118,9 +116,9 @@ function HandlingManager.parseVectorValue(rawValues)
     return vector3(components[1], components[2], components[3])
 end
 
-function HandlingManager.parseValueForType(fieldType, rawValues)
+function PerformanceTuning.HandlingManager.parseValueForType(fieldType, rawValues)
     if fieldType == 'vector' then
-        return HandlingManager.parseVectorValue(rawValues)
+        return PerformanceTuning.HandlingManager.parseVectorValue(rawValues)
     end
 
     local rawValue = rawValues[1]
@@ -128,7 +126,7 @@ function HandlingManager.parseValueForType(fieldType, rawValues)
         return nil, 'A value is required.'
     end
 
-    local numericValue = HandlingManager.parseScalarNumber(rawValue, fieldType == 'int')
+    local numericValue = PerformanceTuning.HandlingManager.parseScalarNumber(rawValue, fieldType == 'int')
     if numericValue == nil then
         return nil, ('"%s" is not a valid %s value.'):format(tostring(rawValue), fieldType)
     end
@@ -136,7 +134,7 @@ function HandlingManager.parseValueForType(fieldType, rawValues)
     return numericValue
 end
 
-function HandlingManager.formatHandlingValue(value, fieldType)
+function PerformanceTuning.HandlingManager.formatHandlingValue(value, fieldType)
     if fieldType == 'vector' and type(value) == 'vector3' then
         return ('vector3(%.4f, %.4f, %.4f)'):format(value.x, value.y, value.z)
     end
@@ -148,7 +146,7 @@ function HandlingManager.formatHandlingValue(value, fieldType)
     return tostring(value)
 end
 
-function HandlingManager.rememberOriginalValue(vehicle, fieldName, fieldType)
+function PerformanceTuning.HandlingManager.rememberOriginalValue(vehicle, fieldName, fieldType)
     local vehicleManager = PerformanceTuning.VehicleManager
     local bucket = vehicleManager.getVehicleBucket(vehicle, true)
     if bucket[fieldName] ~= nil then
@@ -157,17 +155,17 @@ function HandlingManager.rememberOriginalValue(vehicle, fieldName, fieldType)
 
     bucket[fieldName] = {
         fieldType = fieldType,
-        value = HandlingManager.readHandlingValue(vehicle, fieldType, fieldName)
+        value = PerformanceTuning.HandlingManager.readHandlingValue(vehicle, fieldType, fieldName)
     }
 end
 
-function HandlingManager.getHandlingField(fieldName, fieldType, vehicle)
-    local resolvedFieldName, fieldNameError = HandlingManager.normalizeFieldName(fieldName)
+function PerformanceTuning.HandlingManager.getHandlingField(fieldName, fieldType, vehicle)
+    local resolvedFieldName, fieldNameError = PerformanceTuning.HandlingManager.normalizeFieldName(fieldName)
     if not resolvedFieldName then
         return nil, fieldNameError
     end
 
-    local resolvedType, typeError = HandlingManager.normalizeFieldType(fieldType, resolvedFieldName)
+    local resolvedType, typeError = PerformanceTuning.HandlingManager.normalizeFieldType(fieldType, resolvedFieldName)
     if not resolvedType then
         return nil, typeError
     end
@@ -186,17 +184,17 @@ function HandlingManager.getHandlingField(fieldName, fieldType, vehicle)
         return nil, 'Vehicle does not exist.'
     end
 
-    return HandlingManager.readHandlingValue(resolvedVehicle, resolvedType, resolvedFieldName), nil, resolvedType
+    return PerformanceTuning.HandlingManager.readHandlingValue(resolvedVehicle, resolvedType, resolvedFieldName), nil, resolvedType
 end
 
-function HandlingManager.setHandlingField(fieldName, value, fieldType, vehicle)
+function PerformanceTuning.HandlingManager.setHandlingField(fieldName, value, fieldType, vehicle)
     local internals = PerformanceTuning._internals
-    local resolvedFieldName, fieldNameError = HandlingManager.normalizeFieldName(fieldName)
+    local resolvedFieldName, fieldNameError = PerformanceTuning.HandlingManager.normalizeFieldName(fieldName)
     if not resolvedFieldName then
         return false, fieldNameError
     end
 
-    local resolvedType, typeError = HandlingManager.normalizeFieldType(fieldType, resolvedFieldName)
+    local resolvedType, typeError = PerformanceTuning.HandlingManager.normalizeFieldType(fieldType, resolvedFieldName)
     if not resolvedType then
         return false, typeError
     end
@@ -231,19 +229,19 @@ function HandlingManager.setHandlingField(fieldName, value, fieldType, vehicle)
         return false, 'Vector handling values must be a vector3.'
     end
 
-    HandlingManager.rememberOriginalValue(resolvedVehicle, resolvedFieldName, resolvedType)
-    HandlingManager.writeHandlingValue(resolvedVehicle, resolvedType, resolvedFieldName, value)
+    PerformanceTuning.HandlingManager.rememberOriginalValue(resolvedVehicle, resolvedFieldName, resolvedType)
+    PerformanceTuning.HandlingManager.writeHandlingValue(resolvedVehicle, resolvedType, resolvedFieldName, value)
 
     internals.refreshVehicleAfterHandlingChange(resolvedVehicle)
     PerformanceTuning.VehicleManager.syncVehicleHandlingState(resolvedVehicle)
 
-    local updatedValue = HandlingManager.readHandlingValue(resolvedVehicle, resolvedType, resolvedFieldName)
+    local updatedValue = PerformanceTuning.HandlingManager.readHandlingValue(resolvedVehicle, resolvedType, resolvedFieldName)
     return true, updatedValue, resolvedType
 end
 
-function HandlingManager.resetHandlingField(fieldName, vehicle)
+function PerformanceTuning.HandlingManager.resetHandlingField(fieldName, vehicle)
     local internals = PerformanceTuning._internals
-    local resolvedFieldName, fieldNameError = HandlingManager.normalizeFieldName(fieldName)
+    local resolvedFieldName, fieldNameError = PerformanceTuning.HandlingManager.normalizeFieldName(fieldName)
     if not resolvedFieldName then
         return false, fieldNameError
     end
@@ -265,17 +263,17 @@ function HandlingManager.resetHandlingField(fieldName, vehicle)
     end
 
     local originalEntry = bucket[resolvedFieldName]
-    HandlingManager.writeHandlingValue(resolvedVehicle, originalEntry.fieldType, resolvedFieldName, originalEntry.value)
+    PerformanceTuning.HandlingManager.writeHandlingValue(resolvedVehicle, originalEntry.fieldType, resolvedFieldName, originalEntry.value)
 
     if resolvedFieldName == 'fSuspensionRaise' and bucket.fSuspensionUpperLimit then
         local pairedUpperEntry = bucket.fSuspensionUpperLimit
-        HandlingManager.writeHandlingValue(resolvedVehicle, pairedUpperEntry.fieldType, 'fSuspensionUpperLimit', pairedUpperEntry.value)
+        PerformanceTuning.HandlingManager.writeHandlingValue(resolvedVehicle, pairedUpperEntry.fieldType, 'fSuspensionUpperLimit', pairedUpperEntry.value)
         bucket.fSuspensionUpperLimit = nil
     end
 
     if resolvedFieldName == 'fSuspensionRaise' and bucket.fSuspensionLowerLimit then
         local pairedLowerEntry = bucket.fSuspensionLowerLimit
-        HandlingManager.writeHandlingValue(resolvedVehicle, pairedLowerEntry.fieldType, 'fSuspensionLowerLimit', pairedLowerEntry.value)
+        PerformanceTuning.HandlingManager.writeHandlingValue(resolvedVehicle, pairedLowerEntry.fieldType, 'fSuspensionLowerLimit', pairedLowerEntry.value)
         bucket.fSuspensionLowerLimit = nil
     end
 
@@ -290,7 +288,7 @@ function HandlingManager.resetHandlingField(fieldName, vehicle)
     return true, originalEntry.value, originalEntry.fieldType
 end
 
-function HandlingManager.resetAllHandling(vehicle)
+function PerformanceTuning.HandlingManager.resetAllHandling(vehicle)
     local internals = PerformanceTuning._internals
     local resolvedVehicle = vehicle
     if not resolvedVehicle then
@@ -311,7 +309,7 @@ function HandlingManager.resetAllHandling(vehicle)
 
     local count = 0
     for trackedFieldName, entry in pairs(bucket) do
-        HandlingManager.writeHandlingValue(resolvedVehicle, entry.fieldType, trackedFieldName, entry.value)
+        PerformanceTuning.HandlingManager.writeHandlingValue(resolvedVehicle, entry.fieldType, trackedFieldName, entry.value)
         count = count + 1
     end
 
@@ -320,3 +318,4 @@ function HandlingManager.resetAllHandling(vehicle)
     vehicleManager.syncVehicleHandlingState(resolvedVehicle)
     return true, count
 end
+

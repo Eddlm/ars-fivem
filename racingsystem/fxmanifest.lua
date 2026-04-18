@@ -30,7 +30,8 @@ client_scripts {
     '@ScaleformUI_Lua/ScaleformUI.lua',
     'client/util.lua',
     'client/menu.lua',
-    'client/client.lua'
+    'client/client.lua',
+    'client/InRace.lua'
 }
 
 server_scripts {

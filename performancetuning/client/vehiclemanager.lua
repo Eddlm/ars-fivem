@@ -1,9 +1,6 @@
 -- Manages per-vehicle tuning buckets, tracking, caching, and statebag sync.
 PerformanceTuning = PerformanceTuning or {}
 PerformanceTuning.VehicleManager = PerformanceTuning.VehicleManager or {}
-
-local VehicleManager = PerformanceTuning.VehicleManager
-
 local function roundToThreeDecimals(value, fallback)
     local numeric = tonumber(value)
     if numeric == nil then
@@ -17,9 +14,9 @@ local function roundToThreeDecimals(value, fallback)
     return math.ceil((numeric * 1000.0) - 0.5) / 1000.0
 end
 
-VehicleManager.roundToThreeDecimals = roundToThreeDecimals
+PerformanceTuning.VehicleManager.roundToThreeDecimals = roundToThreeDecimals
 
-function VehicleManager.getVehicleCacheKey(vehicle)
+function PerformanceTuning.VehicleManager.getVehicleCacheKey(vehicle)
     if not vehicle or vehicle == 0 then
         return nil
     end
@@ -31,18 +28,18 @@ function VehicleManager.getVehicleCacheKey(vehicle)
     return ('ent:%s'):format(vehicle)
 end
 
-function VehicleManager.isVehicleEntityValid(vehicle)
+function PerformanceTuning.VehicleManager.isVehicleEntityValid(vehicle)
     return vehicle ~= nil and vehicle ~= 0 and DoesEntityExist(vehicle)
 end
 
-function VehicleManager.isPedDrivingVehicle(ped, vehicle)
+function PerformanceTuning.VehicleManager.isPedDrivingVehicle(ped, vehicle)
     return DoesEntityExist(ped)
-        and VehicleManager.isVehicleEntityValid(vehicle)
+        and PerformanceTuning.VehicleManager.isVehicleEntityValid(vehicle)
         and GetPedInVehicleSeat(vehicle, -1) == ped
 end
 
-function VehicleManager.getVehicleBucket(vehicle, createIfMissing)
-    local key = VehicleManager.getVehicleCacheKey(vehicle)
+function PerformanceTuning.VehicleManager.getVehicleBucket(vehicle, createIfMissing)
+    local key = PerformanceTuning.VehicleManager.getVehicleCacheKey(vehicle)
     if not key then
         return nil
     end
@@ -57,8 +54,8 @@ function VehicleManager.getVehicleBucket(vehicle, createIfMissing)
     return bucket
 end
 
-function VehicleManager.getTuningBucket(vehicle, createIfMissing)
-    local key = VehicleManager.getVehicleCacheKey(vehicle)
+function PerformanceTuning.VehicleManager.getTuningBucket(vehicle, createIfMissing)
+    local key = PerformanceTuning.VehicleManager.getVehicleCacheKey(vehicle)
     if not key then
         return nil
     end
@@ -102,8 +99,8 @@ function VehicleManager.getTuningBucket(vehicle, createIfMissing)
     return bucket
 end
 
-function VehicleManager.trackVehicle(vehicle)
-    local key = VehicleManager.getVehicleCacheKey(vehicle)
+function PerformanceTuning.VehicleManager.trackVehicle(vehicle)
+    local key = PerformanceTuning.VehicleManager.getVehicleCacheKey(vehicle)
     if not key then
         return nil
     end
@@ -120,7 +117,7 @@ function VehicleManager.trackVehicle(vehicle)
     return key
 end
 
-function VehicleManager.untrackVehicleByKey(key)
+function PerformanceTuning.VehicleManager.untrackVehicleByKey(key)
     if type(key) ~= 'string' or key == '' then
         return
     end
@@ -146,7 +143,7 @@ function VehicleManager.untrackVehicleByKey(key)
     end
 end
 
-function VehicleManager.resolveTrackedVehicleEntity(key)
+function PerformanceTuning.VehicleManager.resolveTrackedVehicleEntity(key)
     if type(key) ~= 'string' or key == '' then
         return 0
     end
@@ -163,7 +160,7 @@ function VehicleManager.resolveTrackedVehicleEntity(key)
     return id
 end
 
-function VehicleManager.serializeTuneState(bucket)
+function PerformanceTuning.VehicleManager.serializeTuneState(bucket)
     local internals = PerformanceTuning._internals
     local antirollField = internals.ANTIROLL_FORCE_FIELD
     local antirollBiasField = internals.ANTIROLL_BIAS_FRONT_FIELD
@@ -195,13 +192,13 @@ function VehicleManager.serializeTuneState(bucket)
     }
 end
 
-function VehicleManager.getLastAppliedTuneState(vehicle)
-    local key = VehicleManager.getVehicleCacheKey(vehicle)
+function PerformanceTuning.VehicleManager.getLastAppliedTuneState(vehicle)
+    local key = PerformanceTuning.VehicleManager.getVehicleCacheKey(vehicle)
     return key and PerformanceTuning._state.lastAppliedTuneStateByVehicle[key] or nil
 end
 
-function VehicleManager.setLastAppliedTuneState(vehicle, state)
-    local key = VehicleManager.getVehicleCacheKey(vehicle)
+function PerformanceTuning.VehicleManager.setLastAppliedTuneState(vehicle, state)
+    local key = PerformanceTuning.VehicleManager.getVehicleCacheKey(vehicle)
     if not key then
         return
     end
@@ -209,13 +206,13 @@ function VehicleManager.setLastAppliedTuneState(vehicle, state)
     PerformanceTuning._state.lastAppliedTuneStateByVehicle[key] = state
 end
 
-function VehicleManager.getLastAppliedPiState(vehicle)
-    local key = VehicleManager.getVehicleCacheKey(vehicle)
+function PerformanceTuning.VehicleManager.getLastAppliedPiState(vehicle)
+    local key = PerformanceTuning.VehicleManager.getVehicleCacheKey(vehicle)
     return key and PerformanceTuning._state.lastAppliedPiStateByVehicle[key] or nil
 end
 
-function VehicleManager.setLastAppliedPiState(vehicle, state)
-    local key = VehicleManager.getVehicleCacheKey(vehicle)
+function PerformanceTuning.VehicleManager.setLastAppliedPiState(vehicle, state)
+    local key = PerformanceTuning.VehicleManager.getVehicleCacheKey(vehicle)
     if not key then
         return
     end
@@ -223,13 +220,13 @@ function VehicleManager.setLastAppliedPiState(vehicle, state)
     PerformanceTuning._state.lastAppliedPiStateByVehicle[key] = state
 end
 
-function VehicleManager.getLastPiStateUpdatedAt(vehicle)
-    local key = VehicleManager.getVehicleCacheKey(vehicle)
+function PerformanceTuning.VehicleManager.getLastPiStateUpdatedAt(vehicle)
+    local key = PerformanceTuning.VehicleManager.getVehicleCacheKey(vehicle)
     return key and PerformanceTuning._state.lastPiStateUpdatedAtByVehicle[key] or nil
 end
 
-function VehicleManager.setLastPiStateUpdatedAt(vehicle, timestampMs)
-    local key = VehicleManager.getVehicleCacheKey(vehicle)
+function PerformanceTuning.VehicleManager.setLastPiStateUpdatedAt(vehicle, timestampMs)
+    local key = PerformanceTuning.VehicleManager.getVehicleCacheKey(vehicle)
     if not key then
         return
     end
@@ -237,7 +234,7 @@ function VehicleManager.setLastPiStateUpdatedAt(vehicle, timestampMs)
     PerformanceTuning._state.lastPiStateUpdatedAtByVehicle[key] = math.floor(tonumber(timestampMs) or 0)
 end
 
-function VehicleManager.piStatesEqual(a, b)
+function PerformanceTuning.VehicleManager.piStatesEqual(a, b)
     if type(a) ~= 'table' or type(b) ~= 'table' then
         return false
     end
@@ -252,8 +249,8 @@ function VehicleManager.piStatesEqual(a, b)
     return true
 end
 
-function VehicleManager.buildPiState(vehicle)
-    if not VehicleManager.isVehicleEntityValid(vehicle) then
+function PerformanceTuning.VehicleManager.buildPiState(vehicle)
+    if not PerformanceTuning.VehicleManager.isVehicleEntityValid(vehicle) then
         return nil
     end
 
@@ -274,37 +271,37 @@ function VehicleManager.buildPiState(vehicle)
     }
 end
 
-function VehicleManager.syncVehiclePiState(vehicle, ensureNetworked, forceUpdate)
-    if not VehicleManager.isVehicleEntityValid(vehicle) then
+function PerformanceTuning.VehicleManager.syncVehiclePiState(vehicle, ensureNetworked, forceUpdate)
+    if not PerformanceTuning.VehicleManager.isVehicleEntityValid(vehicle) then
         return false
     end
 
     local now = GetGameTimer()
     local updateIntervalMs = 500
     if forceUpdate ~= true then
-        local lastUpdatedAt = tonumber(VehicleManager.getLastPiStateUpdatedAt(vehicle)) or 0
+        local lastUpdatedAt = tonumber(PerformanceTuning.VehicleManager.getLastPiStateUpdatedAt(vehicle)) or 0
         if (now - lastUpdatedAt) < updateIntervalMs then
             return false
         end
     end
 
     if ensureNetworked == true then
-        if not VehicleManager.ensureVehicleNetworked(vehicle, 500) then
+        if not PerformanceTuning.VehicleManager.ensureVehicleNetworked(vehicle, 500) then
             return false
         end
     elseif not NetworkGetEntityIsNetworked(vehicle) then
         return false
     end
 
-    local piState = VehicleManager.buildPiState(vehicle)
+    local piState = PerformanceTuning.VehicleManager.buildPiState(vehicle)
     if not piState then
         return false
     end
 
-    VehicleManager.setLastPiStateUpdatedAt(vehicle, now)
+    PerformanceTuning.VehicleManager.setLastPiStateUpdatedAt(vehicle, now)
 
-    local previousState = VehicleManager.getLastAppliedPiState(vehicle)
-    if previousState and VehicleManager.piStatesEqual(previousState, piState) then
+    local previousState = PerformanceTuning.VehicleManager.getLastAppliedPiState(vehicle)
+    if previousState and PerformanceTuning.VehicleManager.piStatesEqual(previousState, piState) then
         return false
     end
 
@@ -314,11 +311,11 @@ function VehicleManager.syncVehiclePiState(vehicle, ensureNetworked, forceUpdate
     end
 
     Entity(vehicle).state:set(piStateKey, piState, true)
-    VehicleManager.setLastAppliedPiState(vehicle, piState)
+    PerformanceTuning.VehicleManager.setLastAppliedPiState(vehicle, piState)
     return true
 end
 
-function VehicleManager.tuneStatesEqual(a, b)
+function PerformanceTuning.VehicleManager.tuneStatesEqual(a, b)
     if type(a) ~= 'table' or type(b) ~= 'table' then
         return false
     end
@@ -362,7 +359,7 @@ function VehicleManager.tuneStatesEqual(a, b)
         and sameNumber(a.suspensionBiasFront, b.suspensionBiasFront, 0.5, 0.0001)
 end
 
-function VehicleManager.getCurrentVehicle()
+function PerformanceTuning.VehicleManager.getCurrentVehicle()
     local ped = PlayerPedId()
     if not DoesEntityExist(ped) then
         return nil, 'Player ped does not exist.'
@@ -373,15 +370,15 @@ function VehicleManager.getCurrentVehicle()
         return nil, 'You are not inside a vehicle.'
     end
 
-    if not VehicleManager.isPedDrivingVehicle(ped, vehicle) then
+    if not PerformanceTuning.VehicleManager.isPedDrivingVehicle(ped, vehicle) then
         return nil, 'You must be in the driver seat to tune this vehicle.'
     end
 
     return vehicle
 end
 
-function VehicleManager.ensureVehicleNetworked(vehicle, timeoutMs)
-    if not VehicleManager.isVehicleEntityValid(vehicle) then
+function PerformanceTuning.VehicleManager.ensureVehicleNetworked(vehicle, timeoutMs)
+    if not PerformanceTuning.VehicleManager.isVehicleEntityValid(vehicle) then
         return false
     end
 
@@ -404,7 +401,7 @@ function VehicleManager.ensureVehicleNetworked(vehicle, timeoutMs)
     return NetworkGetEntityIsNetworked(vehicle)
 end
 
-function VehicleManager.serializeFieldTable(fieldNames, source)
+function PerformanceTuning.VehicleManager.serializeFieldTable(fieldNames, source)
     local serialized = {}
 
     for _, fieldName in ipairs(fieldNames or {}) do
@@ -417,7 +414,7 @@ function VehicleManager.serializeFieldTable(fieldNames, source)
     return serialized
 end
 
-function VehicleManager.readFieldTable(vehicle, fieldNames, fieldTypeResolver)
+function PerformanceTuning.VehicleManager.readFieldTable(vehicle, fieldNames, fieldTypeResolver)
     local values = {}
     local readHandlingValue = PerformanceTuning.HandlingManager.readHandlingValue
 
@@ -429,57 +426,57 @@ function VehicleManager.readFieldTable(vehicle, fieldNames, fieldTypeResolver)
     return values
 end
 
-function VehicleManager.buildPersistedHandlingState(vehicle, bucket)
+function PerformanceTuning.VehicleManager.buildPersistedHandlingState(vehicle, bucket)
     local internals = PerformanceTuning._internals
-    if not VehicleManager.isVehicleEntityValid(vehicle) or type(bucket) ~= 'table' then
+    if not PerformanceTuning.VehicleManager.isVehicleEntityValid(vehicle) or type(bucket) ~= 'table' then
         return nil
     end
 
     return {
         version = 1,
         original = {
-            engine = VehicleManager.serializeFieldTable(internals.ENGINE_FIELDS, bucket.baseEngine),
-            transmission = VehicleManager.serializeFieldTable(internals.TRANSMISSION_FIELDS, bucket.baseTransmission),
-            suspension = VehicleManager.serializeFieldTable(internals.SUSPENSION_FIELDS, bucket.baseSuspension),
-            tires = VehicleManager.serializeFieldTable(internals.TIRE_FIELDS, bucket.baseTires),
-            brakes = VehicleManager.serializeFieldTable(internals.BRAKE_FIELDS, bucket.baseBrakes),
-            antiroll = VehicleManager.serializeFieldTable(internals.ANTIROLL_FIELDS, bucket.baseAntiroll),
+            engine = PerformanceTuning.VehicleManager.serializeFieldTable(internals.ENGINE_FIELDS, bucket.baseEngine),
+            transmission = PerformanceTuning.VehicleManager.serializeFieldTable(internals.TRANSMISSION_FIELDS, bucket.baseTransmission),
+            suspension = PerformanceTuning.VehicleManager.serializeFieldTable(internals.SUSPENSION_FIELDS, bucket.baseSuspension),
+            tires = PerformanceTuning.VehicleManager.serializeFieldTable(internals.TIRE_FIELDS, bucket.baseTires),
+            brakes = PerformanceTuning.VehicleManager.serializeFieldTable(internals.BRAKE_FIELDS, bucket.baseBrakes),
+            antiroll = PerformanceTuning.VehicleManager.serializeFieldTable(internals.ANTIROLL_FIELDS, bucket.baseAntiroll),
         },
         tuned = {
-            engine = VehicleManager.readFieldTable(vehicle, internals.ENGINE_FIELDS, 'float'),
-            transmission = VehicleManager.readFieldTable(vehicle, internals.TRANSMISSION_FIELDS, function(fieldName)
+            engine = PerformanceTuning.VehicleManager.readFieldTable(vehicle, internals.ENGINE_FIELDS, 'float'),
+            transmission = PerformanceTuning.VehicleManager.readFieldTable(vehicle, internals.TRANSMISSION_FIELDS, function(fieldName)
                 return fieldName == internals.GEAR_FIELD and 'int' or 'float'
             end),
-            suspension = VehicleManager.readFieldTable(vehicle, internals.SUSPENSION_FIELDS, 'float'),
-            tires = VehicleManager.readFieldTable(vehicle, internals.TIRE_FIELDS, 'float'),
-            brakes = VehicleManager.readFieldTable(vehicle, internals.BRAKE_FIELDS, 'float'),
-            antiroll = VehicleManager.readFieldTable(vehicle, internals.ANTIROLL_FIELDS, 'float'),
+            suspension = PerformanceTuning.VehicleManager.readFieldTable(vehicle, internals.SUSPENSION_FIELDS, 'float'),
+            tires = PerformanceTuning.VehicleManager.readFieldTable(vehicle, internals.TIRE_FIELDS, 'float'),
+            brakes = PerformanceTuning.VehicleManager.readFieldTable(vehicle, internals.BRAKE_FIELDS, 'float'),
+            antiroll = PerformanceTuning.VehicleManager.readFieldTable(vehicle, internals.ANTIROLL_FIELDS, 'float'),
         }
     }
 end
 
-function VehicleManager.syncVehicleHandlingState(vehicle)
-    if not VehicleManager.isVehicleEntityValid(vehicle) then
+function PerformanceTuning.VehicleManager.syncVehicleHandlingState(vehicle)
+    if not PerformanceTuning.VehicleManager.isVehicleEntityValid(vehicle) then
         return
     end
 
-    if not VehicleManager.ensureVehicleNetworked(vehicle, 1500) then
+    if not PerformanceTuning.VehicleManager.ensureVehicleNetworked(vehicle, 1500) then
         return
     end
 
-    local bucket = VehicleManager.ensureTuningState(vehicle)
-    local state = VehicleManager.buildPersistedHandlingState(vehicle, bucket)
+    local bucket = PerformanceTuning.VehicleManager.ensureTuningState(vehicle)
+    local state = PerformanceTuning.VehicleManager.buildPersistedHandlingState(vehicle, bucket)
     if not state then
         return
     end
 
     Entity(vehicle).state:set(PerformanceTuning._internals.StateBagKeys.handling, state, true)
-    VehicleManager.syncVehiclePiState(vehicle, false)
+    PerformanceTuning.VehicleManager.syncVehiclePiState(vehicle, false)
 end
 
-function VehicleManager.applyPersistedHandlingBaseState(vehicle, tuningBucket)
+function PerformanceTuning.VehicleManager.applyPersistedHandlingBaseState(vehicle, tuningBucket)
     local internals = PerformanceTuning._internals
-    if not VehicleManager.isVehicleEntityValid(vehicle) or type(tuningBucket) ~= 'table' then
+    if not PerformanceTuning.VehicleManager.isVehicleEntityValid(vehicle) or type(tuningBucket) ~= 'table' then
         return false
     end
 
@@ -494,41 +491,41 @@ function VehicleManager.applyPersistedHandlingBaseState(vehicle, tuningBucket)
     end
 
     if type(originalState.engine) == 'table' and tuningBucket.baseEngine == nil then
-        tuningBucket.baseEngine = VehicleManager.serializeFieldTable(internals.ENGINE_FIELDS, originalState.engine)
+        tuningBucket.baseEngine = PerformanceTuning.VehicleManager.serializeFieldTable(internals.ENGINE_FIELDS, originalState.engine)
         tuningBucket.basePower = tuningBucket.baseEngine[internals.POWER_FIELD]
         tuningBucket.baseTopSpeed = tuningBucket.baseEngine[internals.TOP_SPEED_FIELD]
     end
 
     if type(originalState.transmission) == 'table' and tuningBucket.baseTransmission == nil then
-        tuningBucket.baseTransmission = VehicleManager.serializeFieldTable(internals.TRANSMISSION_FIELDS, originalState.transmission)
+        tuningBucket.baseTransmission = PerformanceTuning.VehicleManager.serializeFieldTable(internals.TRANSMISSION_FIELDS, originalState.transmission)
     end
 
     if type(originalState.suspension) == 'table' and tuningBucket.baseSuspension == nil then
-        tuningBucket.baseSuspension = VehicleManager.serializeFieldTable(internals.SUSPENSION_FIELDS, originalState.suspension)
+        tuningBucket.baseSuspension = PerformanceTuning.VehicleManager.serializeFieldTable(internals.SUSPENSION_FIELDS, originalState.suspension)
     end
 
     if type(originalState.tires) == 'table' and tuningBucket.baseTires == nil then
-        tuningBucket.baseTires = VehicleManager.serializeFieldTable(internals.TIRE_FIELDS, originalState.tires)
+        tuningBucket.baseTires = PerformanceTuning.VehicleManager.serializeFieldTable(internals.TIRE_FIELDS, originalState.tires)
     end
 
     if type(originalState.brakes) == 'table' and tuningBucket.baseBrakes == nil then
-        tuningBucket.baseBrakes = VehicleManager.serializeFieldTable(internals.BRAKE_FIELDS, originalState.brakes)
+        tuningBucket.baseBrakes = PerformanceTuning.VehicleManager.serializeFieldTable(internals.BRAKE_FIELDS, originalState.brakes)
     end
 
     if type(originalState.antiroll) == 'table' and tuningBucket.baseAntiroll == nil then
-        tuningBucket.baseAntiroll = VehicleManager.serializeFieldTable(internals.ANTIROLL_FIELDS, originalState.antiroll)
+        tuningBucket.baseAntiroll = PerformanceTuning.VehicleManager.serializeFieldTable(internals.ANTIROLL_FIELDS, originalState.antiroll)
     end
 
     return true
 end
 
-function VehicleManager.ensureTuningState(vehicle)
+function PerformanceTuning.VehicleManager.ensureTuningState(vehicle)
     local internals = PerformanceTuning._internals
-    local bucket = VehicleManager.getTuningBucket(vehicle, true)
+    local bucket = PerformanceTuning.VehicleManager.getTuningBucket(vehicle, true)
     local nitrousConfig = internals.NitrousConfig or {}
     local maxNitrousShots = math.max(1, math.floor(tonumber(nitrousConfig.shotsPerRefill) or 3))
-    VehicleManager.trackVehicle(vehicle)
-    VehicleManager.applyPersistedHandlingBaseState(vehicle, bucket)
+    PerformanceTuning.VehicleManager.trackVehicle(vehicle)
+    PerformanceTuning.VehicleManager.applyPersistedHandlingBaseState(vehicle, bucket)
 
     if bucket.basePower == nil then
         local readHandlingValue = PerformanceTuning.HandlingManager.readHandlingValue
@@ -637,17 +634,17 @@ function VehicleManager.ensureTuningState(vehicle)
     return bucket
 end
 
-function VehicleManager.syncVehicleTuneState(vehicle)
-    if not VehicleManager.isVehicleEntityValid(vehicle) then
+function PerformanceTuning.VehicleManager.syncVehicleTuneState(vehicle)
+    if not PerformanceTuning.VehicleManager.isVehicleEntityValid(vehicle) then
         return
     end
 
-    local bucket = VehicleManager.ensureTuningState(vehicle)
-    VehicleManager.trackVehicle(vehicle)
-    local state = VehicleManager.serializeTuneState(bucket)
-    VehicleManager.setLastAppliedTuneState(vehicle, state)
+    local bucket = PerformanceTuning.VehicleManager.ensureTuningState(vehicle)
+    PerformanceTuning.VehicleManager.trackVehicle(vehicle)
+    local state = PerformanceTuning.VehicleManager.serializeTuneState(bucket)
+    PerformanceTuning.VehicleManager.setLastAppliedTuneState(vehicle, state)
 
-    if VehicleManager.ensureVehicleNetworked(vehicle, 1500) then
+    if PerformanceTuning.VehicleManager.ensureVehicleNetworked(vehicle, 1500) then
         local netId = NetworkGetNetworkIdFromEntity(vehicle)
         if netId and netId ~= 0 then
             local runtimeState = PerformanceTuning.RuntimeState or {}
@@ -661,6 +658,7 @@ function VehicleManager.syncVehicleTuneState(vehicle)
         end
     end
 
-    VehicleManager.syncVehicleHandlingState(vehicle)
-    VehicleManager.syncVehiclePiState(vehicle, false)
+    PerformanceTuning.VehicleManager.syncVehicleHandlingState(vehicle)
+    PerformanceTuning.VehicleManager.syncVehiclePiState(vehicle, false)
 end
+

@@ -1,8 +1,6 @@
 -- Applies tuning packs and tweak values to vehicles and synchronized tune state.
 PerformanceTuning = PerformanceTuning or {}
 PerformanceTuning.TuningPackManager = PerformanceTuning.TuningPackManager or {}
-
-local TuningPackManager = PerformanceTuning.TuningPackManager
 local TIRE_COMPOUND_CATEGORY_OPTIONS = {
     { id = 'stock', label = 'Stock' },
     { id = 'road', label = 'Road' },
@@ -236,7 +234,7 @@ local function getHandbrakeUpgradeProgress(selectedPackId)
     return selectedLevel, totalUpgrades
 end
 
-function TuningPackManager.normalizeEnginePackId(packId)
+function PerformanceTuning.TuningPackManager.normalizeEnginePackId(packId)
     local normalized = tostring(packId or getBaseEnginePackId())
     local basePackId = getBaseEnginePackId()
     if normalized == '' then
@@ -257,7 +255,7 @@ function TuningPackManager.normalizeEnginePackId(packId)
     return basePackId
 end
 
-function TuningPackManager.normalizeEngineSwapPackId(packId)
+function PerformanceTuning.TuningPackManager.normalizeEngineSwapPackId(packId)
     local normalized = tostring(packId or getBaseEnginePackId())
     local basePackId = getBaseEnginePackId()
     if normalized == '' then
@@ -283,7 +281,7 @@ function TuningPackManager.normalizeEngineSwapPackId(packId)
     return basePackId
 end
 
-function TuningPackManager.normalizeSuspensionPackId(packId)
+function PerformanceTuning.TuningPackManager.normalizeSuspensionPackId(packId)
     if packId == 'street' then
         return 'sport'
     end
@@ -291,35 +289,35 @@ function TuningPackManager.normalizeSuspensionPackId(packId)
     return packId or 'stock'
 end
 
-function TuningPackManager.buildSuspensionPackOptions(selectedPackId)
-    return buildPackOptions(PerformanceTuning._internals.SUSPENSION_PACKS, TuningPackManager.normalizeSuspensionPackId(selectedPackId))
+function PerformanceTuning.TuningPackManager.buildSuspensionPackOptions(selectedPackId)
+    return buildPackOptions(PerformanceTuning._internals.SUSPENSION_PACKS, PerformanceTuning.TuningPackManager.normalizeSuspensionPackId(selectedPackId))
 end
 
-function TuningPackManager.getSuspensionPackLabel(packId)
-    return getPackLabel(PerformanceTuning._internals.SUSPENSION_PACKS, TuningPackManager.normalizeSuspensionPackId(packId), 'Stock')
+function PerformanceTuning.TuningPackManager.getSuspensionPackLabel(packId)
+    return getPackLabel(PerformanceTuning._internals.SUSPENSION_PACKS, PerformanceTuning.TuningPackManager.normalizeSuspensionPackId(packId), 'Stock')
 end
 
-function TuningPackManager.buildTransmissionPackOptions(selectedPackId)
+function PerformanceTuning.TuningPackManager.buildTransmissionPackOptions(selectedPackId)
     return buildPackOptions(PerformanceTuning._internals.TRANSMISSION_PACKS, selectedPackId)
 end
 
-function TuningPackManager.getTransmissionPackLabel(packId)
+function PerformanceTuning.TuningPackManager.getTransmissionPackLabel(packId)
     return getPackLabel(PerformanceTuning._internals.TRANSMISSION_PACKS, packId, 'Stock')
 end
 
-function TuningPackManager.buildEnginePackOptions(selectedPackId)
-    return buildPackOptions(PerformanceTuning._internals.ENGINE_PACKS, TuningPackManager.normalizeEnginePackId(selectedPackId))
+function PerformanceTuning.TuningPackManager.buildEnginePackOptions(selectedPackId)
+    return buildPackOptions(PerformanceTuning._internals.ENGINE_PACKS, PerformanceTuning.TuningPackManager.normalizeEnginePackId(selectedPackId))
 end
 
-function TuningPackManager.getEnginePackLabel(packId)
-    return getPackLabel(PerformanceTuning._internals.ENGINE_PACKS, TuningPackManager.normalizeEnginePackId(packId), 'Stock')
+function PerformanceTuning.TuningPackManager.getEnginePackLabel(packId)
+    return getPackLabel(PerformanceTuning._internals.ENGINE_PACKS, PerformanceTuning.TuningPackManager.normalizeEnginePackId(packId), 'Stock')
 end
 
-function TuningPackManager.buildEngineSwapPackOptions(selectedPackId)
+function PerformanceTuning.TuningPackManager.buildEngineSwapPackOptions(selectedPackId)
     local options = {}
     local basePackId = getBaseEnginePackId()
-    local selectedId = TuningPackManager.normalizeEngineSwapPackId(selectedPackId)
-    local baseLabel = TuningPackManager.getEnginePackLabel(basePackId)
+    local selectedId = PerformanceTuning.TuningPackManager.normalizeEngineSwapPackId(selectedPackId)
+    local baseLabel = PerformanceTuning.TuningPackManager.getEnginePackLabel(basePackId)
     options[1] = {
         index = 1,
         id = basePackId,
@@ -347,17 +345,17 @@ function TuningPackManager.buildEngineSwapPackOptions(selectedPackId)
     return options
 end
 
-function TuningPackManager.getEngineSwapPackLabel(packId)
-    local selectedId = TuningPackManager.normalizeEngineSwapPackId(packId)
+function PerformanceTuning.TuningPackManager.getEngineSwapPackLabel(packId)
+    local selectedId = PerformanceTuning.TuningPackManager.normalizeEngineSwapPackId(packId)
     local basePackId = getBaseEnginePackId()
     if selectedId == basePackId then
-        return TuningPackManager.getEnginePackLabel(basePackId)
+        return PerformanceTuning.TuningPackManager.getEnginePackLabel(basePackId)
     end
 
     return getPackLabel(getEngineSwapPacks(), selectedId, 'Stock')
 end
 
-function TuningPackManager.buildTireCompoundPackOptions(selectedPackId, baseTireMax)
+function PerformanceTuning.TuningPackManager.buildTireCompoundPackOptions(selectedPackId, baseTireMax)
     local packs = PerformanceTuning._internals.TIRE_COMPOUND_PACKS
     local performance = PerformanceTuning._internals.Performance
     local isFiniteNumber = PerformanceTuning._internals.isFiniteNumber
@@ -382,7 +380,7 @@ function TuningPackManager.buildTireCompoundPackOptions(selectedPackId, baseTire
     return options
 end
 
-function TuningPackManager.normalizeTireCompoundCategory(categoryId)
+function PerformanceTuning.TuningPackManager.normalizeTireCompoundCategory(categoryId)
     local normalized = tostring(categoryId or 'stock'):lower()
     if normalized == 'stock' then
         return 'stock'
@@ -399,7 +397,7 @@ function TuningPackManager.normalizeTireCompoundCategory(categoryId)
     return 'stock'
 end
 
-function TuningPackManager.normalizeTireCompoundQuality(qualityId)
+function PerformanceTuning.TuningPackManager.normalizeTireCompoundQuality(qualityId)
     local normalized = tostring(qualityId or 'mid_end'):lower()
     if normalized == 'stock' then
         return 'mid_end'
@@ -419,25 +417,25 @@ function TuningPackManager.normalizeTireCompoundQuality(qualityId)
     return 'mid_end'
 end
 
-function TuningPackManager.buildTireCompoundCategoryOptions(selectedCategoryId)
-    return buildPackOptions(TIRE_COMPOUND_CATEGORY_OPTIONS, TuningPackManager.normalizeTireCompoundCategory(selectedCategoryId))
+function PerformanceTuning.TuningPackManager.buildTireCompoundCategoryOptions(selectedCategoryId)
+    return buildPackOptions(TIRE_COMPOUND_CATEGORY_OPTIONS, PerformanceTuning.TuningPackManager.normalizeTireCompoundCategory(selectedCategoryId))
 end
 
-function TuningPackManager.buildTireCompoundQualityOptions(selectedQualityId)
-    return buildPackOptions(TIRE_COMPOUND_QUALITY_OPTIONS, TuningPackManager.normalizeTireCompoundQuality(selectedQualityId))
+function PerformanceTuning.TuningPackManager.buildTireCompoundQualityOptions(selectedQualityId)
+    return buildPackOptions(TIRE_COMPOUND_QUALITY_OPTIONS, PerformanceTuning.TuningPackManager.normalizeTireCompoundQuality(selectedQualityId))
 end
 
-function TuningPackManager.getTireCompoundCategoryLabel(categoryId)
-    return getPackLabel(TIRE_COMPOUND_CATEGORY_OPTIONS, TuningPackManager.normalizeTireCompoundCategory(categoryId), 'Stock')
+function PerformanceTuning.TuningPackManager.getTireCompoundCategoryLabel(categoryId)
+    return getPackLabel(TIRE_COMPOUND_CATEGORY_OPTIONS, PerformanceTuning.TuningPackManager.normalizeTireCompoundCategory(categoryId), 'Stock')
 end
 
-function TuningPackManager.getTireCompoundQualityLabel(qualityId)
-    return getPackLabel(TIRE_COMPOUND_QUALITY_OPTIONS, TuningPackManager.normalizeTireCompoundQuality(qualityId), 'Mid-End')
+function PerformanceTuning.TuningPackManager.getTireCompoundQualityLabel(qualityId)
+    return getPackLabel(TIRE_COMPOUND_QUALITY_OPTIONS, PerformanceTuning.TuningPackManager.normalizeTireCompoundQuality(qualityId), 'Mid-End')
 end
 
-function TuningPackManager.resolveTireCompoundPackId(categoryId, qualityId)
-    local normalizedCategory = TuningPackManager.normalizeTireCompoundCategory(categoryId)
-    local normalizedQuality = TuningPackManager.normalizeTireCompoundQuality(qualityId)
+function PerformanceTuning.TuningPackManager.resolveTireCompoundPackId(categoryId, qualityId)
+    local normalizedCategory = PerformanceTuning.TuningPackManager.normalizeTireCompoundCategory(categoryId)
+    local normalizedQuality = PerformanceTuning.TuningPackManager.normalizeTireCompoundQuality(qualityId)
     if normalizedCategory == 'stock' then
         return 'stock'
     end
@@ -447,8 +445,8 @@ function TuningPackManager.resolveTireCompoundPackId(categoryId, qualityId)
 end
 
 local function getTireCompoundTuningProfile(categoryId, qualityId)
-    local normalizedCategory = TuningPackManager.normalizeTireCompoundCategory(categoryId)
-    local normalizedQuality = TuningPackManager.normalizeTireCompoundQuality(qualityId)
+    local normalizedCategory = PerformanceTuning.TuningPackManager.normalizeTireCompoundCategory(categoryId)
+    local normalizedQuality = PerformanceTuning.TuningPackManager.normalizeTireCompoundQuality(qualityId)
     local categoryProfiles = TIRE_COMPOUND_TUNING_MATRIX[normalizedCategory]
     if type(categoryProfiles) ~= 'table' then
         return nil
@@ -463,7 +461,7 @@ local function getTireCompoundTuningProfile(categoryId, qualityId)
 end
 
 local function getLowSpeedLossMultiplierForQuality(qualityId)
-    local normalizedQuality = TuningPackManager.normalizeTireCompoundQuality(qualityId)
+    local normalizedQuality = PerformanceTuning.TuningPackManager.normalizeTireCompoundQuality(qualityId)
     if normalizedQuality == 'low_end' then
         return 0.8
     end
@@ -491,15 +489,15 @@ local function getRelativeGripTargetValue(baseGrip, categoryId, qualityId)
         return 0.0
     end
 
-    local normalizedCategory = TuningPackManager.normalizeTireCompoundCategory(categoryId)
-    local normalizedQuality = TuningPackManager.normalizeTireCompoundQuality(qualityId)
+    local normalizedCategory = PerformanceTuning.TuningPackManager.normalizeTireCompoundCategory(categoryId)
+    local normalizedQuality = PerformanceTuning.TuningPackManager.normalizeTireCompoundQuality(qualityId)
     local qualityOffset = tonumber(qualityLadder[normalizedQuality]) or 0.0
     local roadQualityTarget = resolvedBaseGrip + qualityOffset
     local compoundOffset = tonumber(compoundRoadOffset[normalizedCategory]) or 0.0
     return math.max(0.1, roadQualityTarget + compoundOffset)
 end
 
-function TuningPackManager.inferTireCompoundQualityFromPackId(packId)
+function PerformanceTuning.TuningPackManager.inferTireCompoundQualityFromPackId(packId)
     local normalized = tostring(packId or ''):lower()
     if normalized == 'street' then
         return 'low_end'
@@ -513,48 +511,48 @@ function TuningPackManager.inferTireCompoundQualityFromPackId(packId)
     return nil
 end
 
-function TuningPackManager.getTireCompoundPackLabel(packId)
+function PerformanceTuning.TuningPackManager.getTireCompoundPackLabel(packId)
     return getPackLabel(PerformanceTuning._internals.TIRE_COMPOUND_PACKS, packId, 'Stock')
 end
 
-function TuningPackManager.buildBrakePackOptions(selectedPackId)
+function PerformanceTuning.TuningPackManager.buildBrakePackOptions(selectedPackId)
     return buildPackOptions(PerformanceTuning._internals.BRAKE_PACKS, selectedPackId)
 end
 
-function TuningPackManager.getBrakePackLabel(packId)
+function PerformanceTuning.TuningPackManager.getBrakePackLabel(packId)
     return getPackLabel(PerformanceTuning._internals.BRAKE_PACKS, packId, 'Stock')
 end
 
-function TuningPackManager.buildHandbrakePackOptions(selectedPackId)
+function PerformanceTuning.TuningPackManager.buildHandbrakePackOptions(selectedPackId)
     return buildPackOptions(PerformanceTuning._internals.HANDBRAKE_PACKS, selectedPackId)
 end
 
-function TuningPackManager.getHandbrakePackLabel(packId)
+function PerformanceTuning.TuningPackManager.getHandbrakePackLabel(packId)
     return getPackLabel(PerformanceTuning._internals.HANDBRAKE_PACKS, packId, 'Stock')
 end
 
-function TuningPackManager.buildNitrousPackOptions(selectedPackId)
+function PerformanceTuning.TuningPackManager.buildNitrousPackOptions(selectedPackId)
     return buildPackOptions(PerformanceTuning._internals.NITROUS_PACKS, selectedPackId)
 end
 
-function TuningPackManager.getNitrousPackLabel(packId)
+function PerformanceTuning.TuningPackManager.getNitrousPackLabel(packId)
     return getPackLabel(PerformanceTuning._internals.NITROUS_PACKS, packId, 'Stock')
 end
 
-TuningPackManager.buildNitroPackOptions = TuningPackManager.buildNitrousPackOptions
-TuningPackManager.getNitroPackLabel = TuningPackManager.getNitrousPackLabel
+PerformanceTuning.TuningPackManager.buildNitroPackOptions = PerformanceTuning.TuningPackManager.buildNitrousPackOptions
+PerformanceTuning.TuningPackManager.getNitroPackLabel = PerformanceTuning.TuningPackManager.getNitrousPackLabel
 
-function TuningPackManager.getContextDetails(bucket, context)
+function PerformanceTuning.TuningPackManager.getContextDetails(bucket, context)
     local internals = PerformanceTuning._internals
     if context == 'engine' then
         return {
             key = 'engine',
             title = 'ENGINE',
             fieldName = table.concat(internals.ENGINE_FIELDS, ', '),
-            currentValue = TuningPackManager.getEnginePackLabel(bucket.enginePack),
+            currentValue = PerformanceTuning.TuningPackManager.getEnginePackLabel(bucket.enginePack),
             currentStep = bucket.enginePack,
             optionType = 'pack',
-            options = TuningPackManager.buildEnginePackOptions(bucket.enginePack),
+            options = PerformanceTuning.TuningPackManager.buildEnginePackOptions(bucket.enginePack),
         }
     end
 
@@ -563,10 +561,10 @@ function TuningPackManager.getContextDetails(bucket, context)
             key = 'engineSwap',
             title = 'ENGINE SWAP',
             fieldName = table.concat(internals.ENGINE_FIELDS, ', '),
-            currentValue = TuningPackManager.getEngineSwapPackLabel(bucket.engineSwapPack),
+            currentValue = PerformanceTuning.TuningPackManager.getEngineSwapPackLabel(bucket.engineSwapPack),
             currentStep = bucket.engineSwapPack,
             optionType = 'pack',
-            options = TuningPackManager.buildEngineSwapPackOptions(bucket.engineSwapPack),
+            options = PerformanceTuning.TuningPackManager.buildEngineSwapPackOptions(bucket.engineSwapPack),
         }
     end
 
@@ -575,10 +573,10 @@ function TuningPackManager.getContextDetails(bucket, context)
             key = 'transmission',
             title = 'TRANSMISSION',
             fieldName = table.concat(internals.TRANSMISSION_FIELDS, ', '),
-            currentValue = TuningPackManager.getTransmissionPackLabel(bucket.transmissionPack),
+            currentValue = PerformanceTuning.TuningPackManager.getTransmissionPackLabel(bucket.transmissionPack),
             currentStep = bucket.transmissionPack,
             optionType = 'pack',
-            options = TuningPackManager.buildTransmissionPackOptions(bucket.transmissionPack),
+            options = PerformanceTuning.TuningPackManager.buildTransmissionPackOptions(bucket.transmissionPack),
         }
     end
 
@@ -587,10 +585,10 @@ function TuningPackManager.getContextDetails(bucket, context)
             key = 'suspension',
             title = 'SUSPENSION',
             fieldName = table.concat(internals.SUSPENSION_FIELDS, ', '),
-            currentValue = TuningPackManager.getSuspensionPackLabel(bucket.suspensionPack),
+            currentValue = PerformanceTuning.TuningPackManager.getSuspensionPackLabel(bucket.suspensionPack),
             currentStep = bucket.suspensionPack,
             optionType = 'pack',
-            options = TuningPackManager.buildSuspensionPackOptions(bucket.suspensionPack),
+            options = PerformanceTuning.TuningPackManager.buildSuspensionPackOptions(bucket.suspensionPack),
         }
     end
 
@@ -599,10 +597,10 @@ function TuningPackManager.getContextDetails(bucket, context)
             key = 'tires',
             title = 'TIRE COMPOUND',
             fieldName = table.concat(internals.TIRE_FIELDS, ', '),
-            currentValue = TuningPackManager.getTireCompoundPackLabel(bucket.tireCompoundPack),
+            currentValue = PerformanceTuning.TuningPackManager.getTireCompoundPackLabel(bucket.tireCompoundPack),
             currentStep = bucket.tireCompoundPack,
             optionType = 'pack',
-            options = TuningPackManager.buildTireCompoundPackOptions(bucket.tireCompoundPack, bucket.baseTires and bucket.baseTires[internals.TIRE_MAX_FIELD]),
+            options = PerformanceTuning.TuningPackManager.buildTireCompoundPackOptions(bucket.tireCompoundPack, bucket.baseTires and bucket.baseTires[internals.TIRE_MAX_FIELD]),
         }
     end
 
@@ -611,10 +609,10 @@ function TuningPackManager.getContextDetails(bucket, context)
             key = 'tireCompoundCategory',
             title = 'TIRE COMPOUND CATEGORY',
             fieldName = 'Compound category',
-            currentValue = TuningPackManager.getTireCompoundCategoryLabel(bucket.tireCompoundCategory),
-            currentStep = TuningPackManager.normalizeTireCompoundCategory(bucket.tireCompoundCategory),
+            currentValue = PerformanceTuning.TuningPackManager.getTireCompoundCategoryLabel(bucket.tireCompoundCategory),
+            currentStep = PerformanceTuning.TuningPackManager.normalizeTireCompoundCategory(bucket.tireCompoundCategory),
             optionType = 'pack',
-            options = TuningPackManager.buildTireCompoundCategoryOptions(bucket.tireCompoundCategory),
+            options = PerformanceTuning.TuningPackManager.buildTireCompoundCategoryOptions(bucket.tireCompoundCategory),
         }
     end
 
@@ -623,10 +621,10 @@ function TuningPackManager.getContextDetails(bucket, context)
             key = 'tireCompoundQuality',
             title = 'TIRE COMPOUND QUALITY',
             fieldName = 'Compound quality',
-            currentValue = TuningPackManager.getTireCompoundQualityLabel(bucket.tireCompoundQuality),
-            currentStep = TuningPackManager.normalizeTireCompoundQuality(bucket.tireCompoundQuality),
+            currentValue = PerformanceTuning.TuningPackManager.getTireCompoundQualityLabel(bucket.tireCompoundQuality),
+            currentStep = PerformanceTuning.TuningPackManager.normalizeTireCompoundQuality(bucket.tireCompoundQuality),
             optionType = 'pack',
-            options = TuningPackManager.buildTireCompoundQualityOptions(bucket.tireCompoundQuality),
+            options = PerformanceTuning.TuningPackManager.buildTireCompoundQualityOptions(bucket.tireCompoundQuality),
         }
     end
 
@@ -635,10 +633,10 @@ function TuningPackManager.getContextDetails(bucket, context)
             key = 'brakes',
             title = 'BRAKES',
             fieldName = table.concat(internals.BRAKE_FIELDS, ', '),
-            currentValue = TuningPackManager.getBrakePackLabel(bucket.brakePack),
+            currentValue = PerformanceTuning.TuningPackManager.getBrakePackLabel(bucket.brakePack),
             currentStep = bucket.brakePack,
             optionType = 'pack',
-            options = TuningPackManager.buildBrakePackOptions(bucket.brakePack),
+            options = PerformanceTuning.TuningPackManager.buildBrakePackOptions(bucket.brakePack),
         }
     end
 
@@ -647,10 +645,10 @@ function TuningPackManager.getContextDetails(bucket, context)
             key = 'handbrakes',
             title = 'HANDBRAKES',
             fieldName = tostring(internals.HANDBRAKE_FORCE_FIELD or 'fHandBrakeForce'),
-            currentValue = TuningPackManager.getHandbrakePackLabel(bucket.handbrakePack),
+            currentValue = PerformanceTuning.TuningPackManager.getHandbrakePackLabel(bucket.handbrakePack),
             currentStep = bucket.handbrakePack,
             optionType = 'pack',
-            options = TuningPackManager.buildHandbrakePackOptions(bucket.handbrakePack),
+            options = PerformanceTuning.TuningPackManager.buildHandbrakePackOptions(bucket.handbrakePack),
         }
     end
 
@@ -659,10 +657,10 @@ function TuningPackManager.getContextDetails(bucket, context)
             key = 'nitrous',
             title = 'NITROUS',
             fieldName = 'Nitrous level',
-            currentValue = TuningPackManager.getNitrousPackLabel(bucket.nitrousLevel),
+            currentValue = PerformanceTuning.TuningPackManager.getNitrousPackLabel(bucket.nitrousLevel),
             currentStep = bucket.nitrousLevel,
             optionType = 'pack',
-            options = TuningPackManager.buildNitrousPackOptions(bucket.nitrousLevel),
+            options = PerformanceTuning.TuningPackManager.buildNitrousPackOptions(bucket.nitrousLevel),
         }
     end
 
@@ -670,14 +668,14 @@ function TuningPackManager.getContextDetails(bucket, context)
         key = 'engine',
         title = 'ENGINE',
         fieldName = table.concat(internals.ENGINE_FIELDS, ', '),
-        currentValue = TuningPackManager.getEnginePackLabel(bucket.enginePack),
+        currentValue = PerformanceTuning.TuningPackManager.getEnginePackLabel(bucket.enginePack),
         currentStep = bucket.enginePack,
         optionType = 'pack',
-        options = TuningPackManager.buildEnginePackOptions(bucket.enginePack),
+        options = PerformanceTuning.TuningPackManager.buildEnginePackOptions(bucket.enginePack),
     }
 end
 
-function TuningPackManager.applyEngineAudioProfile(vehicle, audioName)
+function PerformanceTuning.TuningPackManager.applyEngineAudioProfile(vehicle, audioName)
     if not PerformanceTuning.VehicleManager.isVehicleEntityValid(vehicle) then
         return false
     end
@@ -690,7 +688,7 @@ function TuningPackManager.applyEngineAudioProfile(vehicle, audioName)
     return true
 end
 
-function TuningPackManager.resolveEngineSwapValues(modelName)
+function PerformanceTuning.TuningPackManager.resolveEngineSwapValues(modelName)
     local normalizedName = tostring(modelName or ''):upper()
     local cache = PerformanceTuning._state.cachedEngineSwapValuesByModel
     local powerField = PerformanceTuning._internals.POWER_FIELD
@@ -823,9 +821,6 @@ local function getEngineUpgradeProgress(selectedPackId)
 
     return selectedLevel, totalUpgrades
 end
-
-local roundToThreeDecimals = PerformanceTuning.VehicleManager.roundToThreeDecimals
-
 local function applyComposedDriveForce(vehicle, bucket, options)
     options = options or {}
     local internals = PerformanceTuning._internals
@@ -922,7 +917,7 @@ local function applySimpleFloatTweak(vehicle, fieldName, value, clampFn, bucketF
     local vehicleManager = PerformanceTuning.VehicleManager
     local bucket = vehicleManager.ensureTuningState(vehicle)
     local currentValue = readHandlingValue(vehicle, 'float', fieldName)
-    local resolvedValue = roundToThreeDecimals(clampFn(value), currentValue)
+    local resolvedValue = PerformanceTuning.VehicleManager.roundToThreeDecimals(clampFn(value), currentValue)
 
     rememberOriginalValue(vehicle, fieldName, 'float')
     writeHandlingValue(vehicle, 'float', fieldName, resolvedValue)
@@ -1014,7 +1009,7 @@ local function computeLowerLimitNearSuspensionRaise(baseUpperLimit, baseLowerLim
     return resolvedLowerLimit
 end
 
-function TuningPackManager.applySuspensionRaiseLimitAdjustments(vehicle, targetRaise)
+function PerformanceTuning.TuningPackManager.applySuspensionRaiseLimitAdjustments(vehicle, targetRaise)
     local vehicleManager = PerformanceTuning.VehicleManager
     local handlingManager = PerformanceTuning.HandlingManager
     local bucket = vehicleManager.ensureTuningState(vehicle)
@@ -1037,27 +1032,27 @@ function TuningPackManager.applySuspensionRaiseLimitAdjustments(vehicle, targetR
     return resolvedUpperLimit, resolvedLowerLimit
 end
 
-function TuningPackManager.applyAntirollForceTweak(vehicle, value, options)
+function PerformanceTuning.TuningPackManager.applyAntirollForceTweak(vehicle, value, options)
     return applySimpleFloatTweak(vehicle, PerformanceTuning._internals.ANTIROLL_FORCE_FIELD, value, PerformanceTuning._internals.clampAntirollForceValue, 'antirollForce', 'Anti-roll', options)
 end
 
-function TuningPackManager.applyBrakeBiasFrontTweak(vehicle, value, options)
+function PerformanceTuning.TuningPackManager.applyBrakeBiasFrontTweak(vehicle, value, options)
     return applySimpleFloatTweak(vehicle, PerformanceTuning._internals.BRAKE_BIAS_FRONT_FIELD, value, PerformanceTuning._internals.clampBrakeBiasFrontValue, 'brakeBiasFront', 'Brakes', options)
 end
 
-function TuningPackManager.applyGripBiasFrontTweak(vehicle, value, options)
+function PerformanceTuning.TuningPackManager.applyGripBiasFrontTweak(vehicle, value, options)
     return applySimpleFloatTweak(vehicle, PerformanceTuning._internals.TIRE_BIAS_FRONT_FIELD, value, PerformanceTuning._internals.clampGripBiasFrontValue, 'gripBiasFront', 'Tires', options)
 end
 
-function TuningPackManager.applyAntirollBiasFrontTweak(vehicle, value, options)
+function PerformanceTuning.TuningPackManager.applyAntirollBiasFrontTweak(vehicle, value, options)
     return applySimpleFloatTweak(vehicle, PerformanceTuning._internals.ANTIROLL_BIAS_FRONT_FIELD, value, PerformanceTuning._internals.clampAntirollBiasFrontValue, 'antirollBiasFront', 'Anti-roll', options)
 end
 
-function TuningPackManager.applySuspensionBiasFrontTweak(vehicle, value, options)
+function PerformanceTuning.TuningPackManager.applySuspensionBiasFrontTweak(vehicle, value, options)
     return applySimpleFloatTweak(vehicle, PerformanceTuning._internals.SUSPENSION_BIAS_FRONT_FIELD, value, PerformanceTuning._internals.clampSuspensionBiasFrontValue, 'suspensionBiasFront', 'Suspension', options)
 end
 
-function TuningPackManager.applyCgOffsetTweak(vehicle, delta, options)
+function PerformanceTuning.TuningPackManager.applyCgOffsetTweak(vehicle, delta, options)
     options = options or {}
     local bucket = PerformanceTuning.VehicleManager.ensureTuningState(vehicle)
     local base = bucket.baseCgOffset or { x = 0.0, y = 0.0, z = 0.0 }
@@ -1073,11 +1068,11 @@ function TuningPackManager.applyCgOffsetTweak(vehicle, delta, options)
     return true, resolvedDelta
 end
 
-function TuningPackManager.applySuspensionRaiseTweak(vehicle, value, options)
+function PerformanceTuning.TuningPackManager.applySuspensionRaiseTweak(vehicle, value, options)
     options = options or {}
     local bucket = PerformanceTuning.VehicleManager.ensureTuningState(vehicle)
     local currentValue = PerformanceTuning.HandlingManager.readHandlingValue(vehicle, 'float', 'fSuspensionRaise')
-    local resolvedValue = roundToThreeDecimals(PerformanceTuning._internals.clampSuspensionRaiseValue(value), currentValue)
+    local resolvedValue = PerformanceTuning.VehicleManager.roundToThreeDecimals(PerformanceTuning._internals.clampSuspensionRaiseValue(value), currentValue)
     local baseUpperLimit = bucket.baseSuspension and tonumber(bucket.baseSuspension.fSuspensionUpperLimit) or 0.0
     local baseRaise = bucket.baseSuspension and tonumber(bucket.baseSuspension.fSuspensionRaise) or 0.0
     local raiseLeftLimit = baseRaise - (baseUpperLimit * 0.5)
@@ -1096,7 +1091,7 @@ function TuningPackManager.applySuspensionRaiseTweak(vehicle, value, options)
 
     PerformanceTuning.HandlingManager.rememberOriginalValue(vehicle, 'fSuspensionRaise', 'float')
     PerformanceTuning.HandlingManager.writeHandlingValue(vehicle, 'float', 'fSuspensionRaise', resolvedValue)
-    TuningPackManager.applySuspensionRaiseLimitAdjustments(vehicle, resolvedValue)
+    PerformanceTuning.TuningPackManager.applySuspensionRaiseLimitAdjustments(vehicle, resolvedValue)
     if not options.skipLog then
         PerformanceTuning._internals.logInfo(('Suspension %s: %s -> %s (tweak)'):format('fSuspensionRaise', PerformanceTuning.HandlingManager.formatHandlingValue(currentValue, 'float'), PerformanceTuning.HandlingManager.formatHandlingValue(resolvedValue, 'float')))
     end
@@ -1109,10 +1104,10 @@ function TuningPackManager.applySuspensionRaiseTweak(vehicle, value, options)
     return true, resolvedValue
 end
 
-function TuningPackManager.applyNitroShotStrengthTweak(vehicle, value, options)
+function PerformanceTuning.TuningPackManager.applyNitroShotStrengthTweak(vehicle, value, options)
     options = options or {}
     local bucket = PerformanceTuning.VehicleManager.ensureTuningState(vehicle)
-    local resolvedValue = roundToThreeDecimals(PerformanceTuning._internals.clampNitroShotStrength(value), 1.0)
+    local resolvedValue = PerformanceTuning.VehicleManager.roundToThreeDecimals(PerformanceTuning._internals.clampNitroShotStrength(value), 1.0)
     bucket.nitrousShotStrength = resolvedValue
     bucket.nitrousDurationMs = math.max(250, math.floor(PerformanceTuning._internals.NitrousConfig.baseDurationMs / resolvedValue))
 
@@ -1123,7 +1118,7 @@ function TuningPackManager.applyNitroShotStrengthTweak(vehicle, value, options)
     return true, resolvedValue
 end
 
-function TuningPackManager.normalizeSteeringLockMode(mode)
+function PerformanceTuning.TuningPackManager.normalizeSteeringLockMode(mode)
     local normalized = tostring(mode or 'stock'):lower()
     if normalized == 'stock' or normalized == 'none' then
         return 'stock'
@@ -1156,8 +1151,8 @@ function TuningPackManager.normalizeSteeringLockMode(mode)
     return ('%.1f'):format(numeric)
 end
 
-function TuningPackManager.getSteeringLockModeFactor(mode)
-    local normalized = TuningPackManager.normalizeSteeringLockMode(mode)
+function PerformanceTuning.TuningPackManager.getSteeringLockModeFactor(mode)
+    local normalized = PerformanceTuning.TuningPackManager.normalizeSteeringLockMode(mode)
     if normalized == 'stock' then
         return nil
     end
@@ -1169,14 +1164,14 @@ function TuningPackManager.getSteeringLockModeFactor(mode)
     return numeric
 end
 
-function TuningPackManager.applySteeringLockModeTweak(vehicle, mode, options)
+function PerformanceTuning.TuningPackManager.applySteeringLockModeTweak(vehicle, mode, options)
     options = options or {}
     local internals = PerformanceTuning._internals
     local handlingManager = PerformanceTuning.HandlingManager
     local vehicleManager = PerformanceTuning.VehicleManager
     local steeringLockField = internals.STEERING_LOCK_FIELD
     local bucket = vehicleManager.ensureTuningState(vehicle)
-    local normalizedMode = TuningPackManager.normalizeSteeringLockMode(mode)
+    local normalizedMode = PerformanceTuning.TuningPackManager.normalizeSteeringLockMode(mode)
 
     bucket.steeringLockMode = normalizedMode
 
@@ -1198,7 +1193,7 @@ function TuningPackManager.applySteeringLockModeTweak(vehicle, mode, options)
     return true, normalizedMode
 end
 
-function TuningPackManager.applySuspensionPack(vehicle, packId, options)
+function PerformanceTuning.TuningPackManager.applySuspensionPack(vehicle, packId, options)
     options = options or {}
     local packs = PerformanceTuning._internals.SUSPENSION_PACKS
     local readHandlingValue = PerformanceTuning.HandlingManager.readHandlingValue
@@ -1281,7 +1276,7 @@ function TuningPackManager.applySuspensionPack(vehicle, packId, options)
     return true, selectedPack.label
 end
 
-function TuningPackManager.applyTransmissionPack(vehicle, packId, options)
+function PerformanceTuning.TuningPackManager.applyTransmissionPack(vehicle, packId, options)
     options = options or {}
     local packs = PerformanceTuning._internals.TRANSMISSION_PACKS
     local readHandlingValue = PerformanceTuning.HandlingManager.readHandlingValue
@@ -1346,7 +1341,7 @@ function TuningPackManager.applyTransmissionPack(vehicle, packId, options)
 end
 
 local function resolveEngineStagePack(packId)
-    local normalizedId = TuningPackManager.normalizeEnginePackId(packId)
+    local normalizedId = PerformanceTuning.TuningPackManager.normalizeEnginePackId(packId)
     local packs = PerformanceTuning._internals.ENGINE_PACKS or {}
     for _, pack in ipairs(packs) do
         if type(pack) == 'table' and pack.id == normalizedId then
@@ -1358,7 +1353,7 @@ local function resolveEngineStagePack(packId)
 end
 
 local function resolveEngineSwapPack(packId)
-    local normalizedId = TuningPackManager.normalizeEngineSwapPackId(packId)
+    local normalizedId = PerformanceTuning.TuningPackManager.normalizeEngineSwapPackId(packId)
     local basePackId = getBaseEnginePackId()
     if normalizedId == basePackId then
         return nil
@@ -1415,7 +1410,7 @@ local function applySelectedEngineComposition(vehicle, bucket, options)
 
     if selectedSwapPack then
         local selectedSwapModel = tostring(selectedSwapPack.swapModel or selectedSwapPack.id or ''):upper()
-        local resolvedSwapValues, errorMessage = TuningPackManager.resolveEngineSwapValues(selectedSwapModel)
+        local resolvedSwapValues, errorMessage = PerformanceTuning.TuningPackManager.resolveEngineSwapValues(selectedSwapModel)
         if not resolvedSwapValues then
             return false, errorMessage
         end
@@ -1448,11 +1443,11 @@ local function applySelectedEngineComposition(vehicle, bucket, options)
     end
 
     if targetAudioName then
-        TuningPackManager.applyEngineAudioProfile(vehicle, targetAudioName)
+        PerformanceTuning.TuningPackManager.applyEngineAudioProfile(vehicle, targetAudioName)
     end
 
     if not options.skipLog then
-        local swapLabel = selectedSwapPack and selectedSwapPack.label or TuningPackManager.getEngineSwapPackLabel(getBaseEnginePackId())
+        local swapLabel = selectedSwapPack and selectedSwapPack.label or PerformanceTuning.TuningPackManager.getEngineSwapPackLabel(getBaseEnginePackId())
         internals.logInfo(('Engine baseline composed (stage: %s, swap: %s): power=%.4f, topSpeed=%.4f'):format(
             selectedStagePack.label,
             swapLabel,
@@ -1470,14 +1465,14 @@ local function applySelectedEngineComposition(vehicle, bucket, options)
     return true
 end
 
-function TuningPackManager.applyEnginePack(vehicle, packId, options)
+function PerformanceTuning.TuningPackManager.applyEnginePack(vehicle, packId, options)
     options = options or {}
     local internals = PerformanceTuning._internals
     local refreshVehicleAfterHandlingChange = internals.refreshVehicleAfterHandlingChange
     local vehicleManager = PerformanceTuning.VehicleManager
     local bucket = vehicleManager.ensureTuningState(vehicle)
-    bucket.enginePack = TuningPackManager.normalizeEnginePackId(packId)
-    bucket.engineSwapPack = TuningPackManager.normalizeEngineSwapPackId(bucket.engineSwapPack)
+    bucket.enginePack = PerformanceTuning.TuningPackManager.normalizeEnginePackId(packId)
+    bucket.engineSwapPack = PerformanceTuning.TuningPackManager.normalizeEngineSwapPackId(bucket.engineSwapPack)
     local ok, errorMessage = applySelectedEngineComposition(vehicle, bucket, options)
     if not ok then
         return false, errorMessage
@@ -1487,16 +1482,16 @@ function TuningPackManager.applyEnginePack(vehicle, packId, options)
         refreshVehicleAfterHandlingChange(vehicle)
     end
     vehicleManager.syncVehicleHandlingState(vehicle)
-    return true, TuningPackManager.getEnginePackLabel(bucket.enginePack)
+    return true, PerformanceTuning.TuningPackManager.getEnginePackLabel(bucket.enginePack)
 end
 
-function TuningPackManager.applyEngineSwapPack(vehicle, packId, options)
+function PerformanceTuning.TuningPackManager.applyEngineSwapPack(vehicle, packId, options)
     options = options or {}
     local refreshVehicleAfterHandlingChange = (PerformanceTuning._internals or {}).refreshVehicleAfterHandlingChange
     local vehicleManager = PerformanceTuning.VehicleManager
     local bucket = vehicleManager.ensureTuningState(vehicle)
-    bucket.enginePack = TuningPackManager.normalizeEnginePackId(bucket.enginePack)
-    bucket.engineSwapPack = TuningPackManager.normalizeEngineSwapPackId(packId)
+    bucket.enginePack = PerformanceTuning.TuningPackManager.normalizeEnginePackId(bucket.enginePack)
+    bucket.engineSwapPack = PerformanceTuning.TuningPackManager.normalizeEngineSwapPackId(packId)
     local ok, errorMessage = applySelectedEngineComposition(vehicle, bucket, options)
     if not ok then
         return false, errorMessage
@@ -1506,10 +1501,10 @@ function TuningPackManager.applyEngineSwapPack(vehicle, packId, options)
         refreshVehicleAfterHandlingChange(vehicle)
     end
     vehicleManager.syncVehicleHandlingState(vehicle)
-    return true, TuningPackManager.getEngineSwapPackLabel(bucket.engineSwapPack)
+    return true, PerformanceTuning.TuningPackManager.getEngineSwapPackLabel(bucket.engineSwapPack)
 end
 
-function TuningPackManager.applyTireCompoundPack(vehicle, packId, options)
+function PerformanceTuning.TuningPackManager.applyTireCompoundPack(vehicle, packId, options)
     options = options or {}
     local internals = PerformanceTuning._internals
     local readHandlingValue = PerformanceTuning.HandlingManager.readHandlingValue
@@ -1521,8 +1516,8 @@ function TuningPackManager.applyTireCompoundPack(vehicle, packId, options)
     local vehicleManager = PerformanceTuning.VehicleManager
     local bucket = vehicleManager.ensureTuningState(vehicle)
     local selectedPack
-    local normalizedCategory = TuningPackManager.normalizeTireCompoundCategory(bucket.tireCompoundCategory)
-    local normalizedQuality = TuningPackManager.normalizeTireCompoundQuality(bucket.tireCompoundQuality)
+    local normalizedCategory = PerformanceTuning.TuningPackManager.normalizeTireCompoundCategory(bucket.tireCompoundCategory)
+    local normalizedQuality = PerformanceTuning.TuningPackManager.normalizeTireCompoundQuality(bucket.tireCompoundQuality)
 
     for _, pack in ipairs(internals.TIRE_COMPOUND_PACKS) do
         if pack.id == packId then
@@ -1623,53 +1618,53 @@ function TuningPackManager.applyTireCompoundPack(vehicle, packId, options)
     return true, selectedPack.label
 end
 
-function TuningPackManager.applyTireCompoundCategory(vehicle, categoryId, options)
+function PerformanceTuning.TuningPackManager.applyTireCompoundCategory(vehicle, categoryId, options)
     options = options or {}
     local vehicleManager = PerformanceTuning.VehicleManager
     local bucket = vehicleManager.ensureTuningState(vehicle)
-    bucket.tireCompoundCategory = TuningPackManager.normalizeTireCompoundCategory(categoryId)
+    bucket.tireCompoundCategory = PerformanceTuning.TuningPackManager.normalizeTireCompoundCategory(categoryId)
     if bucket.tireCompoundQuality == nil then
         bucket.tireCompoundQuality = 'mid_end'
     end
 
     local packId = 'stock'
     if bucket.tireCompoundCategory ~= 'stock' then
-        packId = TuningPackManager.resolveTireCompoundPackId(bucket.tireCompoundCategory, bucket.tireCompoundQuality)
+        packId = PerformanceTuning.TuningPackManager.resolveTireCompoundPackId(bucket.tireCompoundCategory, bucket.tireCompoundQuality)
     else
         bucket.tireCompoundPack = 'stock'
     end
-    local ok, result = TuningPackManager.applyTireCompoundPack(vehicle, packId, options)
+    local ok, result = PerformanceTuning.TuningPackManager.applyTireCompoundPack(vehicle, packId, options)
     if not ok then
         return false, result
     end
 
-    return true, TuningPackManager.getTireCompoundCategoryLabel(bucket.tireCompoundCategory)
+    return true, PerformanceTuning.TuningPackManager.getTireCompoundCategoryLabel(bucket.tireCompoundCategory)
 end
 
-function TuningPackManager.applyTireCompoundQuality(vehicle, qualityId, options)
+function PerformanceTuning.TuningPackManager.applyTireCompoundQuality(vehicle, qualityId, options)
     options = options or {}
     local vehicleManager = PerformanceTuning.VehicleManager
     local bucket = vehicleManager.ensureTuningState(vehicle)
-    bucket.tireCompoundQuality = TuningPackManager.normalizeTireCompoundQuality(qualityId)
+    bucket.tireCompoundQuality = PerformanceTuning.TuningPackManager.normalizeTireCompoundQuality(qualityId)
     if bucket.tireCompoundCategory == nil then
         bucket.tireCompoundCategory = 'road'
     end
 
     local packId = 'stock'
     if bucket.tireCompoundCategory ~= 'stock' then
-        packId = TuningPackManager.resolveTireCompoundPackId(bucket.tireCompoundCategory, bucket.tireCompoundQuality)
+        packId = PerformanceTuning.TuningPackManager.resolveTireCompoundPackId(bucket.tireCompoundCategory, bucket.tireCompoundQuality)
     else
         bucket.tireCompoundPack = 'stock'
     end
-    local ok, result = TuningPackManager.applyTireCompoundPack(vehicle, packId, options)
+    local ok, result = PerformanceTuning.TuningPackManager.applyTireCompoundPack(vehicle, packId, options)
     if not ok then
         return false, result
     end
 
-    return true, TuningPackManager.getTireCompoundQualityLabel(bucket.tireCompoundQuality)
+    return true, PerformanceTuning.TuningPackManager.getTireCompoundQualityLabel(bucket.tireCompoundQuality)
 end
 
-function TuningPackManager.applyBrakePack(vehicle, packId, options)
+function PerformanceTuning.TuningPackManager.applyBrakePack(vehicle, packId, options)
     options = options or {}
     local internals = PerformanceTuning._internals
     local readHandlingValue = PerformanceTuning.HandlingManager.readHandlingValue
@@ -1729,7 +1724,7 @@ function TuningPackManager.applyBrakePack(vehicle, packId, options)
     return true, selectedPack.label
 end
 
-function TuningPackManager.applyHandbrakePack(vehicle, packId, options)
+function PerformanceTuning.TuningPackManager.applyHandbrakePack(vehicle, packId, options)
     options = options or {}
     local internals = PerformanceTuning._internals
     local readHandlingValue = PerformanceTuning.HandlingManager.readHandlingValue
@@ -1797,7 +1792,7 @@ function TuningPackManager.applyHandbrakePack(vehicle, packId, options)
     return true, selectedPack.label
 end
 
-function TuningPackManager.applyNitrousPack(vehicle, packId, options)
+function PerformanceTuning.TuningPackManager.applyNitrousPack(vehicle, packId, options)
     options = options or {}
     local internals = PerformanceTuning._internals
     local vehicleManager = PerformanceTuning.VehicleManager
@@ -1851,9 +1846,9 @@ function TuningPackManager.applyNitrousPack(vehicle, packId, options)
     return true, selectedPack.label
 end
 
-TuningPackManager.applyNitroPack = TuningPackManager.applyNitrousPack
+PerformanceTuning.TuningPackManager.applyNitroPack = PerformanceTuning.TuningPackManager.applyNitrousPack
 
-function TuningPackManager.applySynchronizedTuneState(vehicle, state, options)
+function PerformanceTuning.TuningPackManager.applySynchronizedTuneState(vehicle, state, options)
     options = options or {}
     local internals = PerformanceTuning._internals
 
@@ -1862,12 +1857,12 @@ function TuningPackManager.applySynchronizedTuneState(vehicle, state, options)
     end
 
     local bucket = PerformanceTuning.VehicleManager.ensureTuningState(vehicle)
-    bucket.enginePack = TuningPackManager.normalizeEnginePackId(state.enginePack or getBaseEnginePackId())
-    bucket.engineSwapPack = TuningPackManager.normalizeEngineSwapPackId(state.engineSwapPack or getBaseEnginePackId())
+    bucket.enginePack = PerformanceTuning.TuningPackManager.normalizeEnginePackId(state.enginePack or getBaseEnginePackId())
+    bucket.engineSwapPack = PerformanceTuning.TuningPackManager.normalizeEngineSwapPackId(state.engineSwapPack or getBaseEnginePackId())
     bucket.transmissionPack = state.transmissionPack or 'stock'
     bucket.suspensionPack = internals.normalizeSuspensionPackId(state.suspensionPack)
-    bucket.tireCompoundCategory = TuningPackManager.normalizeTireCompoundCategory(state.tireCompoundCategory)
-    bucket.tireCompoundQuality = TuningPackManager.normalizeTireCompoundQuality(state.tireCompoundQuality)
+    bucket.tireCompoundCategory = PerformanceTuning.TuningPackManager.normalizeTireCompoundCategory(state.tireCompoundCategory)
+    bucket.tireCompoundQuality = PerformanceTuning.TuningPackManager.normalizeTireCompoundQuality(state.tireCompoundQuality)
     if type(state.tireCompoundPack) == 'string' and state.tireCompoundPack ~= '' then
         bucket.tireCompoundPack = state.tireCompoundPack
         if bucket.tireCompoundPack == 'stock' then
@@ -1878,12 +1873,12 @@ function TuningPackManager.applySynchronizedTuneState(vehicle, state, options)
             end
         end
     else
-        bucket.tireCompoundPack = TuningPackManager.resolveTireCompoundPackId(bucket.tireCompoundCategory, bucket.tireCompoundQuality)
+        bucket.tireCompoundPack = PerformanceTuning.TuningPackManager.resolveTireCompoundPackId(bucket.tireCompoundCategory, bucket.tireCompoundQuality)
     end
     bucket.brakePack = state.brakePack or getBaseBrakePackId()
     bucket.handbrakePack = state.handbrakePack or getBaseHandbrakePackId()
     bucket.nitrousLevel = state.nitrousLevel or 'stock'
-    bucket.steeringLockMode = TuningPackManager.normalizeSteeringLockMode(state.steeringLockMode)
+    bucket.steeringLockMode = PerformanceTuning.TuningPackManager.normalizeSteeringLockMode(state.steeringLockMode)
     bucket.revLimiterEnabled = state.revLimiterEnabled == true
     bucket.nitrousDurationMs = math.max(250, math.floor(tonumber(state.nitrousDurationMs) or bucket.nitrousDurationMs or internals.NitrousConfig.baseDurationMs))
     bucket.nitrousShotStrength = internals.clampNitroShotStrength(state.nitrousShotStrength or bucket.nitrousShotStrength or 1.0)
@@ -1901,38 +1896,42 @@ function TuningPackManager.applySynchronizedTuneState(vehicle, state, options)
         preserveCharge = true,
     }
 
-    if not select(1, TuningPackManager.applyEnginePack(vehicle, bucket.enginePack, sharedOptions)) then return false end
-    if not select(1, TuningPackManager.applyTransmissionPack(vehicle, bucket.transmissionPack, sharedOptions)) then return false end
-    if not select(1, TuningPackManager.applySuspensionPack(vehicle, bucket.suspensionPack, sharedOptions)) then return false end
-    if not select(1, TuningPackManager.applyTireCompoundPack(vehicle, bucket.tireCompoundPack, sharedOptions)) then return false end
-    if not select(1, TuningPackManager.applyBrakePack(vehicle, bucket.brakePack, sharedOptions)) then return false end
-    if not select(1, TuningPackManager.applyHandbrakePack(vehicle, bucket.handbrakePack, sharedOptions)) then return false end
-    if not select(1, TuningPackManager.applyNitrousPack(vehicle, bucket.nitrousLevel or 'stock', sharedOptions)) then return false end
-    if not select(1, TuningPackManager.applySteeringLockModeTweak(vehicle, bucket.steeringLockMode or 'stock', sharedOptions)) then return false end
-    if not select(1, TuningPackManager.applyNitroShotStrengthTweak(vehicle, bucket.nitrousShotStrength or 1.0, sharedOptions)) then return false end
-    if not select(1, TuningPackManager.applyAntirollForceTweak(vehicle, bucket.antirollForce, sharedOptions)) then return false end
-    if not select(1, TuningPackManager.applyBrakeBiasFrontTweak(vehicle, bucket.brakeBiasFront, sharedOptions)) then return false end
-    if not select(1, TuningPackManager.applyGripBiasFrontTweak(vehicle, bucket.gripBiasFront, sharedOptions)) then return false end
-    if not select(1, TuningPackManager.applyAntirollBiasFrontTweak(vehicle, bucket.antirollBiasFront, sharedOptions)) then return false end
-    if not select(1, TuningPackManager.applySuspensionRaiseTweak(vehicle, bucket.suspensionRaise, sharedOptions)) then return false end
-    if not select(1, TuningPackManager.applySuspensionBiasFrontTweak(vehicle, bucket.suspensionBiasFront, sharedOptions)) then return false end
-    TuningPackManager.applyCgOffsetTweak(vehicle, bucket.cgOffsetTweak or 0.0, sharedOptions)
+    if not select(1, PerformanceTuning.TuningPackManager.applyEnginePack(vehicle, bucket.enginePack, sharedOptions)) then return false end
+    if not select(1, PerformanceTuning.TuningPackManager.applyTransmissionPack(vehicle, bucket.transmissionPack, sharedOptions)) then return false end
+    if not select(1, PerformanceTuning.TuningPackManager.applySuspensionPack(vehicle, bucket.suspensionPack, sharedOptions)) then return false end
+    if not select(1, PerformanceTuning.TuningPackManager.applyTireCompoundPack(vehicle, bucket.tireCompoundPack, sharedOptions)) then return false end
+    if not select(1, PerformanceTuning.TuningPackManager.applyBrakePack(vehicle, bucket.brakePack, sharedOptions)) then return false end
+    if not select(1, PerformanceTuning.TuningPackManager.applyHandbrakePack(vehicle, bucket.handbrakePack, sharedOptions)) then return false end
+    if not select(1, PerformanceTuning.TuningPackManager.applyNitrousPack(vehicle, bucket.nitrousLevel or 'stock', sharedOptions)) then return false end
+    if not select(1, PerformanceTuning.TuningPackManager.applySteeringLockModeTweak(vehicle, bucket.steeringLockMode or 'stock', sharedOptions)) then return false end
+    if not select(1, PerformanceTuning.TuningPackManager.applyNitroShotStrengthTweak(vehicle, bucket.nitrousShotStrength or 1.0, sharedOptions)) then return false end
+    if not select(1, PerformanceTuning.TuningPackManager.applyAntirollForceTweak(vehicle, bucket.antirollForce, sharedOptions)) then return false end
+    if not select(1, PerformanceTuning.TuningPackManager.applyBrakeBiasFrontTweak(vehicle, bucket.brakeBiasFront, sharedOptions)) then return false end
+    if not select(1, PerformanceTuning.TuningPackManager.applyGripBiasFrontTweak(vehicle, bucket.gripBiasFront, sharedOptions)) then return false end
+    if not select(1, PerformanceTuning.TuningPackManager.applyAntirollBiasFrontTweak(vehicle, bucket.antirollBiasFront, sharedOptions)) then return false end
+    if not select(1, PerformanceTuning.TuningPackManager.applySuspensionRaiseTweak(vehicle, bucket.suspensionRaise, sharedOptions)) then return false end
+    if not select(1, PerformanceTuning.TuningPackManager.applySuspensionBiasFrontTweak(vehicle, bucket.suspensionBiasFront, sharedOptions)) then return false end
+    PerformanceTuning.TuningPackManager.applyCgOffsetTweak(vehicle, bucket.cgOffsetTweak or 0.0, sharedOptions)
 
     internals.refreshVehicleAfterHandlingChange(vehicle)
     PerformanceTuning.VehicleManager.setLastAppliedTuneState(vehicle, PerformanceTuning.VehicleManager.serializeTuneState(bucket))
     return true
 end
 
-function TuningPackManager.applyTunePackForContext(vehicle, context, packId)
-    if context == 'engine' then return TuningPackManager.applyEnginePack(vehicle, packId or getBaseEnginePackId()) end
-    if context == 'engineSwap' then return TuningPackManager.applyEngineSwapPack(vehicle, packId or getBaseEnginePackId()) end
-    if context == 'transmission' then return TuningPackManager.applyTransmissionPack(vehicle, packId or 'stock') end
-    if context == 'suspension' then return TuningPackManager.applySuspensionPack(vehicle, packId or 'stock') end
-    if context == 'tires' then return TuningPackManager.applyTireCompoundPack(vehicle, packId or 'stock') end
-    if context == 'tireCompoundCategory' then return TuningPackManager.applyTireCompoundCategory(vehicle, packId or 'stock') end
-    if context == 'tireCompoundQuality' then return TuningPackManager.applyTireCompoundQuality(vehicle, packId or 'mid_end') end
-    if context == 'brakes' then return TuningPackManager.applyBrakePack(vehicle, packId or getBaseBrakePackId()) end
-    if context == 'handbrakes' then return TuningPackManager.applyHandbrakePack(vehicle, packId or getBaseHandbrakePackId()) end
-    if context == 'nitrous' or context == 'nitro' then return TuningPackManager.applyNitrousPack(vehicle, packId or 'stock') end
+function PerformanceTuning.TuningPackManager.applyTunePackForContext(vehicle, context, packId)
+    if context == 'engine' then return PerformanceTuning.TuningPackManager.applyEnginePack(vehicle, packId or getBaseEnginePackId()) end
+    if context == 'engineSwap' then return PerformanceTuning.TuningPackManager.applyEngineSwapPack(vehicle, packId or getBaseEnginePackId()) end
+    if context == 'transmission' then return PerformanceTuning.TuningPackManager.applyTransmissionPack(vehicle, packId or 'stock') end
+    if context == 'suspension' then return PerformanceTuning.TuningPackManager.applySuspensionPack(vehicle, packId or 'stock') end
+    if context == 'tires' then return PerformanceTuning.TuningPackManager.applyTireCompoundPack(vehicle, packId or 'stock') end
+    if context == 'tireCompoundCategory' then return PerformanceTuning.TuningPackManager.applyTireCompoundCategory(vehicle, packId or 'stock') end
+    if context == 'tireCompoundQuality' then return PerformanceTuning.TuningPackManager.applyTireCompoundQuality(vehicle, packId or 'mid_end') end
+    if context == 'brakes' then return PerformanceTuning.TuningPackManager.applyBrakePack(vehicle, packId or getBaseBrakePackId()) end
+    if context == 'handbrakes' then return PerformanceTuning.TuningPackManager.applyHandbrakePack(vehicle, packId or getBaseHandbrakePackId()) end
+    if context == 'nitrous' or context == 'nitro' then return PerformanceTuning.TuningPackManager.applyNitrousPack(vehicle, packId or 'stock') end
     return false, 'Unsupported tuning context.'
 end
+
+
+
+

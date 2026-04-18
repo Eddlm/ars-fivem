@@ -211,7 +211,9 @@ end
 local checkDeadline = nil
 
 AddEventHandler('onResourceStart', function(startedResourceName)
-    local _ = startedResourceName
+    if startedResourceName ~= RESOURCE_NAME then
+        return
+    end
 
     if hasStartupCheckAlreadyRun() then
         return

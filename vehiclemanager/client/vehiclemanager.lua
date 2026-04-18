@@ -1,9 +1,10 @@
-local Config = VehicleManager.Config or {}
-local MenuConfig = Config.menu or {}
-local AppearanceConfig = Config.appearance or {}
-local CategoryConfig = Config.categories or {}
-local ConstantConfig = Config.constants or {}
-local UIConfig = Config.ui or {}
+VehicleManager = VehicleManager or {}
+VehicleManager.Client = VehicleManager.Client or {}
+local MenuConfig = (VehicleManager.Config or {}).menu or {}
+local AppearanceConfig = (VehicleManager.Config or {}).appearance or {}
+local CategoryConfig = (VehicleManager.Config or {}).categories or {}
+local ConstantConfig = (VehicleManager.Config or {}).constants or {}
+local UIConfig = (VehicleManager.Config or {}).ui or {}
 local TextConfig = {
     helpLabel = "Util",
     helpOptions = { "Fix Vehicle", "Teleport To Nearest Road", "Delete Vehicle" },
@@ -213,24 +214,29 @@ local pendingOverwriteSaveId = nil
 local TUNE_STATE_BAG_KEY = tostring(UIConfig.tuneStateBagKey or "performancetuning:tuneState")
 local HANDLING_STATE_BAG_KEY = tostring(UIConfig.handlingStateBagKey or "performancetuning:handlingState")
 local SAVE_ID_STATE_BAG_KEY = tostring(UIConfig.saveIdStateBagKey or "vehiclemanager:saveId")
-local getCurrentVehicle
-local scheduleVehicleTuningAutosave
-
 AddStateBagChangeHandler(TUNE_STATE_BAG_KEY, nil, function(bagName, key, value)
-    local vehicle = getCurrentVehicle(false)
+    if type(VehicleManager.Client.getCurrentVehicle) ~= 'function' then
+        return
+    end
+
+    local vehicle = VehicleManager.Client.getCurrentVehicle(false)
     if not vehicle then return end
     if GetEntityFromStateBagName(bagName) ~= vehicle then return end
-    if scheduleVehicleTuningAutosave then
-        scheduleVehicleTuningAutosave()
+    if type(VehicleManager.Client.scheduleVehicleTuningAutosave) == 'function' then
+        VehicleManager.Client.scheduleVehicleTuningAutosave()
     end
 end)
 
 AddStateBagChangeHandler(HANDLING_STATE_BAG_KEY, nil, function(bagName, key, value)
-    local vehicle = getCurrentVehicle(false)
+    if type(VehicleManager.Client.getCurrentVehicle) ~= 'function' then
+        return
+    end
+
+    local vehicle = VehicleManager.Client.getCurrentVehicle(false)
     if not vehicle then return end
     if GetEntityFromStateBagName(bagName) ~= vehicle then return end
-    if scheduleVehicleTuningAutosave then
-        scheduleVehicleTuningAutosave()
+    if type(VehicleManager.Client.scheduleVehicleTuningAutosave) == 'function' then
+        VehicleManager.Client.scheduleVehicleTuningAutosave()
     end
 end)
 
@@ -380,7 +386,7 @@ end
 
 wheelCategoryListItem.Items = wheelCategoryLabels
 
-getCurrentVehicle = function(requireDriver)
+function VehicleManager.Client.getCurrentVehicle(requireDriver)
     local ped = PlayerPedId()
     if not DoesEntityExist(ped) then
         return nil
@@ -707,7 +713,7 @@ local function rebuildModMenu(subMenu, categories, emptyTitle, emptyDescription,
     end
 
     targetMenu:Clear()
-    local vehicle = getCurrentVehicle(false)
+    local vehicle = VehicleManager.Client.getCurrentVehicle(false)
     if not vehicle then
         local emptyItem = VMUI.CreateItem(TextConfig.noVehicleLabel or "No vehicle", TextConfig.noVehicleDescription or "Get into a vehicle to see options here.")
         emptyItem:Enabled(false)
@@ -789,7 +795,7 @@ local function rebuildStatsMenu()
 end
 
 local function applyModSelection(item, index, entries)
-    local vehicle = getCurrentVehicle(false)
+    local vehicle = VehicleManager.Client.getCurrentVehicle(false)
     if not vehicle then
         return
     end
@@ -814,7 +820,7 @@ local function applyModSelection(item, index, entries)
 
     SetVehicleModKit(vehicle, 0)
     SetVehicleMod(vehicle, targetEntry.modType, option.value, false)
-    scheduleVehicleTuningAutosave()
+    VehicleManager.Client.scheduleVehicleTuningAutosave()
 end
 
 local function findColorIndex(options, colorId)
@@ -884,7 +890,7 @@ local function rebuildWheelList(categoryIndex)
     currentWheelOptions = {}
     wheelListItem.Items = {}
 
-    local vehicle = getCurrentVehicle(false)
+    local vehicle = VehicleManager.Client.getCurrentVehicle(false)
     if not vehicle then
         wheelListItem.Items[1] = TextConfig.noVehicleLabel or "No vehicle"
         wheelListItem:Index(1)
@@ -931,7 +937,7 @@ local function rebuildWheelList(categoryIndex)
 end
 
 local function refreshWheelControls()
-    local vehicle = getCurrentVehicle(false)
+    local vehicle = VehicleManager.Client.getCurrentVehicle(false)
     if not vehicle then
         wheelCategoryListItem:Index(1)
         rebuildWheelList(1)
@@ -947,7 +953,7 @@ local function refreshWheelControls()
 end
 
 local function applyWheelSelection(categoryIndex, wheelIndex, useCustomTyres)
-    local vehicle = getCurrentVehicle(false)
+    local vehicle = VehicleManager.Client.getCurrentVehicle(false)
     local option = currentWheelOptions[wheelIndex]
     if not vehicle or not option then
         return
@@ -958,7 +964,7 @@ local function applyWheelSelection(categoryIndex, wheelIndex, useCustomTyres)
 
     local wheelModType = getPrimaryWheelModType(vehicle)
     SetVehicleMod(vehicle, wheelModType, option.value, useCustomTyres == true)
-    scheduleVehicleTuningAutosave()
+    VehicleManager.Client.scheduleVehicleTuningAutosave()
 end
 
 local function findLiveryIndex(vehicle)
@@ -986,7 +992,7 @@ local function findLiveryIndex(vehicle)
 end
 
 local function refreshVehicleCustomizationLists()
-    local vehicle = getCurrentVehicle(false)
+    local vehicle = VehicleManager.Client.getCurrentVehicle(false)
     local primaryColor = 0
     local secondaryColor = 0
     local primaryPaintType = 0
@@ -1025,8 +1031,8 @@ local function refreshVehicleCustomizationLists()
 end
 
 local function updateVehicleAvailabilityState(forceRefresh)
-    local hasVehicle = getCurrentVehicle(false) ~= nil
-    local hasDriverVehicle = getCurrentVehicle(true) ~= nil
+    local hasVehicle = VehicleManager.Client.getCurrentVehicle(false) ~= nil
+    local hasDriverVehicle = VehicleManager.Client.getCurrentVehicle(true) ~= nil
     local stateChanged = hasVehicle ~= availabilityState.hasVehicle or hasDriverVehicle ~= availabilityState.hasDriverVehicle
     if not forceRefresh and not stateChanged then
         return
@@ -1048,7 +1054,7 @@ local function updateVehicleAvailabilityState(forceRefresh)
 end
 
 local function fixCurrentVehicle()
-    local vehicle = getCurrentVehicle(true)
+    local vehicle = VehicleManager.Client.getCurrentVehicle(true)
     if not vehicle then
         return
     end
@@ -1064,7 +1070,7 @@ local function fixCurrentVehicle()
 end
 
 local function teleportVehicleToNearestRoad()
-    local vehicle = getCurrentVehicle(true)
+    local vehicle = VehicleManager.Client.getCurrentVehicle(true)
     if not vehicle then
         return
     end
@@ -1082,7 +1088,7 @@ end
 
 local function runUtilityDeleteVehicleSequence()
     local ped = PlayerPedId()
-    local vehicle = getCurrentVehicle(true)
+    local vehicle = VehicleManager.Client.getCurrentVehicle(true)
     if not vehicle or not DoesEntityExist(vehicle) or not DoesEntityExist(ped) then
         return
     end
@@ -2006,7 +2012,7 @@ local function buildVehicleSavePayload(vehicle)
 end
 
 local function saveCurrentVehicle()
-    local vehicle = getCurrentVehicle(true)
+    local vehicle = VehicleManager.Client.getCurrentVehicle(true)
     if not vehicle then
         return
     end
@@ -2048,7 +2054,7 @@ saveVehicleItem.Activated = function()
 end
 
 local function autosaveManagedVehicleToExistingSave()
-    local vehicle = getCurrentVehicle(false)
+    local vehicle = VehicleManager.Client.getCurrentVehicle(false)
     if not vehicle then
         return
     end
@@ -2063,7 +2069,7 @@ local function autosaveManagedVehicleToExistingSave()
     TriggerServerEvent("vehiclemanager:updateSavedVehicleSnapshot", saveId, payload)
 end
 
-scheduleVehicleTuningAutosave = function()
+function VehicleManager.Client.scheduleVehicleTuningAutosave()
     pendingVehicleTuningAutosaveId = pendingVehicleTuningAutosaveId + 1
     local saveRequestId = pendingVehicleTuningAutosaveId
 
@@ -2079,7 +2085,7 @@ scheduleVehicleTuningAutosave = function()
 end
 
 local function applyPaintColor(target, categoryIndex, colorIndex)
-    local vehicle = getCurrentVehicle(false)
+    local vehicle = VehicleManager.Client.getCurrentVehicle(false)
     local category = getPaintCategory(categoryIndex)
     local options = target == "primary" and currentPrimaryColorOptions or currentSecondaryColorOptions
     local option = options[colorIndex]
@@ -2101,11 +2107,11 @@ local function applyPaintColor(target, categoryIndex, colorIndex)
     end
 
     SetVehicleExtraColours(vehicle, pearlescentColor, wheelColor)
-    scheduleVehicleTuningAutosave()
+    VehicleManager.Client.scheduleVehicleTuningAutosave()
 end
 
 local function applyPearlescentColor(index)
-    local vehicle = getCurrentVehicle(false)
+    local vehicle = VehicleManager.Client.getCurrentVehicle(false)
     local option = extraColorOptions[index]
     if not vehicle or not option then
         return
@@ -2113,29 +2119,29 @@ local function applyPearlescentColor(index)
 
     local _, wheelColor = GetVehicleExtraColours(vehicle)
     SetVehicleExtraColours(vehicle, option.colorId, wheelColor)
-    scheduleVehicleTuningAutosave()
+    VehicleManager.Client.scheduleVehicleTuningAutosave()
 end
 
 local function applyInteriorColor(index)
-    local vehicle = getCurrentVehicle(false)
+    local vehicle = VehicleManager.Client.getCurrentVehicle(false)
     local option = extraColorOptions[index]
     if not vehicle or not option then
         return
     end
 
     SetVehicleInteriorColor(vehicle, option.colorId)
-    scheduleVehicleTuningAutosave()
+    VehicleManager.Client.scheduleVehicleTuningAutosave()
 end
 
 local function applyDashboardColor(index)
-    local vehicle = getCurrentVehicle(false)
+    local vehicle = VehicleManager.Client.getCurrentVehicle(false)
     local option = extraColorOptions[index]
     if not vehicle or not option then
         return
     end
 
     SetVehicleDashboardColor(vehicle, option.colorId)
-    scheduleVehicleTuningAutosave()
+    VehicleManager.Client.scheduleVehicleTuningAutosave()
 end
 
 local function pulseHeadlightControl(vehicle)
@@ -2155,7 +2161,7 @@ local function pulseHeadlightControl(vehicle)
 end
 
 local function applyXenonColor(index)
-    local vehicle = getCurrentVehicle(false)
+    local vehicle = VehicleManager.Client.getCurrentVehicle(false)
     local option = xenonColorOptions[index]
     if not vehicle or not option then
         return
@@ -2171,11 +2177,11 @@ local function applyXenonColor(index)
             pulseHeadlightControl(vehicle)
         end
     end
-    scheduleVehicleTuningAutosave()
+    VehicleManager.Client.scheduleVehicleTuningAutosave()
 end
 
 local function applyWheelColor(index)
-    local vehicle = getCurrentVehicle(false)
+    local vehicle = VehicleManager.Client.getCurrentVehicle(false)
     local option = extraColorOptions[index]
     if not vehicle or not option then
         return
@@ -2183,11 +2189,11 @@ local function applyWheelColor(index)
 
     local pearlescentColor, _ = GetVehicleExtraColours(vehicle)
     SetVehicleExtraColours(vehicle, pearlescentColor, option.colorId)
-    scheduleVehicleTuningAutosave()
+    VehicleManager.Client.scheduleVehicleTuningAutosave()
 end
 
 local function applySelectedLivery(index)
-    local vehicle = getCurrentVehicle(false)
+    local vehicle = VehicleManager.Client.getCurrentVehicle(false)
     local option = currentLiveryOptions[index]
     if not vehicle or not option or not option.available then
         return
@@ -2200,7 +2206,7 @@ local function applySelectedLivery(index)
     elseif option.mode == "mod" then
         SetVehicleMod(vehicle, 48, option.value, false)
     end
-    scheduleVehicleTuningAutosave()
+    VehicleManager.Client.scheduleVehicleTuningAutosave()
 end
 
 vehicleMainMenu:AddItem(helpListItem)
@@ -2400,7 +2406,7 @@ performanceSettingsMenu.OnListChange = function(_, item, index)
         setPerformanceTuningPiDisplayModeIndex(index)
     elseif item == performanceRevLimiterListItem then
         if setPerformanceTuningRevLimiterEnabled(index == 2) then
-            scheduleVehicleTuningAutosave()
+            VehicleManager.Client.scheduleVehicleTuningAutosave()
         end
     end
     syncMenuCurrentDescription(performanceSettingsMenu)
@@ -2411,7 +2417,7 @@ performanceSettingsMenu.OnListSelect = function(_, item, index)
         setPerformanceTuningPiDisplayModeIndex(index)
     elseif item == performanceRevLimiterListItem then
         if setPerformanceTuningRevLimiterEnabled(index == 2) then
-            scheduleVehicleTuningAutosave()
+            VehicleManager.Client.scheduleVehicleTuningAutosave()
         end
     end
     syncMenuCurrentDescription(performanceSettingsMenu)
@@ -2441,7 +2447,7 @@ vehicleMainMenu.OnMenuChanged = function(_, newmenu, forward)
 end
 
 AddEventHandler("performancetuning:menuClosed", function()
-    scheduleVehicleTuningAutosave()
+    VehicleManager.Client.scheduleVehicleTuningAutosave()
 
     if not returnToCustomizeAfterPerformanceTuningClose then
         return
@@ -2480,7 +2486,7 @@ end)
 
 RegisterNetEvent("vehiclemanager:vehicleSnapshotUpdated", function(saveId)
     local _ = saveId
-    notifyPersistentVehicleUpdated(getCurrentVehicle(false))
+    notifyPersistentVehicleUpdated(VehicleManager.Client.getCurrentVehicle(false))
 end)
 
 RegisterNetEvent("vehiclemanager:vehicleSaved", function(saveId)
@@ -2529,3 +2535,6 @@ CreateThread(function()
         end
     end
 end)
+
+
+

@@ -1,8 +1,5 @@
 -- Exposes the remaining client-side orchestration glue after module extraction.
-local Definitions = PerformanceTuning.Definitions or {}
-local HandlingFields = Definitions.handlingFields
-local RuntimeConfig = PerformanceTuning.RuntimeConfig or Definitions.runtimeConfig
-
+local HandlingFields = (PerformanceTuning.Definitions or {}).handlingFields
 local RuntimeState = {
     originalHandlingByVehicle = {},
     tuningStateByVehicle = {},
@@ -20,7 +17,6 @@ local RuntimeState = {
     localTuneAuthoredUntilByNetId = {},
     steeringLockOverrideAppliedByVehicleKey = {},
 }
-local ensureTuningState, syncVehicleHandlingState, buildPerformanceIndex
 
 local function trim(value)
     return (tostring(value or ''):match('^%s*(.-)%s*$'))
@@ -123,8 +119,16 @@ local function calculateTargetDragCoeff(topSpeedFlatVel, powerValue)
     return (resolvedPowerValue / refSpeedDrag) * 2.0
 end
 
-syncVehicleHandlingState = function(vehicle)
+local function syncVehicleHandlingState(vehicle)
     return PerformanceTuning.VehicleManager.syncVehicleHandlingState(vehicle)
+end
+
+local function ensureTuningState(vehicle)
+    return PerformanceTuning.VehicleManager.ensureTuningState(vehicle)
+end
+
+local function buildPerformanceIndex(vehicle, bucket)
+    return PerformanceTuning.PerformancePanel.buildPerformanceIndex(vehicle, bucket)
 end
 
 local function notifyDragRebalanceFinished()
@@ -322,14 +326,6 @@ local function logInfo(message)
     return message
 end
 
-ensureTuningState = function(vehicle)
-    return PerformanceTuning.VehicleManager.ensureTuningState(vehicle)
-end
-
-buildPerformanceIndex = function(vehicle, bucket)
-    return PerformanceTuning.PerformancePanel.buildPerformanceIndex(vehicle, bucket)
-end
-
 local function getVehicleDisplayName(vehicle)
     local displayCode = GetDisplayNameFromVehicleModel(GetEntityModel(vehicle)) or ''
     local displayName = displayCode
@@ -435,7 +431,7 @@ local function applyCurrentVehicleStateBagTuningForMenu()
         return false
     end
 
-    local state = Entity(vehicle).state[(Definitions.stateBagKeys or {}).tune]
+    local state = Entity(vehicle).state[((PerformanceTuning.Definitions or {}).stateBagKeys or {}).tune]
     if type(state) ~= 'table' then
         return true
     end
@@ -662,7 +658,7 @@ exports('SetCurrentVehicleSteeringLockMode', function(mode)
 end)
 
 PerformanceTuning.RuntimeState = RuntimeState
-PerformanceTuning.RuntimeConfig = RuntimeConfig
+PerformanceTuning.RuntimeConfig = (PerformanceTuning.RuntimeConfig or (PerformanceTuning.Definitions or {}).runtimeConfig)
 PerformanceTuning.ClientBindings = {
     trim = trim,
     startsWith = startsWith,
@@ -756,3 +752,5 @@ RegisterNetEvent('performancetuning:stableLapStored', function(payload)
         tonumber(pi.brake) or 0
     ))
 end)
+
+

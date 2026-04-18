@@ -1,43 +1,42 @@
-RacingSystemUtil = type(RacingSystemUtil) == 'table' and RacingSystemUtil or {}
+RacingSystem = RacingSystem or {}
+RacingSystem.Client = RacingSystem.Client or {}
+RacingSystem.Menu = RacingSystem.Menu or {}
 
-local function registerUtil(name, fn)
-    if type(RacingSystemUtil[name]) ~= 'function' then
-        RacingSystemUtil[name] = fn
-    end
+RacingSystem.Client.Util = RacingSystem.Client.Util or {}
+
+RacingSystem.Client.Util.NotifyPlayer = function(message)
+    BeginTextCommandThefeedPost('STRING')
+    AddTextComponentSubstringPlayerName(tostring(message or ''))
+    EndTextCommandThefeedPostTicker(false, false)
 end
 
-registerUtil('NotifyPlayer', function(message, isError)
-    local colorPrefix = isError and '~o~' or '~g~'
-    local text = ('%s%s~s~'):format(colorPrefix, tostring(message or ''))
-    BeginTextCommandThefeedPost('STRING')
-    AddTextComponentSubstringPlayerName(text)
-    EndTextCommandThefeedPostTicker(false, false)
-end)
-
-registerUtil('ShowWarningSubtitle', function(message, durationMs, colorTag)
+RacingSystem.Client.Util.ShowWarningSubtitle = function(message, durationMs, colorTag)
     BeginTextCommandPrint('STRING')
     local colorPrefix = tostring(colorTag or '~y~')
     AddTextComponentSubstringPlayerName(('%s%s~s~'):format(colorPrefix, tostring(message or '')))
     EndTextCommandPrint(math.max(0, math.floor(tonumber(durationMs) or 1000)), true)
-end)
+end
 
-local noop = function() return end
-registerUtil('ShowRaceEventVisual', noop)
-registerUtil('DrawRaceEventVisual', noop)
-registerUtil('UpdateCountdownVisual', function(instanceId, remainingMs)
+RacingSystem.Client.Util.UpdateCountdownVisual = function(instanceId, remainingMs)
     local seconds = math.floor(remainingMs / 1000)
     if seconds >= 0 then
-        ScaleformUI.Scaleforms.BigMessageInstance:ShowSimpleShard("Race starts in", tostring(seconds), 1000)
+        ScaleformUI.Scaleforms.BigMessageInstance:ShowMpMessageLarge("Race starts in", tostring(seconds), 1000)
     end
-end)
-registerUtil('ClearCountdownVisual', function()
+end
+RacingSystem.Client.Util.ClearCountdownVisual = function()
     ScaleformUI.Scaleforms.BigMessageInstance:Dispose()
-end)
+end
 
 local raceLeaderboardVisualState = {
     title = 'LEADERBOARD',
     rows = {},
     finalizedByKey = {},
+}
+
+local raceEventVisualState = {
+    title = '',
+    subtitle = '',
+    expiresAt = 0,
 }
 
 local function drawLeaderboardText(x, y, scale, text, r, g, b, a, centered)
@@ -55,7 +54,39 @@ local function drawLeaderboardText(x, y, scale, text, r, g, b, a, centered)
     EndTextCommandDisplayText(x, y)
 end
 
-registerUtil('UpdateRaceLeaderboardVisual', function(title, rows)
+RacingSystem.Client.Util.ShowRaceEventVisual = function(title, subtitle, durationMs)
+    raceEventVisualState.title = tostring(title or '')
+    raceEventVisualState.subtitle = tostring(subtitle or '')
+    raceEventVisualState.expiresAt = GetGameTimer() + math.max(0, math.floor(tonumber(durationMs) or 1200))
+end
+
+RacingSystem.Client.Util.DrawRaceEventVisual = function()
+    local expiresAt = tonumber(raceEventVisualState.expiresAt) or 0
+    local now = GetGameTimer()
+    if expiresAt <= now then
+        raceEventVisualState.title = ''
+        raceEventVisualState.subtitle = ''
+        return
+    end
+
+    local title = raceEventVisualState.title
+    local subtitle = raceEventVisualState.subtitle
+    if title == '' and subtitle == '' then
+        return
+    end
+
+    local bodyX = 0.5
+    local bodyY = 0.185
+    local hasSubtitle = subtitle ~= ''
+    local bodyHeight = hasSubtitle and 0.09 or 0.062
+    DrawRect(bodyX, bodyY, 0.48, bodyHeight, 10, 14, 24, 150)
+    drawLeaderboardText(bodyX, bodyY - (hasSubtitle and 0.024 or 0.012), 0.45, title, 245, 250, 255, 235, true)
+    if hasSubtitle then
+        drawLeaderboardText(bodyX, bodyY + 0.01, 0.32, subtitle, 210, 225, 255, 220, true)
+    end
+end
+
+RacingSystem.Client.Util.UpdateRaceLeaderboardVisual = function(title, rows)
     raceLeaderboardVisualState.title = tostring(title or 'LEADERBOARD')
     local previousByKey = {}
     for _, existing in ipairs(type(raceLeaderboardVisualState.rows) == 'table' and raceLeaderboardVisualState.rows or {}) do
@@ -96,9 +127,9 @@ registerUtil('UpdateRaceLeaderboardVisual', function(title, rows)
             finalized = shouldFinalize,
         }
     end
-end)
+end
 
-registerUtil('DrawRaceLeaderboardVisual', function()
+RacingSystem.Client.Util.DrawRaceLeaderboardVisual = function()
     local rows = type(raceLeaderboardVisualState.rows) == 'table' and raceLeaderboardVisualState.rows or {}
     if #rows <= 0 then
         return
@@ -139,15 +170,14 @@ registerUtil('DrawRaceLeaderboardVisual', function()
 
         drawLeaderboardText(textLeftX, y - 0.004, rowTextScale, row.text, textR, textG, textB, textA, false)
     end
-end)
+end
 
-registerUtil('ClearRaceLeaderboardVisual', function()
+RacingSystem.Client.Util.ClearRaceLeaderboardVisual = function()
     raceLeaderboardVisualState.rows = {}
     raceLeaderboardVisualState.finalizedByKey = {}
-end)
+end
 
--- Global snapshot state — accessed by menu.lua
-latestSnapshot = {
+local latestSnapshot = {
     races = {},
     count = 0,
     viewer = {
@@ -156,8 +186,9 @@ latestSnapshot = {
         canKillOwnedInstances = false,
     },
 }
+RacingSystem.Client.latestSnapshot = latestSnapshot
 
-editorState = {
+local editorState = {
     active = false,
     name = '',
     selectedName = '',
@@ -165,44 +196,13 @@ editorState = {
     grabbedCheckpointIndex = nil,
     defaultCheckpointRadius = 8.0,
 }
+RacingSystem.Client.editorState = editorState
 
-local raceRuntimeState = {
-    pendingCheckpointPass = nil,
-    predictedProgress = nil,
-    previousPosition = nil,
-    accelerationPenaltyUntil = 0,
-    powerPenaltyUntil = 0,
-    powerPenaltyVehicle = nil,
-    checkpointPassArm = nil,
-    lastPassedCheckpoint = nil,
-    startLineCheckpoint = nil,
-    joinHintInstanceId = nil,
-    startLineBlip = nil,
-    futureCheckpointBlips = {},
-    futureBlipCheckpointIndex = nil,
-    futureBlipInstanceId = nil,
-    chevronEdgeCache = nil,
-    penaltyPreviewText = nil,
-    penaltyPreviewShownAt = 0,
-    cornerConesByKey = {},
-}
-local countdownEndTimeByInstanceId = {}
-local countdownZeroReportedByInstanceId = {}
-local raceStartCueShownByInstanceId = {}
-local finishCueShownByInstanceId = {}
-local raceTimingState = {
-    instanceId = nil,
-    raceStartedAt = nil,
-    lapStartedAt = nil,
-}
 local latestSnapshotVersion = 0
 local snapshotAcceptedAt = 0
 local snapshotRequestedAt = 0
 local latestStandingsVersionByInstanceId = {}
 local latestStandingsByInstanceId = {}
-local localEntrantIdentity = {
-    entrantId = nil,
-}
 local reliabilityCounters = {
     staleSnapshotsIgnored = 0,
 }
@@ -212,26 +212,21 @@ local ClientAdvancedConfig = (((RacingSystem or {}).Config or {}).advanced or {}
 local CHECKPOINT_RADIUS_STEP_METERS = tonumber(ClientAdvancedConfig.checkpointRadiusStepMeters) or 1.0
 local EDITOR_PITCH_UP_CONTROL_ID = math.floor(tonumber(ClientAdvancedConfig.editorPitchUpControlId) or 111)
 local EDITOR_PITCH_DOWN_CONTROL_ID = math.floor(tonumber(ClientAdvancedConfig.editorPitchDownControlId) or 112)
+local LEADERBOARD_CLIENT_TIEBREAK_ENABLED = ClientAdvancedConfig.leaderboardClientTiebreakEnabled == true
 
 local isGTAORacePromptOpen = false
-local clearPredictedRaceProgress
 
 local instanceAssetCache = {}
+RacingSystem.Client.instanceAssetCache = instanceAssetCache
+
 local activeInstanceAssets = {
     instanceId = nil,
     objects = {},
     modelHides = {},
 }
+RacingSystem.Client.activeInstanceAssets = activeInstanceAssets
 
-local CHECKPOINT_PASS_ARM_DISTANCE = tonumber(ClientAdvancedConfig.checkpointPassArmDistance) or 30.0
-local CHECKPOINT_PASS_RELEASE_THRESHOLD = tonumber(ClientAdvancedConfig.checkpointPassReleaseThreshold) or 0.75
-local CHECKPOINT_RECOVERY_PASS_MAX_MPH = tonumber(ClientAdvancedConfig.checkpointRecoveryPassMaxMph) or 5.0
-local CHECKPOINT_RECOVERY_FORWARD_VELOCITY_RATIO_MAX = tonumber(ClientAdvancedConfig.checkpointRecoveryForwardVelocityRatioMax) or 0.66
-local METERS_PER_SECOND_TO_MILES_PER_HOUR = 2.236936
 local MILES_PER_HOUR_TO_METERS_PER_SECOND = 0.44704
-local CHECKPOINT_SOFT_POWER_PENALTY_MULTIPLIER = tonumber(ClientAdvancedConfig.checkpointSoftPowerPenaltyMultiplier) or 0.05
-local CHECKPOINT_DEBUG_TEXT_DISTANCE_METERS = tonumber(ClientAdvancedConfig.checkpointDebugTextDistanceMeters) or 300.0
-local LEADERBOARD_CLIENT_TIEBREAK_ENABLED = ClientAdvancedConfig.leaderboardClientTiebreakEnabled == true
 local CHECKPOINT_RUNTIME_Z_OFFSET_METERS = tonumber(ClientAdvancedConfig.checkpointRuntimeZOffsetMeters) or -2.0
 local MAX_FUTURE_PREVIEW_CHECKPOINTS = math.max(1, math.floor(tonumber(ClientAdvancedConfig.maxFuturePreviewCheckpoints) or 3))
 local CORNER_CONE_MODEL_HASH = GetHashKey(tostring(ClientAdvancedConfig.cornerConeModel or 'prop_roadcone01a'))
@@ -249,6 +244,11 @@ local MARKER_TAXONOMY = ClientAdvancedConfig.markerTaxonomy or {
 local isTeleportInProgress = false
 local CLIENT_EXTRA_PRINT_LEVEL = math.floor(tonumber(ClientAdvancedConfig.extraPrintLevel) or 0)
 
+-- Lazy accessor so client.lua functions can read InRace state without a circular upvalue.
+local function getRaceRuntimeState()
+    return RacingSystem.Client.InRace.raceRuntimeState
+end
+
 local function getRouteCheckpointMarkerTypeId()
     local taxonomyType = tonumber(MARKER_TAXONOMY.routeCheckpointTypeId)
     if taxonomyType then
@@ -265,140 +265,23 @@ local function getClientExtraPrintLevel()
 end
 
 local function logClientVerbose(message)
-    local _ = message
-end
-
-local function clearPowerPenaltyVehicleOverride()
-    local penaltyVehicle = raceRuntimeState.powerPenaltyVehicle
-    if penaltyVehicle and DoesEntityExist(penaltyVehicle) then
-        SetVehicleEnginePowerMultiplier(penaltyVehicle, 0.0)
-    end
-    raceRuntimeState.powerPenaltyVehicle = nil
-    raceRuntimeState.powerPenaltyUntil = 0
-end
-
-local function applySoftPowerPenalty(vehicle, durationMs)
-    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+    if getClientExtraPrintLevel() ~= 2 then
         return
     end
-
-    local now = GetGameTimer()
-    local penaltyDurationMs = math.max(0, math.floor(tonumber(durationMs) or 0))
-    if penaltyDurationMs <= 0 then
-        return
-    end
-
-    raceRuntimeState.powerPenaltyVehicle = vehicle
-    raceRuntimeState.powerPenaltyUntil = now + penaltyDurationMs
-    SetVehicleEnginePowerMultiplier(vehicle, CHECKPOINT_SOFT_POWER_PENALTY_MULTIPLIER)
-end
-
-local function getVehicleForwardVelocityRatio(vehicle)
-    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
-        return 1.0
-    end
-
-    local velocity = GetEntityVelocity(vehicle)
-    local speedSquared = (velocity.x * velocity.x) + (velocity.y * velocity.y) + (velocity.z * velocity.z)
-    if speedSquared <= 0.0001 then
-        return 0.0
-    end
-
-    local forward = GetEntityForwardVector(vehicle)
-    local forwardSpeed = (velocity.x * forward.x) + (velocity.y * forward.y) + (velocity.z * forward.z)
-    return forwardSpeed / math.sqrt(speedSquared)
-end
-
-local GetPropSpeedModificationParameters
-
-do
-    local speedUpObjects = {
-        [-1006978322] = true,
-        [-388593496] = true,
-        [-66244843] = true,
-        [-1170462683] = true,
-        [993442923] = true,
-        [737005456] = true,
-        [-904856315] = true,
-        [-279848256] = true,
-        [588352126] = true,
-    }
-
-    local slowDownObjects = {
-        [346059280] = true,
-        [620582592] = true,
-        [85342060] = true,
-        [483832101] = true,
-        [930976262] = true,
-        [1677872320] = true,
-        [708828172] = true,
-        [950795200] = true,
-        [-1260656854] = true,
-        [-1875404158] = true,
-        [-864804458] = true,
-        [-1302470386] = true,
-        [1518201148] = true,
-        [384852939] = true,
-        [117169896] = true,
-        [-1479958115] = true,
-        [-227275508] = true,
-        [1431235846] = true,
-        [1832852758] = true,
-    }
-
-    GetPropSpeedModificationParameters = function(model, prpsba)
-        if prpsba == -1 then
-            return false
-        end
-
-        local speedTarget, durationTarget = -1, -1
-
-        if speedUpObjects[model] then
-            if prpsba == 1 then
-                speedTarget, durationTarget = 15, 0.3
-            elseif prpsba == 2 then
-                speedTarget, durationTarget = 25, 0.3
-            elseif prpsba == 3 then
-                speedTarget, durationTarget = 35, 0.5
-            elseif prpsba == 4 then
-                speedTarget, durationTarget = 45, 0.5
-            elseif prpsba == 5 then
-                speedTarget, durationTarget = 100, 0.5
-            else
-                speedTarget, durationTarget = 25, 0.4
-            end
-        elseif slowDownObjects[model] then
-            durationTarget = -1
-            if prpsba == 1 then
-                speedTarget = 44
-            elseif prpsba == 2 then
-                speedTarget = 30
-            elseif prpsba == 3 then
-                speedTarget = 16
-            else
-                speedTarget = 30
-            end
-        else
-            return false
-        end
-
-        return true, speedTarget, durationTarget
-    end
+    print(('[racingsystem:client] %s'):format(tostring(message or '')))
 end
 
 RegisterNetEvent('racingsystem:notify', function(payload)
     local message = ''
-    local isError = false
     if type(payload) == 'table' then
         message = tostring(payload.message or '')
-        isError = payload.isError == true
     else
         message = tostring(payload or '')
     end
     if message == '' then
         return
     end
-    RacingSystemUtil.NotifyPlayer(message, isError)
+    RacingSystem.Client.Util.NotifyPlayer(message)
 end)
 
 local function requestRaceStateSnapshot()
@@ -667,24 +550,21 @@ local function beginEditorSession(raceName, checkpoints)
     end
 
     -- Notify menu UI that editor session has begun
-    if type(beginEditorSessionUI) == 'function' then
-        beginEditorSessionUI()
-    end
+    RacingSystem.Menu.beginEditorSessionUI()
 end
 
-function endEditorSession()
+local function endEditorSession()
     -- Notify menu UI that editor session has ended
-    if type(endEditorSessionUI) == 'function' then
-        endEditorSessionUI()
-    end
+    RacingSystem.Menu.endEditorSessionUI()
 
     editorState.active = false
     editorState.name = ''
     editorState.checkpoints = {}
     editorState.grabbedCheckpointIndex = nil
 end
+RacingSystem.Client.endEditorSession = endEditorSession
 
-function addCheckpointAtPlayer()
+local function addCheckpointAtPlayer()
     if not isEditorActive() then
         return
     end
@@ -703,6 +583,7 @@ function addCheckpointAtPlayer()
     }
     refreshCheckpointMarkerAlignment(editorState.checkpoints[#editorState.checkpoints])
 end
+RacingSystem.Client.addCheckpointAtPlayer = addCheckpointAtPlayer
 
 local function moveClosestCheckpointToPlayer()
     if not isEditorActive() then
@@ -759,7 +640,7 @@ local function adjustClosestCheckpointRadius(direction)
     checkpoint.radius = math.max(minimum, math.min(maximum, updatedRadius))
 end
 
-function toggleGrabClosestCheckpoint()
+local function toggleGrabClosestCheckpoint()
     if not isEditorActive() then
         return
     end
@@ -779,6 +660,7 @@ function toggleGrabClosestCheckpoint()
     end
     editorState.grabbedCheckpointIndex = closestIndex
 end
+RacingSystem.Client.toggleGrabClosestCheckpoint = toggleGrabClosestCheckpoint
 
 local function wasEditorControlJustPressed(controlId)
     return IsControlJustPressed(0, controlId)
@@ -802,30 +684,6 @@ local function saveEditorRace(optionalName)
         name = raceName,
         checkpoints = editorState.checkpoints,
     })
-end
-
-local function formatDurationMs(totalMs)
-    local durationMs = math.max(0, math.floor(tonumber(totalMs) or 0))
-    local minutes = math.floor(durationMs / 60000)
-    local seconds = math.floor((durationMs % 60000) / 1000)
-    local milliseconds = durationMs % 1000
-
-    return ('%02d:%02d.%03d'):format(minutes, seconds, milliseconds)
-end
-
-local function resetLocalRaceTiming()
-    raceTimingState.instanceId = nil
-    raceTimingState.raceStartedAt = nil
-    raceTimingState.lapStartedAt = nil
-    clearPredictedRaceProgress()
-end
-
-local function ensureLocalRaceTiming(instanceId)
-    local numericInstanceId = tonumber(instanceId)
-    if raceTimingState.instanceId ~= numericInstanceId then
-        resetLocalRaceTiming()
-        raceTimingState.instanceId = numericInstanceId
-    end
 end
 
 local function getPreviewCheckpointMarker(checkpoint)
@@ -869,10 +727,15 @@ local function getRuntimeCheckpointMarker(checkpoint)
     }
 end
 
-local function getFuturePreviewMarkerHeight(distanceMeters)
-    local _ = distanceMeters
+local function getFuturePreviewMarkerHeight()
     return 3.0
 end
+RacingSystem.Client.getFuturePreviewMarkerHeight = getFuturePreviewMarkerHeight
+
+local function getMaxFuturePreviewCheckpoints()
+    return MAX_FUTURE_PREVIEW_CHECKPOINTS
+end
+RacingSystem.Client.getMaxFuturePreviewCheckpoints = getMaxFuturePreviewCheckpoints
 
 local function getCheckpointRadiusScaleFactor(instance)
     local sourceType = tostring(type(instance) == 'table' and instance.sourceType or ''):lower()
@@ -1006,6 +869,7 @@ local function getNextCheckpointForVariant(instance, totalCheckpoints, targetInd
 
     return nextVariantEntry.primary
 end
+RacingSystem.Client.getNextCheckpointForVariant = getNextCheckpointForVariant
 
 local function getCheckpointForVariant(instance, index, routeVariant)
     local variantEntry = getCheckpointVariantEntry(instance, index)
@@ -1019,6 +883,8 @@ local function getCheckpointForVariant(instance, index, routeVariant)
 
     return variantEntry.primary
 end
+RacingSystem.Client.getCheckpointForVariant = getCheckpointForVariant
+RacingSystem.Client.getCheckpointVariantEntry = getCheckpointVariantEntry
 
 local function getHeadingToNextCheckpoint(currentCheckpoint, nextCheckpoint)
     local currentX = tonumber(currentCheckpoint and currentCheckpoint.x) or 0.0
@@ -1060,6 +926,7 @@ local function getHorizontalDistance(origin, checkpoint)
     local dy = originY - checkpointY
     return math.sqrt((dx * dx) + (dy * dy))
 end
+RacingSystem.Client.getHorizontalDistance = getHorizontalDistance
 
 local function getCheckpointPassRadius(checkpoint, instance)
     local baseRadius = tonumber(checkpoint and checkpoint.radius) or 8.0
@@ -1069,6 +936,7 @@ end
 local function getCheckpointPenaltyRadius(checkpoint, instance)
     return getCheckpointPassRadius(checkpoint, instance) * 0.5
 end
+RacingSystem.Client.getCheckpointPenaltyRadius = getCheckpointPenaltyRadius
 
 local function getPenaltyPreviewStateByOutsideOffset(outsideOffset)
     local offset = math.max(0.0, tonumber(outsideOffset) or 0.0)
@@ -1209,15 +1077,16 @@ local function computeCheckpointCornerPoint(checkpoint, prevCheckpoint, nextChec
 end
 
 local function clearCornerCones()
-    local conesByKey = type(raceRuntimeState.cornerConesByKey) == 'table' and raceRuntimeState.cornerConesByKey or {}
+    local conesByKey = type(getRaceRuntimeState().cornerConesByKey) == 'table' and getRaceRuntimeState().cornerConesByKey or {}
     for _, entry in pairs(conesByKey) do
         local entity = tonumber(type(entry) == 'table' and entry.entity or entry)
         if entity and entity ~= 0 and DoesEntityExist(entity) then
             SetEntityAsNoLongerNeeded(entity)
         end
     end
-    raceRuntimeState.cornerConesByKey = {}
+    getRaceRuntimeState().cornerConesByKey = {}
 end
+RacingSystem.Client.clearCornerCones = clearCornerCones
 
 local function spawnCornerConeIfMissing(key, x, y, z, heading)
     if key == nil then
@@ -1235,7 +1104,7 @@ local function spawnCornerConeIfMissing(key, x, y, z, heading)
         end
     end
 
-    local conesByKey = type(raceRuntimeState.cornerConesByKey) == 'table' and raceRuntimeState.cornerConesByKey or {}
+    local conesByKey = type(getRaceRuntimeState().cornerConesByKey) == 'table' and getRaceRuntimeState().cornerConesByKey or {}
     local keyString = tostring(key)
     local existing = conesByKey[keyString]
     local entity = tonumber(type(existing) == 'table' and existing.entity or existing) or 0
@@ -1259,7 +1128,7 @@ local function spawnCornerConeIfMissing(key, x, y, z, heading)
     conesByKey[keyString] = {
         entity = entity,
     }
-    raceRuntimeState.cornerConesByKey = conesByKey
+    getRaceRuntimeState().cornerConesByKey = conesByKey
 end
 
 local function releaseCornerConeByKey(key)
@@ -1267,7 +1136,7 @@ local function releaseCornerConeByKey(key)
         return
     end
 
-    local conesByKey = type(raceRuntimeState.cornerConesByKey) == 'table' and raceRuntimeState.cornerConesByKey or {}
+    local conesByKey = type(getRaceRuntimeState().cornerConesByKey) == 'table' and getRaceRuntimeState().cornerConesByKey or {}
     local keyString = tostring(key)
     local existing = conesByKey[keyString]
     local entity = tonumber(type(existing) == 'table' and existing.entity or existing) or 0
@@ -1275,12 +1144,13 @@ local function releaseCornerConeByKey(key)
         SetEntityAsNoLongerNeeded(entity)
     end
     conesByKey[keyString] = nil
-    raceRuntimeState.cornerConesByKey = conesByKey
+    getRaceRuntimeState().cornerConesByKey = conesByKey
 end
 
 local function clearCheckpointChevronEdgeCache()
-    raceRuntimeState.chevronEdgeCache = nil
+    getRaceRuntimeState().chevronEdgeCache = nil
 end
+RacingSystem.Client.clearCheckpointChevronEdgeCache = clearCheckpointChevronEdgeCache
 
 local function getCheckpointChevronEdgeCache(instance)
     if type(instance) ~= 'table' then
@@ -1290,7 +1160,7 @@ local function getCheckpointChevronEdgeCache(instance)
     local instanceId = tonumber(instance.id)
     local checkpoints = type(instance.checkpoints) == 'table' and instance.checkpoints or {}
     local totalCheckpoints = #checkpoints
-    local existing = raceRuntimeState.chevronEdgeCache
+    local existing = getRaceRuntimeState().chevronEdgeCache
     if type(existing) == 'table'
         and tonumber(existing.instanceId) == instanceId
         and tonumber(existing.totalCheckpoints) == totalCheckpoints then
@@ -1305,7 +1175,7 @@ local function getCheckpointChevronEdgeCache(instance)
     }
 
     if totalCheckpoints <= 0 then
-        raceRuntimeState.chevronEdgeCache = cache
+        getRaceRuntimeState().chevronEdgeCache = cache
         return cache
     end
 
@@ -1341,9 +1211,10 @@ local function getCheckpointChevronEdgeCache(instance)
         end
     end
 
-    raceRuntimeState.chevronEdgeCache = cache
+    getRaceRuntimeState().chevronEdgeCache = cache
     return cache
 end
+RacingSystem.Client.getCheckpointChevronEdgeCache = getCheckpointChevronEdgeCache
 
 local function drawCheckpointConeChevronVariants(checkpoint, prevCheckpoint, nextCheckpoint, currentX, currentY, currentZ, aimX, aimY, nextX, nextY, chevronZ, chevronSize, chevronRotationZ, chevronColor, instance)
     local coneChevronA = nil
@@ -1525,7 +1396,6 @@ local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, 
             orientedAngleDegrees = signedAngle
         end
     end
-    local invertChevronRotationX = orientedAngleDegrees > 180.0
     local chevronRotationZ = -90.0
     local toNextX = nextX - currentX
     local toNextY = nextY - currentY
@@ -1551,8 +1421,6 @@ local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, 
         local drawAimX = aimX
         local drawAimY = aimY
         local rotationX = (flipRotationX == true) and -89.0 or 89.0
-        -- Keep this decoupled for later tuning; currently not applied.
-        local _ = invertChevronRotationX
         DrawMarker(
             MARKER_TAXONOMY.routeChevronTypeId,
             targetX,
@@ -1589,6 +1457,7 @@ local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, 
 
     return
 end
+RacingSystem.Client.drawCheckpointTarget = drawCheckpointTarget
 
 local function drawIdleStartChevron(checkpoint)
     if type(checkpoint) ~= 'table' then
@@ -1633,32 +1502,27 @@ local function drawIdleStartChevron(checkpoint)
     )
 end
 
-local function drawCheckpointDebugText(checkpoint, checkpointIndex, totalCheckpoints)
-    local _ = checkpoint
-    local __ = checkpointIndex
-    local ___ = totalCheckpoints
-    return
-end
-
 local function clearFutureCheckpointBlips()
-    local blipsByIndex = type(raceRuntimeState.futureCheckpointBlips) == 'table' and raceRuntimeState.futureCheckpointBlips or {}
+    local blipsByIndex = type(getRaceRuntimeState().futureCheckpointBlips) == 'table' and getRaceRuntimeState().futureCheckpointBlips or {}
     for _, blip in pairs(blipsByIndex) do
         if blip and DoesBlipExist(blip) then
             RemoveBlip(blip)
         end
     end
-    raceRuntimeState.futureCheckpointBlips = {}
-    raceRuntimeState.futureBlipCheckpointIndex = nil
-    raceRuntimeState.futureBlipInstanceId = nil
+    getRaceRuntimeState().futureCheckpointBlips = {}
+    getRaceRuntimeState().futureBlipCheckpointIndex = nil
+    getRaceRuntimeState().futureBlipInstanceId = nil
 end
+RacingSystem.Client.clearFutureCheckpointBlips = clearFutureCheckpointBlips
 
 local function clearStartLineBlip()
-    local blip = raceRuntimeState.startLineBlip
+    local blip = getRaceRuntimeState().startLineBlip
     if blip and DoesBlipExist(blip) then
         RemoveBlip(blip)
     end
-    raceRuntimeState.startLineBlip = nil
+    getRaceRuntimeState().startLineBlip = nil
 end
+RacingSystem.Client.clearStartLineBlip = clearStartLineBlip
 
 local function buildFutureCheckpointIndices(totalCheckpoints, targetIndex, countAhead, allowWrap)
     local total = math.max(0, math.floor(tonumber(totalCheckpoints) or 0))
@@ -1706,7 +1570,7 @@ local function updateFutureCheckpointBlips(instance, totalCheckpoints, targetInd
         desired[index] = true
     end
 
-    local blipsByIndex = type(raceRuntimeState.futureCheckpointBlips) == 'table' and raceRuntimeState.futureCheckpointBlips or {}
+    local blipsByIndex = type(getRaceRuntimeState().futureCheckpointBlips) == 'table' and getRaceRuntimeState().futureCheckpointBlips or {}
     for index, blip in pairs(blipsByIndex) do
         if not desired[index] or not (blip and DoesBlipExist(blip)) then
             if blip and DoesBlipExist(blip) then
@@ -1736,14 +1600,15 @@ local function updateFutureCheckpointBlips(instance, totalCheckpoints, targetInd
         end
     end
 
-    raceRuntimeState.futureCheckpointBlips = blipsByIndex
+    getRaceRuntimeState().futureCheckpointBlips = blipsByIndex
 end
+RacingSystem.Client.updateFutureCheckpointBlips = updateFutureCheckpointBlips
 
 local function resolveStartLineCheckpoint(checkpoints, totalCheckpoints, fallbackCheckpoint, pointToPoint)
     local list = type(checkpoints) == 'table' and checkpoints or {}
     local checkpointCount = math.max(1, math.floor(tonumber(totalCheckpoints) or #list or 1))
     local startIndex = (pointToPoint == true) and 1 or checkpointCount
-    local raw = list[startIndex] or list[#list] or fallbackCheckpoint or raceRuntimeState.startLineCheckpoint
+    local raw = list[startIndex] or list[#list] or fallbackCheckpoint or getRaceRuntimeState().startLineCheckpoint
     if type(raw) ~= 'table' then
         return nil
     end
@@ -1755,7 +1620,7 @@ local function resolveStartLineCheckpoint(checkpoints, totalCheckpoints, fallbac
         z = tonumber(raw.z) or 0.0,
         radius = tonumber(raw.radius) or 8.0,
     }
-    raceRuntimeState.startLineCheckpoint = resolved
+    getRaceRuntimeState().startLineCheckpoint = resolved
     logClientVerbose(("[startfinish] startLine resolvedIndex=%s totalCheckpoints=%s xyz=(%.2f,%.2f,%.2f)"):format(
         tostring(resolved.index),
         tostring(totalCheckpoints),
@@ -1765,6 +1630,7 @@ local function resolveStartLineCheckpoint(checkpoints, totalCheckpoints, fallbac
     ))
     return resolved
 end
+RacingSystem.Client.resolveStartLineCheckpoint = resolveStartLineCheckpoint
 
 local function getClientRaceStartCheckpoint(totalCheckpoints, pointToPoint)
     local checkpointCount = math.max(0, math.floor(tonumber(totalCheckpoints) or 0))
@@ -1779,6 +1645,7 @@ local function getClientRaceStartCheckpoint(totalCheckpoints, pointToPoint)
     -- Coherency rule: start line is always the final checkpoint.
     return checkpointCount
 end
+RacingSystem.Client.getClientRaceStartCheckpoint = getClientRaceStartCheckpoint
 
 local function getClientLapTriggerCheckpoint(totalCheckpoints)
     local checkpointCount = math.max(0, math.floor(tonumber(totalCheckpoints) or 0))
@@ -1789,6 +1656,7 @@ local function getClientLapTriggerCheckpoint(totalCheckpoints)
     -- Coherency rule: finish/lap trigger is always the final checkpoint.
     return checkpointCount
 end
+RacingSystem.Client.getClientLapTriggerCheckpoint = getClientLapTriggerCheckpoint
 
 local function updateStartLineBlip(startCheckpoint)
     if type(startCheckpoint) ~= 'table' then
@@ -1799,10 +1667,10 @@ local function updateStartLineBlip(startCheckpoint)
     local x = tonumber(startCheckpoint.x) or 0.0
     local y = tonumber(startCheckpoint.y) or 0.0
     local z = tonumber(startCheckpoint.z) or 0.0
-    local blip = raceRuntimeState.startLineBlip
+    local blip = getRaceRuntimeState().startLineBlip
     if not blip or not DoesBlipExist(blip) then
         blip = AddBlipForCoord(x, y, z)
-        raceRuntimeState.startLineBlip = blip
+        getRaceRuntimeState().startLineBlip = blip
         SetBlipSprite(blip, MARKER_TAXONOMY.startLineBlipSprite)
         SetBlipDisplay(blip, 4)
         SetBlipScale(blip, 0.9)
@@ -1815,6 +1683,7 @@ local function updateStartLineBlip(startCheckpoint)
         SetBlipCoords(blip, x, y, z)
     end
 end
+RacingSystem.Client.updateStartLineBlip = updateStartLineBlip
 
 local function showJoinHintNotifications()
     BeginTextCommandThefeedPost('STRING')
@@ -1825,10 +1694,12 @@ local function showJoinHintNotifications()
     AddTextComponentSubstringPlayerName('I assure you this jank is ~y~temporary~w~.')
     EndTextCommandThefeedPostTicker(false, false)
 end
+RacingSystem.Client.showJoinHintNotifications = showJoinHintNotifications
 
 local function getCheckpointPassArmKey(instanceId, checkpointIndex, lapNumber)
     return ('%s:%s:%s'):format(tonumber(instanceId) or 0, tonumber(checkpointIndex) or 0, tonumber(lapNumber) or 1)
 end
+RacingSystem.Client.getCheckpointPassArmKey = getCheckpointPassArmKey
 
 local function cloneRuntimeCheckpoint(checkpoint)
     if type(checkpoint) ~= 'table' then
@@ -1843,6 +1714,7 @@ local function cloneRuntimeCheckpoint(checkpoint)
         radius = tonumber(checkpoint.radius) or 8.0,
     }
 end
+RacingSystem.Client.cloneRuntimeCheckpoint = cloneRuntimeCheckpoint
 
 local function resolveLastPassedCheckpointTarget(instance, entrantProgress)
     if type(instance) ~= 'table' then
@@ -1856,7 +1728,7 @@ local function resolveLastPassedCheckpointTarget(instance, entrantProgress)
     end
 
     local instanceId = tonumber(instance.id)
-    local cached = raceRuntimeState.lastPassedCheckpoint
+    local cached = getRaceRuntimeState().lastPassedCheckpoint
     if type(cached) == 'table' and tonumber(cached.instanceId) == instanceId and type(cached.checkpoint) == 'table' then
         return cloneRuntimeCheckpoint(cached.checkpoint), cloneRuntimeCheckpoint(cached.nextCheckpoint)
     end
@@ -1905,7 +1777,7 @@ local function resolveLocalEntrantEntry(instance)
 
     local entrants = type(instance.entrants) == 'table' and instance.entrants or {}
     local localServerId = tonumber(GetPlayerServerId(PlayerId())) or 0
-    local preferredEntrantId = normalizeEntrantId(localEntrantIdentity.entrantId)
+    local preferredEntrantId = normalizeEntrantId(RacingSystem.Client.InRace.localEntrantIdentity.entrantId)
     if preferredEntrantId then
         for _, entrant in ipairs(entrants) do
             local entrantId = normalizeEntrantId(entrant.entrantId)
@@ -1919,7 +1791,7 @@ local function resolveLocalEntrantEntry(instance)
         if tonumber(entrant.source) == localServerId then
             local entrantId = normalizeEntrantId(entrant.entrantId)
             if entrantId then
-                localEntrantIdentity.entrantId = entrantId
+                RacingSystem.Client.InRace.localEntrantIdentity.entrantId = entrantId
             end
             return entrant
         end
@@ -1928,14 +1800,14 @@ local function resolveLocalEntrantEntry(instance)
     return nil
 end
 
-function getJoinedRaceInstance()
+local function getJoinedRaceInstance()
     local instances = type(latestSnapshot.instances) == 'table' and latestSnapshot.instances or {}
     for _, instance in ipairs(instances) do
         local entrant = resolveLocalEntrantEntry(instance)
         if entrant then
             local entrantId = normalizeEntrantId(entrant.entrantId)
             if entrantId then
-                localEntrantIdentity.entrantId = entrantId
+                RacingSystem.Client.InRace.localEntrantIdentity.entrantId = entrantId
             end
             return instance
         end
@@ -1943,6 +1815,7 @@ function getJoinedRaceInstance()
 
     return nil
 end
+RacingSystem.Client.getJoinedRaceInstance = getJoinedRaceInstance
 
 local function normalizeTrafficDensity(value)
     local density = tonumber(value)
@@ -1996,28 +1869,18 @@ local function getLocalEntrant(instance)
     if type(entrant) == 'table' then
         local entrantId = normalizeEntrantId(entrant.entrantId)
         if entrantId then
-            localEntrantIdentity.entrantId = entrantId
+            RacingSystem.Client.InRace.localEntrantIdentity.entrantId = entrantId
         end
     end
     return entrant
 end
-
-clearPredictedRaceProgress = function(instanceId)
-    local predicted = raceRuntimeState.predictedProgress
-    if not predicted then
-        return
-    end
-
-    if instanceId == nil or tonumber(predicted.instanceId) == tonumber(instanceId) then
-        raceRuntimeState.predictedProgress = nil
-    end
-end
+RacingSystem.Client.getLocalEntrant = getLocalEntrant
 
 local function getEffectiveEntrantProgress(instance, entrant)
     local currentCheckpoint = tonumber(entrant and entrant.currentCheckpoint) or 1
     local currentLap = math.max(1, tonumber(entrant and entrant.currentLap) or 1)
     local finishedAt = tonumber(entrant and entrant.finishedAt)
-    local predicted = raceRuntimeState.predictedProgress
+    local predicted = getRaceRuntimeState().predictedProgress
     local instanceId = tonumber(instance and instance.id)
 
     if predicted and instanceId and tonumber(predicted.instanceId) == instanceId then
@@ -2026,12 +1889,12 @@ local function getEffectiveEntrantProgress(instance, entrant)
         local predictedFinished = predicted.finished == true
 
         if finishedAt or (predictedFinished and predictedCheckpoint == nil) then
-            clearPredictedRaceProgress(instanceId)
+            RacingSystem.Client.InRace.clearPredictedRaceProgress(instanceId)
         elseif predictedCheckpoint and (predictedLap > currentLap or (predictedLap == currentLap and predictedCheckpoint > currentCheckpoint)) then
             currentCheckpoint = predictedCheckpoint
             currentLap = predictedLap
         else
-            clearPredictedRaceProgress(instanceId)
+            RacingSystem.Client.InRace.clearPredictedRaceProgress(instanceId)
         end
     end
 
@@ -2045,15 +1908,13 @@ end
 local function resetLocalPlayerToLastCheckpoint()
     local joinedInstance = getJoinedRaceInstance()
     if type(joinedInstance) ~= 'table' then
-        RacingSystemUtil.NotifyPlayer('Join a race first.', true)
         return
     end
 
     local entrant = getLocalEntrant(joinedInstance)
-    local entrantProgress = getEffectiveEntrantProgress(joinedInstance, entrant)
-    local lastCheckpoint, nextCheckpoint = resolveLastPassedCheckpointTarget(joinedInstance, entrantProgress)
+    local entrantProgress = RacingSystem.Client.InRace.getEffectiveEntrantProgress(joinedInstance, entrant)
+    local lastCheckpoint, nextCheckpoint = RacingSystem.Client.InRace.resolveLastPassedCheckpointTarget(joinedInstance, entrantProgress)
     if type(lastCheckpoint) ~= 'table' then
-        RacingSystemUtil.NotifyPlayer('No checkpoint available for reset yet.', true)
         return
     end
 
@@ -2061,7 +1922,6 @@ local function resetLocalPlayerToLastCheckpoint()
         checkpoint = lastCheckpoint,
         nextCheckpoint = nextCheckpoint,
     })
-    RacingSystemUtil.NotifyPlayer('Reset to last checkpoint.', false)
 end
 
 local function predictCheckpointPass(instance, entrantProgress, totalCheckpoints, targetIndex)
@@ -2079,14 +1939,14 @@ local function predictCheckpointPass(instance, entrantProgress, totalCheckpoints
 
     if targetIndex == lapTriggerCheckpoint then
         if currentLap >= totalLaps then
-            raceRuntimeState.predictedProgress = {
+            getRaceRuntimeState().predictedProgress = {
                 instanceId = instanceId,
                 currentCheckpoint = totalCheckpoints + 1,
                 currentLap = currentLap,
                 finished = true,
             }
         else
-            raceRuntimeState.predictedProgress = {
+            getRaceRuntimeState().predictedProgress = {
                 instanceId = instanceId,
                 currentCheckpoint = postFinishNextCheckpoint,
                 currentLap = currentLap + 1,
@@ -2098,7 +1958,7 @@ local function predictCheckpointPass(instance, entrantProgress, totalCheckpoints
         if nextCheckpoint > totalCheckpoints then
             nextCheckpoint = 1
         end
-        raceRuntimeState.predictedProgress = {
+        getRaceRuntimeState().predictedProgress = {
             instanceId = instanceId,
             currentCheckpoint = nextCheckpoint,
             currentLap = currentLap,
@@ -2106,6 +1966,7 @@ local function predictCheckpointPass(instance, entrantProgress, totalCheckpoints
         }
     end
 end
+RacingSystem.Client.predictCheckpointPass = predictCheckpointPass
 
 local function getDefinitionDisplayName(definition)
     if type(definition) ~= 'table' then
@@ -2280,6 +2141,7 @@ local function unloadActiveInstanceAssets()
     activeInstanceAssets.objects = {}
     activeInstanceAssets.modelHides = {}
 end
+RacingSystem.Client.unloadActiveInstanceAssets = unloadActiveInstanceAssets
 
 local function loadInstanceAssets(payload)
     if type(payload) ~= 'table' then
@@ -2333,7 +2195,7 @@ local function loadInstanceAssets(payload)
                 end
 
                 local speedAdjustment = tonumber(prop.speedAdjustment) or -1
-                local hasSpeedAdjust, speedTarget, durationTarget = GetPropSpeedModificationParameters(model, speedAdjustment)
+                local hasSpeedAdjust, speedTarget, durationTarget = RacingSystem.Client.InRace.GetPropSpeedModificationParameters(model, speedAdjustment)
                 if hasSpeedAdjust then
                     if speedTarget > -1 then
                         SetObjectStuntPropSpeedup(newObject, speedTarget)
@@ -2370,6 +2232,7 @@ local function loadInstanceAssets(payload)
 
     return true
 end
+RacingSystem.Client.loadInstanceAssets = loadInstanceAssets
 
 local function getPlayerPositionText(instance, entrant)
     local position = tonumber(entrant and entrant.position) or 1
@@ -2389,21 +2252,22 @@ local function getPlayerLapText(instance, entrant)
 end
 
 local function clearPendingCheckpointIfAdvanced(entrant)
-    if not raceRuntimeState.pendingCheckpointPass then
+    if not getRaceRuntimeState().pendingCheckpointPass then
         return
     end
 
     local currentCheckpoint = tonumber(entrant and entrant.currentCheckpoint) or 1
-    local pending = raceRuntimeState.pendingCheckpointPass
+    local pending = getRaceRuntimeState().pendingCheckpointPass
     if pending.instanceId ~= nil and tonumber(currentCheckpoint) ~= tonumber(pending.checkpointIndex) then
-        raceRuntimeState.pendingCheckpointPass = nil
+        getRaceRuntimeState().pendingCheckpointPass = nil
         return
     end
 
     if GetGameTimer() > (pending.expiresAt or 0) then
-        raceRuntimeState.pendingCheckpointPass = nil
+        getRaceRuntimeState().pendingCheckpointPass = nil
     end
 end
+RacingSystem.Client.clearPendingCheckpointIfAdvanced = clearPendingCheckpointIfAdvanced
 
 RegisterNetEvent('racingsystem:stateSnapshot', function(snapshot)
     if type(snapshot) ~= 'table' then
@@ -2428,6 +2292,7 @@ RegisterNetEvent('racingsystem:stateSnapshot', function(snapshot)
     end
     snapshotAcceptedAt = GetGameTimer()
     latestSnapshot = snapshot
+    RacingSystem.Client.latestSnapshot = latestSnapshot
 
     local instances = type(snapshot.instances) == 'table' and snapshot.instances or {}
     for _, instance in ipairs(instances) do
@@ -2435,8 +2300,8 @@ RegisterNetEvent('racingsystem:stateSnapshot', function(snapshot)
     end
 
     -- Refresh menu if it's open (for live state updates)
-    if type(isRaceMenuVisible) == 'function' and isRaceMenuVisible() and type(refreshRaceMenu) == 'function' then
-        refreshRaceMenu()
+    if RacingSystem.Menu.isRaceMenuVisible() then
+        RacingSystem.Menu.refreshRaceMenu()
     end
 
     if getClientExtraPrintLevel() == 2 then
@@ -2465,18 +2330,20 @@ RegisterNetEvent('racingsystem:stateSnapshot', function(snapshot)
     local snapshotInstances = type(snapshot.instances) == 'table' and snapshot.instances or {}
     for _, instance in ipairs(snapshotInstances) do
         local instanceId = tonumber(instance.id)
-        if instanceId and instance.state == RacingSystem.States.staging and countdownEndTimeByInstanceId[instanceId] then
-            activeCountdowns[instanceId] = countdownEndTimeByInstanceId[instanceId]
+        if instanceId and instance.state == RacingSystem.States.staging and RacingSystem.Client.InRace.countdownEndTimeByInstanceId[instanceId] then
+            activeCountdowns[instanceId] = RacingSystem.Client.InRace.countdownEndTimeByInstanceId[instanceId]
         end
     end
 
-    countdownEndTimeByInstanceId = activeCountdowns
+    local cdt = RacingSystem.Client.InRace.countdownEndTimeByInstanceId
+    for k in pairs(cdt) do cdt[k] = nil end
+    for k, v in pairs(activeCountdowns) do cdt[k] = v end
     if not getJoinedRaceInstance() then
-        localEntrantIdentity.entrantId = nil
+        RacingSystem.Client.InRace.localEntrantIdentity.entrantId = nil
     end
 
-    if raceMenuInitialized and type(isRaceMenuVisible) == 'function' and isRaceMenuVisible() and type(refreshRaceMenu) == 'function' then
-        refreshRaceMenu()
+    if RacingSystem.Menu.raceMenuInitialized and RacingSystem.Menu.isRaceMenuVisible() then
+        RacingSystem.Menu.refreshRaceMenu()
     end
 
     applyJoinedInstanceTrafficMode()
@@ -2539,17 +2406,17 @@ RegisterNetEvent('racingsystem:startCountdown', function(payload)
         return
     end
 
-    ensureLocalRaceTiming(instanceId)
-    countdownEndTimeByInstanceId[instanceId] = GetGameTimer() + countdownMs
-    countdownZeroReportedByInstanceId[instanceId] = nil
-    raceStartCueShownByInstanceId[instanceId] = nil
-    finishCueShownByInstanceId[instanceId] = nil
-    raceTimingState.raceStartedAt = countdownEndTimeByInstanceId[instanceId]
-    raceTimingState.lapStartedAt = countdownEndTimeByInstanceId[instanceId]
+    RacingSystem.Client.InRace.ensureLocalRaceTiming(instanceId)
+    RacingSystem.Client.InRace.countdownEndTimeByInstanceId[instanceId] = GetGameTimer() + countdownMs
+    RacingSystem.Client.InRace.countdownZeroReportedByInstanceId[instanceId] = nil
+    RacingSystem.Client.InRace.raceStartCueShownByInstanceId[instanceId] = nil
+    RacingSystem.Client.InRace.finishCueShownByInstanceId[instanceId] = nil
+    RacingSystem.Client.InRace.raceTimingState.raceStartedAt = RacingSystem.Client.InRace.countdownEndTimeByInstanceId[instanceId]
+    RacingSystem.Client.InRace.raceTimingState.lapStartedAt = RacingSystem.Client.InRace.countdownEndTimeByInstanceId[instanceId]
 
     -- Refresh menu if visible (state changed from idle to staging)
-    if type(isRaceMenuVisible) == 'function' and isRaceMenuVisible() and type(refreshRaceMenu) == 'function' then
-        refreshRaceMenu()
+    if RacingSystem.Menu.isRaceMenuVisible() then
+        RacingSystem.Menu.refreshRaceMenu()
     end
 end)
 
@@ -2580,15 +2447,20 @@ RegisterNetEvent('racingsystem:lapCompleted', function(payload)
         local finishOrdinal = ('%dº'):format(finishPosition)
         local instanceId = tonumber(instance and instance.id)
         if instanceId then
-            if finishCueShownByInstanceId[instanceId] then
+            if RacingSystem.Client.InRace.finishCueShownByInstanceId[instanceId] then
                 return
             end
-            finishCueShownByInstanceId[instanceId] = true
+            RacingSystem.Client.InRace.finishCueShownByInstanceId[instanceId] = true
         end
-        RacingSystemUtil.ShowRaceEventVisual(('~g~FINISHED ~w~%s'):format(finishOrdinal), '', 2200)
+        ScaleformUI.Scaleforms.BigMessageInstance:ShowMissionPassedMessage(('FINISHED  %s'):format(finishOrdinal), 6000)
     else
         local lapNumber = math.max(1, math.floor(tonumber(payload.lapNumber) or 1))
-        RacingSystemUtil.ShowRaceEventVisual(('~b~LAP %d COMPLETED'):format(lapNumber), '', 1400)
+        local totalLaps = math.max(1, math.floor(tonumber(payload.totalLaps) or tonumber(instance and instance.laps) or 1))
+        if totalLaps > 1 and lapNumber == totalLaps - 1 then
+            ScaleformUI.Scaleforms.BigMessageInstance:ShowSimpleShard("FINAL LAP", "", 2500)
+        else
+            RacingSystem.Client.Util.ShowRaceEventVisual(('~b~LAP %d COMPLETED'):format(lapNumber), '', 1400)
+        end
     end
 
     local bestLapDeltaMs = tonumber(payload.bestLapDeltaMs) or 0
@@ -2609,6 +2481,20 @@ RegisterNetEvent('racingsystem:stableLapTime', function(payload)
         return
     end
 
+end)
+
+RegisterNetEvent('racingsystem:lapTimeAnnotation', function(payload)
+    if type(payload) ~= 'table' then
+        return
+    end
+
+    if payload.isInstanceBest then
+        RacingSystem.Client.Util.NotifyPlayer('~g~Instance best')
+    else
+        local deltaMs = tonumber(payload.deltaMs) or 0
+        local sign = deltaMs >= 0 and '+' or '-'
+        RacingSystem.Client.Util.NotifyPlayer('~r~' .. sign .. RacingSystem.Client.InRace.formatLapTime(math.abs(deltaMs)) .. ' off best')
+    end
 end)
 
 RegisterNetEvent('racingsystem:instanceAssets', function(payload)
@@ -2657,7 +2543,35 @@ local function tryResolveTeleportGroundZ(destinationX, destinationY, destination
     return false, destinationZ
 end
 
-local resolveTeleportHeading
+local function resolveTeleportHeading(payload)
+    local heading = tonumber(payload and payload.heading)
+    if heading ~= nil then
+        return heading
+    end
+
+    local joinedInstance = getJoinedRaceInstance()
+    local checkpoints = type(joinedInstance) == 'table' and type(joinedInstance.checkpoints) == 'table' and joinedInstance.checkpoints or {}
+    local checkpointCount = #checkpoints
+    local checkpointIndex = math.max(1, math.min(checkpointCount, math.floor(tonumber(payload and payload.checkpointIndex) or 1)))
+    if checkpointCount <= 0 then
+        return 0.0
+    end
+
+    local targetVariant = getCheckpointVariantEntry(joinedInstance, checkpointIndex)
+    local targetCheckpoint = targetVariant and targetVariant.primary or checkpoints[checkpointIndex]
+    local previousIndex = checkpointIndex - 1
+    if previousIndex < 1 then
+        -- If previous checkpoint is not in-range, use the last checkpoint in the list.
+        previousIndex = checkpointCount
+    end
+    local previousVariant = getCheckpointVariantEntry(joinedInstance, previousIndex)
+    local previousCheckpoint = previousVariant and previousVariant.primary or checkpoints[previousIndex]
+    if type(previousCheckpoint) == 'table' and type(targetCheckpoint) == 'table' then
+        return getVehicleHeadingToNextCheckpoint(previousCheckpoint, targetCheckpoint)
+    end
+
+    return 0.0
+end
 
 local function runSmartJoinTeleport(payload)
     if type(payload) ~= 'table' then
@@ -2788,36 +2702,6 @@ local function runSmartJoinTeleport(payload)
     end
 
     isTeleportInProgress = false
-end
-
-resolveTeleportHeading = function(payload)
-    local heading = tonumber(payload and payload.heading)
-    if heading ~= nil then
-        return heading
-    end
-
-    local joinedInstance = getJoinedRaceInstance()
-    local checkpoints = type(joinedInstance) == 'table' and type(joinedInstance.checkpoints) == 'table' and joinedInstance.checkpoints or {}
-    local checkpointCount = #checkpoints
-    local checkpointIndex = math.max(1, math.min(checkpointCount, math.floor(tonumber(payload and payload.checkpointIndex) or 1)))
-    if checkpointCount <= 0 then
-        return 0.0
-    end
-
-    local targetVariant = getCheckpointVariantEntry(joinedInstance, checkpointIndex)
-    local targetCheckpoint = targetVariant and targetVariant.primary or checkpoints[checkpointIndex]
-    local previousIndex = checkpointIndex - 1
-    if previousIndex < 1 then
-        -- If previous checkpoint is not in-range, use the last checkpoint in the list.
-        previousIndex = checkpointCount
-    end
-    local previousVariant = getCheckpointVariantEntry(joinedInstance, previousIndex)
-    local previousCheckpoint = previousVariant and previousVariant.primary or checkpoints[previousIndex]
-    if type(previousCheckpoint) == 'table' and type(targetCheckpoint) == 'table' then
-        return getVehicleHeadingToNextCheckpoint(previousCheckpoint, targetCheckpoint)
-    end
-
-    return 0.0
 end
 
 local function runSmartJoinTeleportLerp(payload)
@@ -3076,6 +2960,7 @@ local function buildLiveLeaderboardRows(instance)
 
     return rows
 end
+RacingSystem.Client.buildLiveLeaderboardRows = buildLiveLeaderboardRows
 
 local function runSmartCheckpointTeleport(checkpoint, nextCheckpoint)
     local payload = buildCheckpointTeleportPayload(checkpoint, nextCheckpoint)
@@ -3085,6 +2970,7 @@ local function runSmartCheckpointTeleport(checkpoint, nextCheckpoint)
 
     runSmartJoinTeleport(payload)
 end
+RacingSystem.Client.runSmartCheckpointTeleport = runSmartCheckpointTeleport
 
 RegisterNetEvent('racingsystem:teleportToCheckpoint', function(payload)
     Citizen.CreateThread(function()
@@ -3096,20 +2982,17 @@ end)
 AddEventHandler('racingsystem:resetToLastCheckpoint', function()
     local joinedInstance = getJoinedRaceInstance()
     if not joinedInstance or joinedInstance.state ~= RacingSystem.States.running then
-        RacingSystemUtil.NotifyPlayer('You must be in an active running race.', true)
         return
     end
 
     local entrant = getLocalEntrant(joinedInstance)
     if not entrant then
-        RacingSystemUtil.NotifyPlayer('You are not registered as a race entrant.', true)
         return
     end
 
-    local entrantProgress = getEffectiveEntrantProgress(joinedInstance, entrant)
-    local lastCheckpoint, nextCheckpoint = resolveLastPassedCheckpointTarget(joinedInstance, entrantProgress)
+    local entrantProgress = RacingSystem.Client.InRace.getEffectiveEntrantProgress(joinedInstance, entrant)
+    local lastCheckpoint, nextCheckpoint = RacingSystem.Client.InRace.resolveLastPassedCheckpointTarget(joinedInstance, entrantProgress)
     if type(lastCheckpoint) ~= 'table' then
-        RacingSystemUtil.NotifyPlayer('No checkpoint available for reset yet.', true)
         return
     end
 
@@ -3118,75 +3001,65 @@ AddEventHandler('racingsystem:resetToLastCheckpoint', function()
         nextCheckpoint = nextCheckpoint,
         preserveVelocity = false
     })
-
-    RacingSystemUtil.NotifyPlayer('Reset to last checkpoint.', false)
 end)
 
 -- Local-only event: triggered by menu via TriggerEvent. Pre-validates locally for UX, then forwards to server.
 AddEventHandler('racingsystem:startRace', function()
     local joinedInstance = getJoinedRaceInstance()
     if not joinedInstance then
-        RacingSystemUtil.NotifyPlayer('You are not in any race.', true)
         return
     end
 
     if joinedInstance.state == RacingSystem.States.staging then
-        RacingSystemUtil.NotifyPlayer('Countdown already started.', true)
         return
     end
 
     if joinedInstance.state ~= RacingSystem.States.idle then
-        RacingSystemUtil.NotifyPlayer('Race cannot be started right now.', true)
         return
     end
 
     local entrant = getLocalEntrant(joinedInstance)
     if not entrant then
-        RacingSystemUtil.NotifyPlayer('You are not registered as a race entrant.', true)
         return
     end
 
     if joinedInstance.owner ~= GetPlayerServerId(PlayerId()) then
-        RacingSystemUtil.NotifyPlayer('Only the race host can start the countdown.', true)
         return
     end
 
     if #(joinedInstance.entrants or {}) == 0 then
-        RacingSystemUtil.NotifyPlayer('No racers are joined to that instance.', true)
         return
     end
 
     TriggerServerEvent('racingsystem:startRace')
-    RacingSystemUtil.NotifyPlayer('Countdown started.', false)
 end)
 
 -- Local-only event: triggered by menu via TriggerEvent. Cleans up client state immediately, then notifies server.
 AddEventHandler('racingsystem:leaveRace', function()
     local joinedInstance = getJoinedRaceInstance()
     if not joinedInstance then
-        RacingSystemUtil.NotifyPlayer('You are not in any race.', true)
         return
     end
 
     -- Immediate client side cleanup
-    localEntrantIdentity.entrantId = nil
-    raceRuntimeState.pendingCheckpointPass = nil
-    raceRuntimeState.checkpointPassArm = nil
-    finishCueShownByInstanceId = {}
-    clearPredictedRaceProgress()
-    resetLocalRaceTiming()
+    RacingSystem.Client.InRace.localEntrantIdentity.entrantId = nil
+    getRaceRuntimeState().pendingCheckpointPass = nil
+    getRaceRuntimeState().checkpointPassArm = nil
+    do local t = RacingSystem.Client.InRace.finishCueShownByInstanceId; for k in pairs(t) do t[k] = nil end end
+
+    RacingSystem.Client.InRace.clearPredictedRaceProgress()
+    RacingSystem.Client.InRace.resetLocalRaceTiming()
     clearFutureCheckpointBlips()
     clearStartLineBlip()
     clearCornerCones()
-    RacingSystemUtil.ClearCountdownVisual()
-    RacingSystemUtil.ClearRaceLeaderboardVisual()
+    RacingSystem.Client.Util.ClearCountdownVisual()
+    RacingSystem.Client.Util.ClearRaceLeaderboardVisual()
     currentTrafficDensity = nil
     TriggerServerEvent('traffic_control:requestDensity', nil, 'racingsystem_clear', RACE_TRAFFIC_REQUEST_KEY)
 
     -- Async notify server
     TriggerServerEvent('racingsystem:leaveRace')
 
-    RacingSystemUtil.NotifyPlayer('Left race.', false)
     MenuHandler:CloseAndClearHistory()
 end)
 
@@ -3206,9 +3079,7 @@ RegisterNUICallback('racingsystem:gtAoRaceUrlSubmit', function(data, cb)
     local typedValue = type(data) == 'table' and data.value or ''
     local ugcId = extractGTAOUGCIdFromInput(typedValue)
     if not ugcId then
-        local failureMessage = 'Could not parse a GTAO race ID from that URL.'
-        RacingSystemUtil.NotifyPlayer(failureMessage, true)
-        RacingSystemUtil.ShowWarningSubtitle(failureMessage, 2500, '~o~')
+        RacingSystem.Client.Util.ShowWarningSubtitle('Could not parse a GTAO race ID from that URL.', 2500, '~o~')
         return
     end
 
@@ -3227,22 +3098,15 @@ RegisterNetEvent('racingsystem:gtAoRaceValidationResult', function(payload)
 
     if payload.ok ~= true then
         local message = type(payload.error) == 'string' and payload.error or 'Could not validate GTAO race URL.'
-        RacingSystemUtil.NotifyPlayer(message, true)
-        RacingSystemUtil.ShowWarningSubtitle(message, 2500, '~o~')
+        RacingSystem.Client.Util.ShowWarningSubtitle(message, 2500, '~o~')
         return
     end
 
     local raceName = tostring(payload.raceName or payload.ugcId or '')
     local checkpointCount = tostring(math.max(0, math.floor(tonumber(payload.checkpointCount) or 0)))
     if raceName ~= '' then
-        pendingSelectRaceName = raceName
+        RacingSystem.Menu.pendingSelectRaceName = raceName
     end
-
-    local successMessage = ('Imported "%s" (%s checkpoints). This race is available in the Host menu now.'):format(
-        raceName ~= '' and raceName or 'GTAO race',
-        checkpointCount
-    )
-    RacingSystemUtil.NotifyPlayer(successMessage, false)
 end)
 
 RegisterNetEvent('racingsystem:editorRaceLoaded', function(payload)
@@ -3257,7 +3121,7 @@ RegisterNetEvent('racingsystem:editorRaceLoaded', function(payload)
 
     editorState.selectedName = raceName
     beginEditorSession(raceName, checkpoints)
-    refreshEditorMenu(buildMenuState())
+    RacingSystem.Menu.refreshEditorMenu(RacingSystem.Menu.buildMenuState())
 end)
 
 RegisterNetEvent('racingsystem:editorRaceSaved', function(payload)
@@ -3274,7 +3138,7 @@ RegisterNetEvent('racingsystem:editorRaceSaved', function(payload)
     for _, checkpoint in ipairs(editorState.checkpoints) do
         ensureCheckpointMarkerAlignment(checkpoint)
     end
-    refreshEditorMenu(buildMenuState())
+    RacingSystem.Menu.refreshEditorMenu(RacingSystem.Menu.buildMenuState())
 end)
 
 RegisterNetEvent('racingsystem:raceDefinitionRegistered', function(payload)
@@ -3283,15 +3147,15 @@ RegisterNetEvent('racingsystem:raceDefinitionRegistered', function(payload)
     end
 
     local definition = type(payload.definition) == 'table' and payload.definition or {}
-    pendingSelectRaceName = definition.name or pendingSelectRaceName
-    pendingEditorRaceName = definition.name or pendingEditorRaceName
+    RacingSystem.Menu.pendingSelectRaceName = definition.name or RacingSystem.Menu.pendingSelectRaceName
+    RacingSystem.Menu.pendingEditorRaceName = definition.name or RacingSystem.Menu.pendingEditorRaceName
 end)
 
 RegisterNetEvent('racingsystem:raceDefinitionDeleted', function(payload)
-    deleteConfirmRaceName = nil
+    RacingSystem.Menu.deleteConfirmRaceName = nil
 
     if type(payload) ~= 'table' or payload.ok ~= true then
-        refreshEditorMenu(buildMenuState())
+        RacingSystem.Menu.refreshEditorMenu(RacingSystem.Menu.buildMenuState())
         return
     end
 
@@ -3394,622 +3258,14 @@ CreateThread(function()
     end
 end)
 
-CreateThread(function()
-    while true do
-        local joinedInstance = getJoinedRaceInstance()
-
-        if not joinedInstance then
-            raceRuntimeState.penaltyPreviewText = nil
-            raceRuntimeState.penaltyPreviewShownAt = 0
-            localEntrantIdentity.entrantId = nil
-            finishCueShownByInstanceId = {}
-            raceRuntimeState.pendingCheckpointPass = nil
-            raceRuntimeState.previousPosition = nil
-            raceRuntimeState.checkpointPassArm = nil
-            raceRuntimeState.lastPassedCheckpoint = nil
-            raceRuntimeState.startLineCheckpoint = nil
-            raceRuntimeState.joinHintInstanceId = nil
-            clearCheckpointChevronEdgeCache()
-            raceRuntimeState.accelerationPenaltyUntil = 0
-            clearPowerPenaltyVehicleOverride()
-            clearFutureCheckpointBlips()
-            clearStartLineBlip()
-            clearCornerCones()
-            resetLocalRaceTiming()
-            RacingSystemUtil.ClearCountdownVisual()
-            RacingSystemUtil.ClearRaceLeaderboardVisual()
-            if activeInstanceAssets.instanceId then
-                unloadActiveInstanceAssets()
-            end
-            Wait(1000)
-        else
-            local joinedInstanceId = tonumber(joinedInstance.id)
-            if joinedInstanceId and raceRuntimeState.joinHintInstanceId ~= joinedInstanceId then
-                raceRuntimeState.joinHintInstanceId = joinedInstanceId
-                showJoinHintNotifications()
-
-                local joinCheckpoints = type(joinedInstance.checkpoints) == 'table' and joinedInstance.checkpoints or {}
-                local joinCheckpointCount = #joinCheckpoints
-                if joinCheckpointCount > 0 then
-                    local joinEntrant = getLocalEntrant(joinedInstance)
-                    local joinTargetIndex = tonumber(joinEntrant and joinEntrant.currentCheckpoint) or 1
-                    local joinCurrentLap = math.max(1, tonumber(joinEntrant and joinEntrant.currentLap) or 1)
-                    local joinTotalLaps = math.max(1, tonumber(joinedInstance.laps) or 1)
-                    local allowWrapOnJoin = (joinedInstance.pointToPoint ~= true) and (joinCurrentLap < joinTotalLaps)
-                    updateFutureCheckpointBlips(joinedInstance, joinCheckpointCount, joinTargetIndex, allowWrapOnJoin)
-                    raceRuntimeState.futureBlipCheckpointIndex = joinTargetIndex
-                    raceRuntimeState.futureBlipInstanceId = joinedInstanceId
-                else
-                    clearFutureCheckpointBlips()
-                end
-            end
-
-            RacingSystemUtil.UpdateRaceLeaderboardVisual(nil, buildLiveLeaderboardRows(joinedInstance))
-            ensureLocalRaceTiming(joinedInstanceId)
-            if joinedInstance.sourceType == 'online' then
-                if tonumber(activeInstanceAssets.instanceId) ~= joinedInstanceId then
-                    local payload = instanceAssetCache[joinedInstanceId]
-                    if payload then
-                        loadInstanceAssets(payload)
-                    end
-                end
-            elseif activeInstanceAssets.instanceId then
-                unloadActiveInstanceAssets()
-            end
-
-            local ped = PlayerPedId()
-            local origin = GetEntityCoords(ped)
-            local pedVehicle = GetVehiclePedIsIn(ped, false)
-            local entrant = getLocalEntrant(joinedInstance)
-            local entrantProgress = getEffectiveEntrantProgress(joinedInstance, entrant)
-            local checkpoints = type(joinedInstance.checkpoints) == 'table' and joinedInstance.checkpoints or {}
-            local totalCheckpoints = #checkpoints
-
-            if totalCheckpoints > 0 then
-                for checkpointIndex, checkpoint in ipairs(checkpoints) do
-                    local variantEntry = getCheckpointVariantEntry(joinedInstance, checkpointIndex)
-                    local labelCheckpoint = variantEntry and variantEntry.primary or checkpoint
-                    if type(labelCheckpoint) == 'table' then
-                        local checkpointX = tonumber(labelCheckpoint.x) or 0.0
-                        local checkpointY = tonumber(labelCheckpoint.y) or 0.0
-                        local checkpointZ = tonumber(labelCheckpoint.z) or 0.0
-                        local dx = (tonumber(origin.x) or 0.0) - checkpointX
-                        local dy = (tonumber(origin.y) or 0.0) - checkpointY
-                        local dz = (tonumber(origin.z) or 0.0) - checkpointZ
-                        local distance = math.sqrt((dx * dx) + (dy * dy) + (dz * dz))
-                        if distance <= CHECKPOINT_DEBUG_TEXT_DISTANCE_METERS then
-                            drawCheckpointDebugText(labelCheckpoint, checkpointIndex, totalCheckpoints)
-                        end
-                    end
-                end
-            end
-
-            local chevronEdgeCache = getCheckpointChevronEdgeCache(joinedInstance)
-            local targetIndex = 1
-            local isPointToPoint = joinedInstance.pointToPoint == true
-            local startLineCheckpoint = resolveStartLineCheckpoint(checkpoints, totalCheckpoints, nil, isPointToPoint)
-            updateStartLineBlip(startLineCheckpoint)
-
-            clearPendingCheckpointIfAdvanced(entrant)
-            targetIndex = tonumber(entrantProgress.currentCheckpoint) or targetIndex
-            local routeTargetIndex = tonumber(entrant and entrant.currentCheckpoint) or targetIndex
-            local routeCurrentLap = math.max(1, tonumber(entrantProgress and entrantProgress.currentLap) or 1)
-            local routeTotalLaps = math.max(1, tonumber(joinedInstance.laps) or 1)
-            local allowRouteWrap = (joinedInstance.pointToPoint ~= true) and (routeCurrentLap < routeTotalLaps)
-            if totalCheckpoints > 0 then
-                local routeInstanceId = tonumber(joinedInstance.id)
-                if raceRuntimeState.futureBlipInstanceId ~= routeInstanceId
-                    or raceRuntimeState.futureBlipCheckpointIndex ~= routeTargetIndex then
-                    updateFutureCheckpointBlips(joinedInstance, totalCheckpoints, routeTargetIndex, allowRouteWrap)
-                    raceRuntimeState.futureBlipCheckpointIndex = routeTargetIndex
-                    raceRuntimeState.futureBlipInstanceId = routeInstanceId
-                end
-            end
-
-            for _, otherEntrant in ipairs(type(joinedInstance.entrants) == 'table' and joinedInstance.entrants or {}) do
-                local otherSource = tonumber(otherEntrant.source) or 0
-                if otherSource > 0 and otherSource ~= GetPlayerServerId(PlayerId()) then
-                    local otherPlayer = GetPlayerFromServerId(otherSource)
-                    if otherPlayer and otherPlayer ~= -1 then
-                        local otherPed = GetPlayerPed(otherPlayer)
-                        if otherPed and otherPed ~= 0 and DoesEntityExist(otherPed) then
-                            local otherVehicle = GetVehiclePedIsIn(otherPed, false)
-                            SetEntityNoCollisionEntity(ped, otherPed, true)
-                            SetEntityNoCollisionEntity(otherPed, ped, true)
-
-                            if pedVehicle ~= 0 and DoesEntityExist(pedVehicle) then
-                                SetEntityNoCollisionEntity(pedVehicle, otherPed, true)
-                                SetEntityNoCollisionEntity(otherPed, pedVehicle, true)
-                            end
-
-                            if otherVehicle ~= 0 and DoesEntityExist(otherVehicle) then
-                                SetEntityNoCollisionEntity(ped, otherVehicle, true)
-                                SetEntityNoCollisionEntity(otherVehicle, ped, true)
-                            end
-
-                            if pedVehicle ~= 0 and DoesEntityExist(pedVehicle) and otherVehicle ~= 0 and DoesEntityExist(otherVehicle) then
-                                SetEntityNoCollisionEntity(pedVehicle, otherVehicle, true)
-                                SetEntityNoCollisionEntity(otherVehicle, pedVehicle, true)
-                            end
-                        end
-                    end
-                end
-            end
-
-            if entrant then
-                if joinedInstance.state == RacingSystem.States.staging and tonumber(joinedInstance.id) then
-                    local joinedInstanceId = tonumber(joinedInstance.id)
-                    local countdownEndsAt = countdownEndTimeByInstanceId[joinedInstanceId]
-                    local remainingMs = countdownEndsAt and math.max(0, countdownEndsAt - GetGameTimer()) or 0
-                    RacingSystemUtil.UpdateCountdownVisual(joinedInstanceId, remainingMs)
-
-                    if pedVehicle ~= 0 and GetPedInVehicleSeat(pedVehicle, -1) == ped then
-                        SetVehicleHandbrake(pedVehicle, true)
-                    end
-
-                    if countdownEndsAt and remainingMs <= 0 and not countdownZeroReportedByInstanceId[joinedInstanceId] then
-                        countdownZeroReportedByInstanceId[joinedInstanceId] = true
-                        TriggerServerEvent('racingsystem:countdownReachedZero', joinedInstanceId, GetGameTimer())
-                    end
-                elseif joinedInstance.state == RacingSystem.States.running then
-                    RacingSystemUtil.ClearCountdownVisual()
-                    local joinedInstanceId = tonumber(joinedInstance.id)
-                    if joinedInstanceId and not raceStartCueShownByInstanceId[joinedInstanceId] then
-                        raceStartCueShownByInstanceId[joinedInstanceId] = true
-                        RacingSystemUtil.ShowRaceEventVisual('~g~GO!', '~w~Race is live', 1400)
-                    end
-                    if raceTimingState.raceStartedAt == nil then
-                        raceTimingState.raceStartedAt = GetGameTimer()
-                    end
-                    if raceTimingState.lapStartedAt == nil then
-                        raceTimingState.lapStartedAt = raceTimingState.raceStartedAt
-                    end
-                    if pedVehicle ~= 0 and GetPedInVehicleSeat(pedVehicle, -1) == ped then
-                        SetVehicleHandbrake(pedVehicle, false)
-                    end
-                elseif joinedInstance.state == RacingSystem.States.finished and tonumber(entrantProgress.finishedAt) then
-                    RacingSystemUtil.ClearCountdownVisual()
-                    if pedVehicle ~= 0 and GetPedInVehicleSeat(pedVehicle, -1) == ped then
-                        SetVehicleHandbrake(pedVehicle, false)
-                    end
-                else
-                    RacingSystemUtil.ClearCountdownVisual()
-                    if pedVehicle ~= 0 and GetPedInVehicleSeat(pedVehicle, -1) == ped then
-                        SetVehicleHandbrake(pedVehicle, false)
-                    end
-                end
-            end
-
-            local targetVariantEntry = getCheckpointVariantEntry(joinedInstance, targetIndex)
-            local targetCheckpoint = targetVariantEntry and targetVariantEntry.primary or checkpoints[targetIndex]
-            local secondaryTargetCheckpoint = targetVariantEntry and targetVariantEntry.secondary or nil
-            if not targetCheckpoint or totalCheckpoints == 0 then
-                raceRuntimeState.checkpointPassArm = nil
-                raceRuntimeState.previousPosition = origin
-                clearFutureCheckpointBlips()
-                clearStartLineBlip()
-                Wait(1000)
-            else
-                local checkpointCandidates = {}
-                local primaryCoords = vector3(targetCheckpoint.x or 0.0, targetCheckpoint.y or 0.0, targetCheckpoint.z or 0.0)
-                local primaryMarkerHeight = getFuturePreviewMarkerHeight(#(origin - primaryCoords))
-                local secondaryCoords = nil
-                local secondaryMarkerHeight = nil
-                checkpointCandidates[#checkpointCandidates + 1] = {
-                    routeVariant = 'primary',
-                    checkpoint = targetCheckpoint,
-                    distance = getHorizontalDistance(origin, targetCheckpoint),
-                    drawDistance = #(origin - primaryCoords),
-                }
-
-                if type(secondaryTargetCheckpoint) == 'table' then
-                    secondaryCoords = vector3(secondaryTargetCheckpoint.x or 0.0, secondaryTargetCheckpoint.y or 0.0, secondaryTargetCheckpoint.z or 0.0)
-                    secondaryMarkerHeight = getFuturePreviewMarkerHeight(#(origin - secondaryCoords))
-                    checkpointCandidates[#checkpointCandidates + 1] = {
-                        routeVariant = 'secondary',
-                        checkpoint = secondaryTargetCheckpoint,
-                        distance = getHorizontalDistance(origin, secondaryTargetCheckpoint),
-                        drawDistance = #(origin - secondaryCoords),
-                    }
-                end
-
-                local nearestDrawDistance = nil
-                for _, candidate in ipairs(checkpointCandidates) do
-                    local candidateDrawDistance = tonumber(candidate.drawDistance) or math.huge
-                    if nearestDrawDistance == nil or candidateDrawDistance < nearestDrawDistance then
-                        nearestDrawDistance = candidateDrawDistance
-                    end
-                end
-
-                do
-                    local totalLaps = math.max(1, tonumber(joinedInstance.laps) or 1)
-                    local currentLap = math.max(1, tonumber(entrantProgress and entrantProgress.currentLap) or 1)
-                    local lapTriggerCheckpoint = getClientLapTriggerCheckpoint(totalCheckpoints)
-                    local raceStartCheckpoint = getClientRaceStartCheckpoint(totalCheckpoints, isPointToPoint)
-                    local isStart = targetIndex == raceStartCheckpoint
-                    local isFinish = targetIndex == lapTriggerCheckpoint
-                    local isTerminalFinish = isFinish and currentLap >= totalLaps
-                    local prevIndex = targetIndex - 1
-                    if prevIndex < 1 then
-                        prevIndex = totalCheckpoints
-                    end
-                    local prevPrimaryCheckpoint = getCheckpointForVariant(joinedInstance, prevIndex, 'primary')
-                        or checkpoints[prevIndex]
-                    local nextPrimaryCheckpoint = getNextCheckpointForVariant(joinedInstance, totalCheckpoints, targetIndex, 'primary')
-                    local nextSecondaryCheckpoint = getNextCheckpointForVariant(joinedInstance, totalCheckpoints, targetIndex, 'secondary')
-
-                    drawCheckpointTarget(
-                        targetCheckpoint,
-                        prevPrimaryCheckpoint,
-                        nextPrimaryCheckpoint,
-                        isStart,
-                        isFinish,
-                        { r = 255, g = 225, b = 80, a = 180 },
-                        { r = 255, g = 235, b = 80, a = 220 },
-                        true,
-                        90.0,
-                        chevronEdgeCache.primary[targetIndex],
-                        isTerminalFinish,
-                        primaryMarkerHeight,
-                        joinedInstance
-                    )
-
-                    if type(secondaryTargetCheckpoint) == 'table' then
-                        drawCheckpointTarget(
-                            secondaryTargetCheckpoint,
-                            prevPrimaryCheckpoint,
-                            nextSecondaryCheckpoint,
-                            isStart,
-                            isFinish,
-                            { r = 255, g = 145, b = 35, a = 170 },
-                            { r = 255, g = 170, b = 75, a = 220 },
-                            true,
-                            0.0,
-                            chevronEdgeCache.secondary[targetIndex],
-                            false,
-                            secondaryMarkerHeight or primaryMarkerHeight,
-                            joinedInstance
-                        )
-                    end
-
-                    -- Preview only a limited number of upcoming checkpoints.
-                    local previewSeenIndex = { [targetIndex] = true }
-                    local previewIndex = targetIndex
-                    local previewMarkerColors = {
-                        { r = 90, g = 170, b = 255, a = 120 },
-                        { r = 70, g = 135, b = 235, a = 95 },
-                    }
-                    local previewChevronColors = {
-                        { r = 170, g = 170, b = 170, a = 145 },
-                        { r = 140, g = 140, b = 140, a = 120 },
-                    }
-
-                    local previewSteps = math.min(MAX_FUTURE_PREVIEW_CHECKPOINTS, math.max(0, totalCheckpoints - 1))
-                    if joinedInstance.pointToPoint == true or currentLap >= totalLaps then
-                        previewSteps = math.min(MAX_FUTURE_PREVIEW_CHECKPOINTS, math.max(0, totalCheckpoints - targetIndex))
-                    end
-
-                    for previewStep = 1, previewSteps do
-                        previewIndex = previewIndex + 1
-                        if previewIndex > totalCheckpoints then
-                            if joinedInstance.pointToPoint == true or currentLap >= totalLaps then
-                                break
-                            end
-                            previewIndex = 1
-                        end
-
-                        if not previewSeenIndex[previewIndex] then
-                            previewSeenIndex[previewIndex] = true
-                            local previewVariantEntry = getCheckpointVariantEntry(joinedInstance, previewIndex)
-                            local previewCheckpoint = previewVariantEntry and previewVariantEntry.primary or checkpoints[previewIndex]
-
-                            if type(previewCheckpoint) == 'table' then
-                                local previewCoords = vector3(
-                                    tonumber(previewCheckpoint.x) or 0.0,
-                                    tonumber(previewCheckpoint.y) or 0.0,
-                                    tonumber(previewCheckpoint.z) or 0.0
-                                )
-                                local previewPrevIndex = previewIndex - 1
-                                if previewPrevIndex < 1 then
-                                    previewPrevIndex = totalCheckpoints
-                                end
-                                local previewPrevPrimaryCheckpoint = getCheckpointForVariant(joinedInstance, previewPrevIndex, 'primary')
-                                    or checkpoints[previewPrevIndex]
-                                local previewNextPrimaryCheckpoint = getNextCheckpointForVariant(joinedInstance, totalCheckpoints, previewIndex, 'primary')
-                                local previewDistanceMeters = #(origin - previewCoords)
-                                local previewMarkerHeight = getFuturePreviewMarkerHeight(previewDistanceMeters)
-                                drawCheckpointTarget(
-                                    previewCheckpoint,
-                                    previewPrevPrimaryCheckpoint,
-                                    previewNextPrimaryCheckpoint,
-                                    false,
-                                    false,
-                                    previewMarkerColors[previewStep] or previewMarkerColors[#previewMarkerColors],
-                                    previewChevronColors[previewStep] or previewChevronColors[#previewChevronColors],
-                                    true,
-                                    0.0,
-                                    chevronEdgeCache.primary[previewIndex],
-                                    false,
-                                    previewMarkerHeight,
-                                    joinedInstance
-                                )
-                            end
-                        end
-                    end
-
-                end
-
-                if joinedInstance.state == RacingSystem.States.idle then
-                    local startCheckpoint = resolveStartLineCheckpoint(checkpoints, totalCheckpoints, targetCheckpoint, isPointToPoint)
-                    if startCheckpoint then
-                        local startLineIndex = math.max(1, math.floor(tonumber(startCheckpoint.index) or totalCheckpoints or 1))
-                        startCheckpoint.nextCheckpoint = getNextCheckpointForVariant(joinedInstance, totalCheckpoints, startLineIndex, 'primary')
-                            or checkpoints[1]
-                        drawIdleStartChevron(startCheckpoint)
-                    end
-                end
-
-                if joinedInstance.state == RacingSystem.States.running and entrant and tonumber(entrantProgress.finishedAt) == nil then
-                    local pending = raceRuntimeState.pendingCheckpointPass
-                    local isPendingSameCheckpoint = pending
-                        and tonumber(pending.instanceId) == tonumber(joinedInstance.id)
-                        and tonumber(pending.checkpointIndex) == tonumber(targetIndex)
-                        and GetGameTimer() <= (pending.expiresAt or 0)
-                    local withinPassDetectionRange = false
-                    local nearestCheckpointDistance = math.huge
-                    local nearestCheckpoint = targetCheckpoint
-                    for _, candidate in ipairs(checkpointCandidates) do
-                        local candidateDistance = tonumber(candidate.distance) or math.huge
-                        if candidateDistance < nearestCheckpointDistance then
-                            nearestCheckpointDistance = candidateDistance
-                            nearestCheckpoint = candidate.checkpoint or targetCheckpoint
-                        end
-                        if candidateDistance <= CHECKPOINT_PASS_ARM_DISTANCE then
-                            withinPassDetectionRange = true
-                        end
-                    end
-                    if nearestCheckpointDistance < math.huge and not withinPassDetectionRange then
-                        raceRuntimeState.penaltyPreviewText = nil
-                    end
-
-                    local checkpointPassed = false
-                    local passedOutsideRadius = false
-                    local outsideLateralDistance = nil
-                    local passedTargetCheckpoint = targetCheckpoint
-                    local passedRouteVariant = 'primary'
-                    local currentLap = math.max(1, tonumber(entrantProgress.currentLap) or 1)
-                    local currentArmKey = getCheckpointPassArmKey(joinedInstance.id, targetIndex, currentLap)
-                    local checkpointPassArm = raceRuntimeState.checkpointPassArm
-
-                    if withinPassDetectionRange and not isPendingSameCheckpoint then
-                        if checkpointPassArm == nil or checkpointPassArm.key ~= currentArmKey then
-                            checkpointPassArm = {
-                                key = currentArmKey,
-                                minDistanceByVariant = {},
-                            }
-                            for _, candidate in ipairs(checkpointCandidates) do
-                                checkpointPassArm.minDistanceByVariant[candidate.routeVariant] = tonumber(candidate.distance) or math.huge
-                            end
-                            raceRuntimeState.checkpointPassArm = checkpointPassArm
-                        else
-                            checkpointPassArm.minDistanceByVariant = type(checkpointPassArm.minDistanceByVariant) == 'table' and checkpointPassArm.minDistanceByVariant or {}
-                            local bestPassDistance = nil
-                            local bestPassCandidate = nil
-
-                            for _, candidate in ipairs(checkpointCandidates) do
-                                local routeVariant = tostring(candidate.routeVariant or 'primary')
-                                local distance = tonumber(candidate.distance) or math.huge
-                                local previousMinDistance = tonumber(checkpointPassArm.minDistanceByVariant[routeVariant]) or distance
-                                local newMinDistance = math.min(previousMinDistance, distance)
-                                checkpointPassArm.minDistanceByVariant[routeVariant] = newMinDistance
-
-                                if distance >= (newMinDistance + CHECKPOINT_PASS_RELEASE_THRESHOLD) then
-                                    if bestPassDistance == nil or newMinDistance < bestPassDistance then
-                                        bestPassDistance = newMinDistance
-                                        bestPassCandidate = candidate
-                                    end
-                                end
-                            end
-
-                            if bestPassCandidate then
-                                checkpointPassed = true
-                                outsideLateralDistance = tonumber(bestPassDistance) or 0.0
-                                passedTargetCheckpoint = bestPassCandidate.checkpoint or targetCheckpoint
-                                passedRouteVariant = tostring(bestPassCandidate.routeVariant or 'primary')
-                                passedOutsideRadius = outsideLateralDistance > getCheckpointPenaltyRadius(passedTargetCheckpoint, joinedInstance)
-                                raceRuntimeState.checkpointPassArm = nil
-                            end
-                        end
-                    elseif checkpointPassArm and checkpointPassArm.key == currentArmKey then
-                        local shouldClearArm = true
-                        for _, candidate in ipairs(checkpointCandidates) do
-                            if (tonumber(candidate.distance) or math.huge) <= (CHECKPOINT_PASS_ARM_DISTANCE + 5.0) then
-                                shouldClearArm = false
-                                break
-                            end
-                        end
-                        if shouldClearArm then
-                            raceRuntimeState.checkpointPassArm = nil
-                        end
-                    end
-
-                    if checkpointPassed then
-                        local checkpointPassIsValid = true
-                        local lowSpeedRecoveryPass = false
-                        local offWheelsRecoveryPass = false
-                        local outsideOffset = 0.0
-                        local throttlePenaltyMs = 0
-                        local powerPenaltyMs = 0
-                        local applyTeleportPenalty = false
-                        local applyThrottlePenalty = false
-                        local applyPowerPenalty = false
-                        if pedVehicle ~= 0 and DoesEntityExist(pedVehicle) then
-                            local speedMph = (tonumber(GetEntitySpeed(pedVehicle)) or 0.0) * METERS_PER_SECOND_TO_MILES_PER_HOUR
-                            lowSpeedRecoveryPass = speedMph < CHECKPOINT_RECOVERY_PASS_MAX_MPH
-                            if not IsVehicleOnAllWheels(pedVehicle) then
-                                local forwardVelocityRatio = getVehicleForwardVelocityRatio(pedVehicle)
-                                offWheelsRecoveryPass = forwardVelocityRatio < CHECKPOINT_RECOVERY_FORWARD_VELOCITY_RATIO_MAX
-                            end
-                        end
-                        local isRecoveryPenaltyBypass = lowSpeedRecoveryPass or offWheelsRecoveryPass
-                        local passContextPayload = {
-                            kind = 'clean_pass',
-                            penalty = 'none',
-                            routeVariant = passedRouteVariant,
-                            outsideOffset = 0.0,
-                            assumedCrashPenaltyVoided = false,
-                            throttlePenaltyMs = 0,
-                            powerPenaltyMs = 0,
-                        }
-
-                        if passedOutsideRadius then
-                            outsideOffset = math.max(0.0, (tonumber(outsideLateralDistance) or 0.0) - getCheckpointPenaltyRadius(passedTargetCheckpoint, joinedInstance))
-                            passContextPayload.outsideOffset = outsideOffset
-                            if isRecoveryPenaltyBypass then
-                                if offWheelsRecoveryPass then
-                                    passContextPayload.kind = 'assumed_crash_penalty_voided'
-                                    passContextPayload.penalty = 'voided_assumed_crash'
-                                    passContextPayload.assumedCrashPenaltyVoided = true
-                                else
-                                    passContextPayload.kind = 'recovery_penalty_voided'
-                                    passContextPayload.penalty = 'voided_low_speed'
-                                end
-                            else
-                                if outsideOffset > 20.0 then
-                                    checkpointPassIsValid = false
-                                    passContextPayload.kind = 'invalid_outside_too_far'
-                                    passContextPayload.penalty = 'invalid_no_pass'
-                                -- convar candidate: rs_penalty_teleport_threshold — admins may want a more or less forgiving cut-corner threshold per server
-                                elseif outsideOffset > 10.0 then
-                                    applyTeleportPenalty = true
-                                    passContextPayload.kind = 'penalty_teleport'
-                                    passContextPayload.penalty = 'teleport_correction'
-                                elseif outsideOffset >= 1.5 then
-                                    local throttleMinMeters = 1.5
-                                    local throttleMaxMeters = 10.0
-                                    -- convar candidate: rs_penalty_throttle_max_ms — casual servers may prefer a softer 2000ms cap; competitive ones can leave it at 5000
-                                    local throttleMinMs = 1000.0
-                                    local throttleMaxMs = 5000.0
-                                    local normalized = math.max(0.0, math.min(1.0, (outsideOffset - throttleMinMeters) / (throttleMaxMeters - throttleMinMeters)))
-                                    throttlePenaltyMs = math.floor(throttleMinMs + ((throttleMaxMs - throttleMinMs) * normalized))
-                                    applyThrottlePenalty = true
-                                    passContextPayload.kind = 'penalty_throttle_cut'
-                                    passContextPayload.penalty = 'throttle_cut'
-                                    passContextPayload.throttlePenaltyMs = throttlePenaltyMs
-                                elseif outsideOffset >= 0.5 then
-                                    powerPenaltyMs = 1000
-                                    applyPowerPenalty = true
-                                    passContextPayload.kind = 'penalty_power_multiplier'
-                                    passContextPayload.penalty = 'power_multiplier'
-                                    passContextPayload.powerPenaltyMs = powerPenaltyMs
-                                else
-                                    passContextPayload.kind = 'outside_no_penalty'
-                                    passContextPayload.penalty = 'none'
-                                end
-                            end
-                        end
-
-                        if checkpointPassIsValid then
-                            local lapTimingPayload = nil
-                            local totalLaps = math.max(1, tonumber(joinedInstance.laps) or 1)
-                            local lapTriggerCheckpoint = getClientLapTriggerCheckpoint(totalCheckpoints)
-                            if targetIndex == lapTriggerCheckpoint then
-                                local nowMs = GetGameTimer()
-                                local raceStartedAt = tonumber(raceTimingState.raceStartedAt) or nowMs
-                                local lapStartedAt = tonumber(raceTimingState.lapStartedAt) or raceStartedAt
-                                local currentLap = math.max(1, tonumber(entrantProgress.currentLap) or 1)
-
-                                lapTimingPayload = {
-                                    lapNumber = currentLap,
-                                    lapTimeMs = math.max(0, nowMs - lapStartedAt),
-                                    totalTimeMs = math.max(0, nowMs - raceStartedAt),
-                                    finished = currentLap >= totalLaps,
-                                }
-
-                                if lapTimingPayload.finished then
-                                    raceTimingState.lapStartedAt = nil
-                                else
-                                    raceTimingState.lapStartedAt = nowMs
-                                end
-                            end
-
-                            raceRuntimeState.pendingCheckpointPass = {
-                                instanceId = joinedInstance.id,
-                                checkpointIndex = targetIndex,
-                                expiresAt = GetGameTimer() + 1500,
-                            }
-                            local nextCheckpointForPassedVariant = getNextCheckpointForVariant(joinedInstance, totalCheckpoints, targetIndex, passedRouteVariant)
-                            raceRuntimeState.lastPassedCheckpoint = {
-                                instanceId = tonumber(joinedInstance.id),
-                                checkpointIndex = tonumber(targetIndex) or 1,
-                                routeVariant = passedRouteVariant,
-                                checkpoint = cloneRuntimeCheckpoint(passedTargetCheckpoint or targetCheckpoint),
-                                nextCheckpoint = cloneRuntimeCheckpoint(nextCheckpointForPassedVariant),
-                                updatedAt = GetGameTimer(),
-                            }
-
-                            predictCheckpointPass(joinedInstance, entrantProgress, totalCheckpoints, targetIndex)
-                            TriggerServerEvent('racingsystem:checkpointPassed', joinedInstance.id, targetIndex, lapTimingPayload, passContextPayload)
-
-                            if applyTeleportPenalty then
-                                local postPassCheckpointIndex = targetIndex + 1
-                                if postPassCheckpointIndex > totalCheckpoints then
-                                    postPassCheckpointIndex = 1
-                                end
-                                if targetIndex == lapTriggerCheckpoint and not (lapTimingPayload and lapTimingPayload.finished == true) then
-                                    -- After crossing the finish line, next target becomes checkpoint 1.
-                                    postPassCheckpointIndex = 1
-                                end
-
-                                local passedCheckpoint = passedTargetCheckpoint or targetCheckpoint
-                                local newCurrentCheckpoint = getNextCheckpointForVariant(joinedInstance, totalCheckpoints, targetIndex, passedRouteVariant) or checkpoints[postPassCheckpointIndex]
-                                runSmartCheckpointTeleport(passedCheckpoint, newCurrentCheckpoint)
-                            elseif applyThrottlePenalty then
-                                if pedVehicle ~= 0 and DoesEntityExist(pedVehicle) then
-                                    local velocity = GetEntityVelocity(pedVehicle)
-                                    SetEntityVelocity(
-                                        pedVehicle,
-                                        (tonumber(velocity.x) or 0.0) * 0.9,
-                                        (tonumber(velocity.y) or 0.0) * 0.9,
-                                        (tonumber(velocity.z) or 0.0) * 0.9
-                                    )
-                                end
-                            elseif applyPowerPenalty then
-                                applySoftPowerPenalty(pedVehicle, powerPenaltyMs)
-                            end
-                        else
-                            raceRuntimeState.pendingCheckpointPass = {
-                                instanceId = joinedInstance.id,
-                                checkpointIndex = targetIndex,
-                                expiresAt = GetGameTimer() + 1500,
-                            }
-                        end
-                    end
-                end
-
-                raceRuntimeState.previousPosition = origin
-                local powerPenaltyUntil = tonumber(raceRuntimeState.powerPenaltyUntil) or 0
-                if powerPenaltyUntil > GetGameTimer() then
-                    local penaltyVehicle = raceRuntimeState.powerPenaltyVehicle
-                    if penaltyVehicle and DoesEntityExist(penaltyVehicle) then
-                        SetVehicleEnginePowerMultiplier(penaltyVehicle, CHECKPOINT_SOFT_POWER_PENALTY_MULTIPLIER)
-                    end
-                elseif raceRuntimeState.powerPenaltyVehicle ~= nil then
-                    clearPowerPenaltyVehicleOverride()
-                end
-                Wait(0)
-            end
-        end
-    end
-end)
 
 CreateThread(function()
     local staleThresholdMs = 5000
     local requestCooldownMs = 1500
     while true do
         local joinedInstance = getJoinedRaceInstance()
-        local hasActiveCountdown = next(countdownEndTimeByInstanceId) ~= nil
-        local shouldReconcile = joinedInstance ~= nil or hasActiveCountdown or (raceMenuInitialized and isRaceMenuVisible())
+        local hasActiveCountdown = next(RacingSystem.Client.InRace.countdownEndTimeByInstanceId) ~= nil
+        local shouldReconcile = joinedInstance ~= nil or hasActiveCountdown or (RacingSystem.Menu.raceMenuInitialized and RacingSystem.Menu.isRaceMenuVisible())
         if shouldReconcile then
             local now = GetGameTimer()
             local lastAcceptedAt = tonumber(snapshotAcceptedAt) or 0
@@ -4030,8 +3286,8 @@ end)
 
 CreateThread(function()
     while true do
-        RacingSystemUtil.DrawRaceEventVisual()
-        RacingSystemUtil.DrawRaceLeaderboardVisual()
+        RacingSystem.Client.Util.DrawRaceEventVisual()
+        RacingSystem.Client.Util.DrawRaceLeaderboardVisual()
         Wait(0)
     end
 end)
@@ -4042,15 +3298,16 @@ AddEventHandler('onClientResourceStop', function(resourceName)
     end
 
     closeGTAORaceUrlPrompt(true)
-    localEntrantIdentity.entrantId = nil
-    finishCueShownByInstanceId = {}
+    RacingSystem.Client.InRace.localEntrantIdentity.entrantId = nil
+    do local t = RacingSystem.Client.InRace.finishCueShownByInstanceId; for k in pairs(t) do t[k] = nil end end
+
     currentTrafficDensity = nil
     TriggerServerEvent('traffic_control:requestDensity', nil, 'racingsystem_clear', RACE_TRAFFIC_REQUEST_KEY)
-    clearPowerPenaltyVehicleOverride()
+    RacingSystem.Client.InRace.clearPowerPenaltyVehicleOverride()
     clearFutureCheckpointBlips()
     clearStartLineBlip()
     clearCornerCones()
-    RacingSystemUtil.ClearRaceLeaderboardVisual()
+    RacingSystem.Client.Util.ClearRaceLeaderboardVisual()
     unloadActiveInstanceAssets()
 end)
 
@@ -4067,3 +3324,8 @@ AddEventHandler('onClientResourceStart', function(resourceName)
 end)
 
 
+
+
+
+
+RacingSystem.Client.drawIdleStartChevron = drawIdleStartChevron

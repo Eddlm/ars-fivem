@@ -1,14 +1,12 @@
 PerformanceTuning = PerformanceTuning or {}
 PerformanceTuning.Config = PerformanceTuning.Config or {}
-local Config = PerformanceTuning.Config
-
-Config.sliderRanges = {
+PerformanceTuning.Config.sliderRanges = {
     nitrousShotStrength = { min = 1.0, max = 2.0, step = 0.2 },
     suspensionRaise = { min = -0.300, max = 0.300, step = 0.010 },
 }
 
 -- convar candidate: pt_nitrous_base_duration_ms — event admins may want to tune burst length for balance without a file redeploy
-Config.nitrous = {
+PerformanceTuning.Config.nitrous = {
     baseDurationMs = 4000,
     nativePowerMultiplier = 0.5,
     shotsPerRefill = 3,
@@ -17,7 +15,7 @@ Config.nitrous = {
 
 -- This piece of madness is used to scale raw stats like 
 -- grip or speed into reasonable PI numbers for each of the PI categories.
-Config.performancePiDistribution = {
+PerformanceTuning.Config.performancePiDistribution = {
     power = 3000, -- 0.3G * 3000 = 900 PI
     topSpeed = 12.5, -- 100mph * 12.5 = 1250 PI
     grip = 600, -- 2G * 600 = 1200 PI
@@ -28,7 +26,7 @@ Config.performancePiDistribution = {
 -- Adjust for your overall car stats on your server, so they make sense.
 -- convar candidates: pt_bar_target_top_speed_mph, pt_bar_target_grip_g
 -- Different servers run different car sets; adjusting these makes the bars visually meaningful for the actual fleet
-Config.performanceBarFillTargets = {
+PerformanceTuning.Config.performanceBarFillTargets = {
     power = 1.0, --Gs
     topSpeedMph = 250.0, --MPH
     grip = 3.5, --Gs
@@ -37,7 +35,7 @@ Config.performanceBarFillTargets = {
 
 -- Models how the upgrades work and apply.
 -- Target means offset above baseline for the stat. Power can be upgraded up to 0.1G above stock, for example.
-Config.performanceModel = {
+PerformanceTuning.Config.performanceModel = {
     power = {
         target = 0.1,
         transmission = {
@@ -74,7 +72,7 @@ Config.performanceModel = {
 
 -- convar candidates: pt_nearby_panels_enabled, pt_nearby_panels_distance, pt_nearby_panels_max
 -- Panels are a significant per-frame draw cost; admins on busy servers may want to disable or limit them at runtime
-Config.performanceNearbyPanels = {
+PerformanceTuning.Config.performanceNearbyPanels = {
     enabled = true,
     maxDistanceMeters = 30.0,
     maxPanels = 6,
@@ -82,7 +80,7 @@ Config.performanceNearbyPanels = {
 
 
 
-Config.packDefinitions = {
+PerformanceTuning.Config.packDefinitions = {
     suspension = {
         { id = 'stock', label = 'Stock', enabled = true, description = 'Keeps the vehicle on its original suspension setup.' },
         { id = 'sport', label = 'Medium', enabled = true, description = 'All-rounder, decent stiffness without grip spikes or heavy bodyroll.', values = { fSuspensionForce = 3.0, fSuspensionReboundDamp = 2.0 } },
@@ -135,7 +133,7 @@ Config.packDefinitions = {
     },
 }
  
-Config.advanced = {
+PerformanceTuning.Config.advanced = {
     panel = {
         sharedPanelHeightUnits = 0.15,
         sharedPanelBaseScale = 0.95,
@@ -158,4 +156,5 @@ Config.advanced = {
         transmissionPowerBonusPerUpgrade = 0.01,
     },
 }
+
 

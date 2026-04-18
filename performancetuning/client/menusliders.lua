@@ -1,10 +1,7 @@
 -- Builds, clamps, and labels ScaleformUI slider values for tuning controls.
 PerformanceTuning = PerformanceTuning or {}
 PerformanceTuning.MenuSliders = PerformanceTuning.MenuSliders or {}
-
-local MenuSliders = PerformanceTuning.MenuSliders
-
-function MenuSliders.clampSliderRangeValue(value, rangeConfig, fallback)
+function PerformanceTuning.MenuSliders.clampSliderRangeValue(value, rangeConfig, fallback)
     local numericValue = tonumber(value) or fallback
     if numericValue < rangeConfig.min then
         return rangeConfig.min
@@ -15,7 +12,7 @@ function MenuSliders.clampSliderRangeValue(value, rangeConfig, fallback)
     return numericValue
 end
 
-function MenuSliders.buildSliderValues(rangeConfig, formatter)
+function PerformanceTuning.MenuSliders.buildSliderValues(rangeConfig, formatter)
     local values = {}
     local index = 1
     local value = rangeConfig.min
@@ -29,31 +26,31 @@ function MenuSliders.buildSliderValues(rangeConfig, formatter)
     return values
 end
 
-function MenuSliders.getSliderIndex(value, rangeConfig, sliderValues, fallback)
-    local normalized = MenuSliders.clampSliderRangeValue(value, rangeConfig, fallback)
+function PerformanceTuning.MenuSliders.getSliderIndex(value, rangeConfig, sliderValues, fallback)
+    local normalized = PerformanceTuning.MenuSliders.clampSliderRangeValue(value, rangeConfig, fallback)
     local steps = math.floor(((normalized - rangeConfig.min) / rangeConfig.step) + 0.5)
     local index = steps + 1
     return math.max(1, math.min(#sliderValues, index))
 end
 
-function MenuSliders.getSliderValueForIndex(index, rangeConfig)
+function PerformanceTuning.MenuSliders.getSliderValueForIndex(index, rangeConfig)
     return rangeConfig.min + ((index - 1) * rangeConfig.step)
 end
 
-function MenuSliders.buildNormalizedSliderValues(rangeConfig)
-    return MenuSliders.buildSliderValues(rangeConfig, function(value)
+function PerformanceTuning.MenuSliders.buildNormalizedSliderValues(rangeConfig)
+    return PerformanceTuning.MenuSliders.buildSliderValues(rangeConfig, function(value)
         return ('%.3f'):format(value)
     end)
 end
 
-function MenuSliders.buildNitroShotSliderValues()
+function PerformanceTuning.MenuSliders.buildNitroShotSliderValues()
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.buildSliderValues((runtimeConfig.sliderRanges or {}).nitrousShotStrength, function(value)
+    return PerformanceTuning.MenuSliders.buildSliderValues((runtimeConfig.sliderRanges or {}).nitrousShotStrength, function(value)
         return ('%.1fx'):format(value)
     end)
 end
 
-function MenuSliders.buildSuspensionClearanceSliderValues(baseUpperLimit)
+function PerformanceTuning.MenuSliders.buildSuspensionClearanceSliderValues(baseUpperLimit)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
     local rangeConfig = (runtimeConfig.sliderRanges or {}).suspensionRaise
     local resolvedUpperLimit = math.max(0.0, tonumber(baseUpperLimit) or 0.0)
@@ -65,146 +62,147 @@ function MenuSliders.buildSuspensionClearanceSliderValues(baseUpperLimit)
         max = maxValue,
         step = stepValue,
     }
-    return MenuSliders.buildSliderValues(dynamicRange, function(value)
+    return PerformanceTuning.MenuSliders.buildSliderValues(dynamicRange, function(value)
         return ('%.3f'):format(value)
     end)
 end
 
-function MenuSliders.getUISliderValues(key)
+function PerformanceTuning.MenuSliders.getUISliderValues(key)
     local scaleformUI = PerformanceTuning and PerformanceTuning.ScaleformUI or nil
     local state = scaleformUI and scaleformUI.state or nil
     local sliderValues = state and state.sliderValues or nil
     return sliderValues and sliderValues[key] or {}
 end
 
-function MenuSliders.clampAntirollForceValue(value)
+function PerformanceTuning.MenuSliders.clampAntirollForceValue(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.clampSliderRangeValue(value, (runtimeConfig.sliderRanges or {}).antirollBars, 0.0)
+    return PerformanceTuning.MenuSliders.clampSliderRangeValue(value, (runtimeConfig.sliderRanges or {}).antirollBars, 0.0)
 end
 
-function MenuSliders.getAntirollSliderIndex(value)
+function PerformanceTuning.MenuSliders.getAntirollSliderIndex(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).antirollBars, MenuSliders.getUISliderValues('antirollBars'), 0.0)
+    return PerformanceTuning.MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).antirollBars, PerformanceTuning.MenuSliders.getUISliderValues('antirollBars'), 0.0)
 end
 
-function MenuSliders.getAntirollForceLabel(value)
-    return ('%.3f'):format(MenuSliders.clampAntirollForceValue(value))
+function PerformanceTuning.MenuSliders.getAntirollForceLabel(value)
+    return ('%.3f'):format(PerformanceTuning.MenuSliders.clampAntirollForceValue(value))
 end
 
-function MenuSliders.clampBrakeBiasFrontValue(value)
+function PerformanceTuning.MenuSliders.clampBrakeBiasFrontValue(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.clampSliderRangeValue(value, (runtimeConfig.sliderRanges or {}).brakeBiasFront, 0.5)
+    return PerformanceTuning.MenuSliders.clampSliderRangeValue(value, (runtimeConfig.sliderRanges or {}).brakeBiasFront, 0.5)
 end
 
-function MenuSliders.getBrakeBiasSliderIndex(value)
+function PerformanceTuning.MenuSliders.getBrakeBiasSliderIndex(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).brakeBiasFront, MenuSliders.getUISliderValues('brakeBiasFront'), 0.5)
+    return PerformanceTuning.MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).brakeBiasFront, PerformanceTuning.MenuSliders.getUISliderValues('brakeBiasFront'), 0.5)
 end
 
-function MenuSliders.getBrakeBiasFrontLabel(value)
-    return ('%.3f'):format(MenuSliders.clampBrakeBiasFrontValue(value))
+function PerformanceTuning.MenuSliders.getBrakeBiasFrontLabel(value)
+    return ('%.3f'):format(PerformanceTuning.MenuSliders.clampBrakeBiasFrontValue(value))
 end
 
-function MenuSliders.clampGripBiasFrontValue(value)
+function PerformanceTuning.MenuSliders.clampGripBiasFrontValue(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.clampSliderRangeValue(value, (runtimeConfig.sliderRanges or {}).gripBiasFront, 0.5)
+    return PerformanceTuning.MenuSliders.clampSliderRangeValue(value, (runtimeConfig.sliderRanges or {}).gripBiasFront, 0.5)
 end
 
-function MenuSliders.getGripBiasSliderIndex(value)
+function PerformanceTuning.MenuSliders.getGripBiasSliderIndex(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).gripBiasFront, MenuSliders.getUISliderValues('gripBiasFront'), 0.5)
+    return PerformanceTuning.MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).gripBiasFront, PerformanceTuning.MenuSliders.getUISliderValues('gripBiasFront'), 0.5)
 end
 
-function MenuSliders.getGripBiasFrontLabel(value)
-    return ('%.3f'):format(MenuSliders.clampGripBiasFrontValue(value))
+function PerformanceTuning.MenuSliders.getGripBiasFrontLabel(value)
+    return ('%.3f'):format(PerformanceTuning.MenuSliders.clampGripBiasFrontValue(value))
 end
 
-function MenuSliders.clampAntirollBiasFrontValue(value)
+function PerformanceTuning.MenuSliders.clampAntirollBiasFrontValue(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.clampSliderRangeValue(value, (runtimeConfig.sliderRanges or {}).antirollBiasFront, 0.5)
+    return PerformanceTuning.MenuSliders.clampSliderRangeValue(value, (runtimeConfig.sliderRanges or {}).antirollBiasFront, 0.5)
 end
 
-function MenuSliders.getAntirollBiasSliderIndex(value)
+function PerformanceTuning.MenuSliders.getAntirollBiasSliderIndex(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).antirollBiasFront, MenuSliders.getUISliderValues('antirollBiasFront'), 0.5)
+    return PerformanceTuning.MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).antirollBiasFront, PerformanceTuning.MenuSliders.getUISliderValues('antirollBiasFront'), 0.5)
 end
 
-function MenuSliders.getAntirollBiasFrontLabel(value)
-    return ('%.3f'):format(MenuSliders.clampAntirollBiasFrontValue(value))
+function PerformanceTuning.MenuSliders.getAntirollBiasFrontLabel(value)
+    return ('%.3f'):format(PerformanceTuning.MenuSliders.clampAntirollBiasFrontValue(value))
 end
 
-function MenuSliders.clampSuspensionRaiseValue(value)
+function PerformanceTuning.MenuSliders.clampSuspensionRaiseValue(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.clampSliderRangeValue(value, (runtimeConfig.sliderRanges or {}).suspensionRaise, 0.0)
+    return PerformanceTuning.MenuSliders.clampSliderRangeValue(value, (runtimeConfig.sliderRanges or {}).suspensionRaise, 0.0)
 end
 
-function MenuSliders.getSuspensionRaiseSliderIndex(value)
+function PerformanceTuning.MenuSliders.getSuspensionRaiseSliderIndex(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).suspensionRaise, MenuSliders.getUISliderValues('suspensionRaise'), 0.0)
+    return PerformanceTuning.MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).suspensionRaise, PerformanceTuning.MenuSliders.getUISliderValues('suspensionRaise'), 0.0)
 end
 
-function MenuSliders.getSuspensionRaiseLabel(value)
-    return ('%.3f'):format(MenuSliders.clampSuspensionRaiseValue(value))
+function PerformanceTuning.MenuSliders.getSuspensionRaiseLabel(value)
+    return ('%.3f'):format(PerformanceTuning.MenuSliders.clampSuspensionRaiseValue(value))
 end
 
-function MenuSliders.clampSuspensionClearanceValue(value)
-    return MenuSliders.clampSuspensionRaiseValue(value)
+function PerformanceTuning.MenuSliders.clampSuspensionClearanceValue(value)
+    return PerformanceTuning.MenuSliders.clampSuspensionRaiseValue(value)
 end
 
-function MenuSliders.getSuspensionClearanceSliderIndex(value)
-    return MenuSliders.getSuspensionRaiseSliderIndex(value)
+function PerformanceTuning.MenuSliders.getSuspensionClearanceSliderIndex(value)
+    return PerformanceTuning.MenuSliders.getSuspensionRaiseSliderIndex(value)
 end
 
-function MenuSliders.getSuspensionClearanceLabel(value)
-    local resolvedValue = MenuSliders.clampSuspensionClearanceValue(value)
+function PerformanceTuning.MenuSliders.getSuspensionClearanceLabel(value)
+    local resolvedValue = PerformanceTuning.MenuSliders.clampSuspensionClearanceValue(value)
     if resolvedValue > 0.0001 then
         return ('+%.3f'):format(resolvedValue)
     end
     return ('%.3f'):format(resolvedValue)
 end
 
-function MenuSliders.clampSuspensionBiasFrontValue(value)
+function PerformanceTuning.MenuSliders.clampSuspensionBiasFrontValue(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.clampSliderRangeValue(value, (runtimeConfig.sliderRanges or {}).suspensionBiasFront, 0.5)
+    return PerformanceTuning.MenuSliders.clampSliderRangeValue(value, (runtimeConfig.sliderRanges or {}).suspensionBiasFront, 0.5)
 end
 
-function MenuSliders.getSuspensionBiasSliderIndex(value)
+function PerformanceTuning.MenuSliders.getSuspensionBiasSliderIndex(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).suspensionBiasFront, MenuSliders.getUISliderValues('suspensionBiasFront'), 0.5)
+    return PerformanceTuning.MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).suspensionBiasFront, PerformanceTuning.MenuSliders.getUISliderValues('suspensionBiasFront'), 0.5)
 end
 
-function MenuSliders.getSuspensionBiasFrontLabel(value)
-    return ('%.3f'):format(MenuSliders.clampSuspensionBiasFrontValue(value))
+function PerformanceTuning.MenuSliders.getSuspensionBiasFrontLabel(value)
+    return ('%.3f'):format(PerformanceTuning.MenuSliders.clampSuspensionBiasFrontValue(value))
 end
 
-function MenuSliders.clampCgOffsetValue(value)
+function PerformanceTuning.MenuSliders.clampCgOffsetValue(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.clampSliderRangeValue(value, (runtimeConfig.sliderRanges or {}).cgOffset, 0.0)
+    return PerformanceTuning.MenuSliders.clampSliderRangeValue(value, (runtimeConfig.sliderRanges or {}).cgOffset, 0.0)
 end
 
-function MenuSliders.getCgOffsetSliderIndex(value)
+function PerformanceTuning.MenuSliders.getCgOffsetSliderIndex(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).cgOffset, MenuSliders.getUISliderValues('cgOffset'), 0.0)
+    return PerformanceTuning.MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).cgOffset, PerformanceTuning.MenuSliders.getUISliderValues('cgOffset'), 0.0)
 end
 
-function MenuSliders.getCgOffsetLabel(value)
-    local clamped = MenuSliders.clampCgOffsetValue(value)
+function PerformanceTuning.MenuSliders.getCgOffsetLabel(value)
+    local clamped = PerformanceTuning.MenuSliders.clampCgOffsetValue(value)
     if clamped > 0.0001 then
         return ('+%.2f'):format(clamped)
     end
     return ('%.2f'):format(clamped)
 end
 
-function MenuSliders.clampNitroShotStrength(value)
+function PerformanceTuning.MenuSliders.clampNitroShotStrength(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.clampSliderRangeValue(value, (runtimeConfig.sliderRanges or {}).nitrousShotStrength, 1.0)
+    return PerformanceTuning.MenuSliders.clampSliderRangeValue(value, (runtimeConfig.sliderRanges or {}).nitrousShotStrength, 1.0)
 end
 
-function MenuSliders.getNitroShotSliderIndex(value)
+function PerformanceTuning.MenuSliders.getNitroShotSliderIndex(value)
     local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
-    return MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).nitrousShotStrength, MenuSliders.getUISliderValues('nitrousShotStrength'), 1.0)
+    return PerformanceTuning.MenuSliders.getSliderIndex(value, (runtimeConfig.sliderRanges or {}).nitrousShotStrength, PerformanceTuning.MenuSliders.getUISliderValues('nitrousShotStrength'), 1.0)
 end
 
-function MenuSliders.getNitroShotStrengthLabel(value)
-    return ('%.1fx'):format(MenuSliders.clampNitroShotStrength(value))
+function PerformanceTuning.MenuSliders.getNitroShotStrengthLabel(value)
+    return ('%.1fx'):format(PerformanceTuning.MenuSliders.clampNitroShotStrength(value))
 end
+

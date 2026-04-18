@@ -9,8 +9,6 @@ local ownerIdentifierPrefixes = (((VehicleManager or {}).Config or {}).save or {
 local function logVm(action, sourceId, message)
     return
 end
-local TUNING_SELECTION_SCHEMA = VehicleManager.Config.constants.TUNING_SELECTION_SCHEMA
-
 local function normalizeSelectionMap(source)
     if type(source) ~= "table" then
         return nil
@@ -100,8 +98,8 @@ local function normalizeTuningSelections(source)
     end
 
     local normalized = {}
-    for index = 1, #TUNING_SELECTION_SCHEMA do
-        local entry = TUNING_SELECTION_SCHEMA[index]
+    for index = 1, #VehicleManager.Config.constants.TUNING_SELECTION_SCHEMA do
+        local entry = VehicleManager.Config.constants.TUNING_SELECTION_SCHEMA[index]
         normalized[entry.key] = entry.parse(canonical[entry.key])
     end
 
@@ -477,3 +475,4 @@ RegisterCommand("vm_save_delete", function(src, args)
     TriggerClientEvent("vehiclemanager:receiveSavedVehicleIndex", src, loadVehicleIndex(ownerKey))
     TriggerClientEvent("chat:addMessage", src, { args = { "^2vehiclemanager", ("Deleted save: %s"):format(saveId) } })
 end, false)
+

@@ -1,8 +1,6 @@
 -- Retries vehicle tune resyncs and reapplies tracked tune states on the client.
 PerformanceTuning = PerformanceTuning or {}
 PerformanceTuning.SyncOrchestrator = PerformanceTuning.SyncOrchestrator or {}
-
-local SyncOrchestrator = PerformanceTuning.SyncOrchestrator
 local registeredTuneStateBagHandler = false
 local pendingImmediateApplyByNetId = {}
 
@@ -57,7 +55,7 @@ local function applyTuneStateIfNeeded(vehicle, state)
     return true
 end
 
-function SyncOrchestrator.queueImmediateVehicleApply(netId)
+function PerformanceTuning.SyncOrchestrator.queueImmediateVehicleApply(netId)
     local numericNetId = math.floor(tonumber(netId) or 0)
     if numericNetId <= 0 or pendingImmediateApplyByNetId[numericNetId] then
         return
@@ -87,13 +85,13 @@ function SyncOrchestrator.queueImmediateVehicleApply(netId)
     end)
 end
 
-function SyncOrchestrator.isTrackedVehicleKeyValid(key)
+function PerformanceTuning.SyncOrchestrator.isTrackedVehicleKeyValid(key)
     local vehicleManager = PerformanceTuning.VehicleManager or {}
     local entity = vehicleManager.resolveTrackedVehicleEntity and vehicleManager.resolveTrackedVehicleEntity(key) or 0
     return entity ~= 0 and DoesEntityExist(entity), entity
 end
 
-function SyncOrchestrator.cleanupTrackedVehicleCaches(key)
+function PerformanceTuning.SyncOrchestrator.cleanupTrackedVehicleCaches(key)
     local runtimeState = PerformanceTuning.RuntimeState or {}
     runtimeState.originalHandlingByVehicle[key] = nil
     runtimeState.tuningStateByVehicle[key] = nil
@@ -104,7 +102,7 @@ function SyncOrchestrator.cleanupTrackedVehicleCaches(key)
     end
 end
 
-function SyncOrchestrator.getNextTrackedVehicleKey()
+function PerformanceTuning.SyncOrchestrator.getNextTrackedVehicleKey()
     local runtimeState = PerformanceTuning.RuntimeState or {}
     local trackedKeys = runtimeState.trackedVehicleKeys or {}
     local trackedCount = #trackedKeys
@@ -122,7 +120,7 @@ function SyncOrchestrator.getNextTrackedVehicleKey()
     return trackedKeys[nextIndex]
 end
 
-function SyncOrchestrator.queuePendingVehicleResync(netId)
+function PerformanceTuning.SyncOrchestrator.queuePendingVehicleResync(netId)
     local runtimeState = PerformanceTuning.RuntimeState or {}
     local numericNetId = math.floor(tonumber(netId) or 0)
     if numericNetId <= 0 or runtimeState.pendingVehicleResyncByNetId[numericNetId] then
@@ -134,7 +132,7 @@ function SyncOrchestrator.queuePendingVehicleResync(netId)
     pendingNetIds[#pendingNetIds + 1] = numericNetId
 end
 
-function SyncOrchestrator.clearPendingVehicleResync(netId)
+function PerformanceTuning.SyncOrchestrator.clearPendingVehicleResync(netId)
     local runtimeState = PerformanceTuning.RuntimeState or {}
     local numericNetId = math.floor(tonumber(netId) or 0)
     if numericNetId <= 0 or not runtimeState.pendingVehicleResyncByNetId[numericNetId] then
@@ -156,7 +154,7 @@ function SyncOrchestrator.clearPendingVehicleResync(netId)
     end
 end
 
-function SyncOrchestrator.getNextPendingVehicleResyncNetId()
+function PerformanceTuning.SyncOrchestrator.getNextPendingVehicleResyncNetId()
     local runtimeState = PerformanceTuning.RuntimeState or {}
     local pendingNetIds = runtimeState.pendingVehicleResyncNetIds or {}
     local pendingCount = #pendingNetIds
@@ -174,7 +172,7 @@ function SyncOrchestrator.getNextPendingVehicleResyncNetId()
     return pendingNetIds[nextIndex]
 end
 
-function SyncOrchestrator.movePendingVehicleResyncToBack(netId)
+function PerformanceTuning.SyncOrchestrator.movePendingVehicleResyncToBack(netId)
     local runtimeState = PerformanceTuning.RuntimeState or {}
     local numericNetId = math.floor(tonumber(netId) or 0)
     if numericNetId <= 0 then
@@ -194,7 +192,7 @@ function SyncOrchestrator.movePendingVehicleResyncToBack(netId)
     end
 end
 
-function SyncOrchestrator.getDiagnostics()
+function PerformanceTuning.SyncOrchestrator.getDiagnostics()
     local runtimeState = PerformanceTuning.RuntimeState or {}
     local trackedKeys = runtimeState.trackedVehicleKeys or {}
     local pendingNetIds = runtimeState.pendingVehicleResyncNetIds or {}
@@ -204,7 +202,7 @@ function SyncOrchestrator.getDiagnostics()
     }
 end
 
-function SyncOrchestrator.tryResyncVehicleByNetId(netId)
+function PerformanceTuning.SyncOrchestrator.tryResyncVehicleByNetId(netId)
     local stateBagKeys = (PerformanceTuning._internals or {}).StateBagKeys or {}
     local vehicleManager = PerformanceTuning.VehicleManager or {}
     local numericNetId = math.floor(tonumber(netId) or 0)
@@ -231,7 +229,7 @@ function SyncOrchestrator.tryResyncVehicleByNetId(netId)
     return true
 end
 
-function SyncOrchestrator.ensureTuneStateBagHandlerRegistered()
+function PerformanceTuning.SyncOrchestrator.ensureTuneStateBagHandlerRegistered()
     if registeredTuneStateBagHandler then
         return true
     end
@@ -261,7 +259,7 @@ function SyncOrchestrator.ensureTuneStateBagHandlerRegistered()
         if netId and netId ~= 0 then
             if isPlayersCurrentVehicle(entity) then
                 if wasTuneStateRecentlyAuthoredLocally(netId) then
-                    SyncOrchestrator.clearPendingVehicleResync(netId)
+                    PerformanceTuning.SyncOrchestrator.clearPendingVehicleResync(netId)
                     return
                 end
 
@@ -271,8 +269,8 @@ function SyncOrchestrator.ensureTuneStateBagHandlerRegistered()
 
             -- Defer to the next frame to avoid re-entering statebag reads/writes in the callback,
             -- but still apply fast enough to feel immediate.
-            SyncOrchestrator.queueImmediateVehicleApply(netId)
-            SyncOrchestrator.queuePendingVehicleResync(netId)
+            PerformanceTuning.SyncOrchestrator.queueImmediateVehicleApply(netId)
+            PerformanceTuning.SyncOrchestrator.queuePendingVehicleResync(netId)
         end
     end)
 
@@ -286,20 +284,20 @@ RegisterNetEvent('performancetuning:requestVehicleResync', function(netId)
         local vehicle = NetworkGetEntityFromNetworkId(numericNetId)
         if isPlayersCurrentVehicle(vehicle) then
             if wasTuneStateRecentlyAuthoredLocally(numericNetId) then
-                SyncOrchestrator.clearPendingVehicleResync(numericNetId)
+                PerformanceTuning.SyncOrchestrator.clearPendingVehicleResync(numericNetId)
                 return
             end
 
-            SyncOrchestrator.tryResyncVehicleByNetId(numericNetId)
-            SyncOrchestrator.clearPendingVehicleResync(numericNetId)
+            PerformanceTuning.SyncOrchestrator.tryResyncVehicleByNetId(numericNetId)
+            PerformanceTuning.SyncOrchestrator.clearPendingVehicleResync(numericNetId)
             return
         end
     end
 
-    if not SyncOrchestrator.tryResyncVehicleByNetId(netId) then
-        SyncOrchestrator.queuePendingVehicleResync(netId)
+    if not PerformanceTuning.SyncOrchestrator.tryResyncVehicleByNetId(netId) then
+        PerformanceTuning.SyncOrchestrator.queuePendingVehicleResync(netId)
     else
-        SyncOrchestrator.clearPendingVehicleResync(netId)
+        PerformanceTuning.SyncOrchestrator.clearPendingVehicleResync(netId)
     end
 end)
 
@@ -309,22 +307,22 @@ CreateThread(function()
     local tuningPackManager = PerformanceTuning.TuningPackManager or {}
     while true do
         Wait(250)
-        SyncOrchestrator.ensureTuneStateBagHandlerRegistered()
+        PerformanceTuning.SyncOrchestrator.ensureTuneStateBagHandlerRegistered()
 
-        local pendingNetId = SyncOrchestrator.getNextPendingVehicleResyncNetId()
+        local pendingNetId = PerformanceTuning.SyncOrchestrator.getNextPendingVehicleResyncNetId()
         if pendingNetId then
-            if SyncOrchestrator.tryResyncVehicleByNetId(pendingNetId) then
-                SyncOrchestrator.clearPendingVehicleResync(pendingNetId)
+            if PerformanceTuning.SyncOrchestrator.tryResyncVehicleByNetId(pendingNetId) then
+                PerformanceTuning.SyncOrchestrator.clearPendingVehicleResync(pendingNetId)
             else
-                SyncOrchestrator.movePendingVehicleResyncToBack(pendingNetId)
+                PerformanceTuning.SyncOrchestrator.movePendingVehicleResyncToBack(pendingNetId)
             end
         end
 
-        local key = SyncOrchestrator.getNextTrackedVehicleKey()
+        local key = PerformanceTuning.SyncOrchestrator.getNextTrackedVehicleKey()
         if key then
-            local isValid, vehicle = SyncOrchestrator.isTrackedVehicleKeyValid(key)
+            local isValid, vehicle = PerformanceTuning.SyncOrchestrator.isTrackedVehicleKeyValid(key)
             if not isValid then
-                SyncOrchestrator.cleanupTrackedVehicleCaches(key)
+                PerformanceTuning.SyncOrchestrator.cleanupTrackedVehicleCaches(key)
             else
                 local stateBagKeys = (PerformanceTuning._internals or {}).StateBagKeys or {}
                 local state = Entity(vehicle).state[stateBagKeys.tune]
@@ -345,3 +343,4 @@ CreateThread(function()
         end
     end
 end)
+

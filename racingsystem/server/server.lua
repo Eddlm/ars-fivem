@@ -1,13 +1,9 @@
+RacingSystem = RacingSystem or {}
+RacingSystem.Server = RacingSystem.Server or {}
+
 local raceInstancesById = {}
 local raceInstanceIdsByName = {}
 local nextRaceInstanceId = 1
-local getSavedRaceCounts
-local buildSavedRaceDefinitions
-local buildCheckpointsFromMissionRace
-local parseRaceDefinitionFromJson
-local buildNormalizedOnlineRaceJson
-local loadBundledOnlineRace
-local cloneMissionValue
 local knownRaceDefinitionsByName = {}
 local immutableExampleLookupNames = {}
 local RACE_INDEX_FILE = 'race_index.json'
@@ -45,11 +41,17 @@ local function logError(message)
 end
 
 local function logLevelOne(message)
-    local _ = message
+    if getExtraPrintLevel() < 1 then
+        return
+    end
+    print(tostring(message or ''))
 end
 
 local function logVerbose(message)
-    local _ = message
+    if getExtraPrintLevel() < 2 then
+        return
+    end
+    print(tostring(message or ''))
 end
 
 local function shouldLogCheckpointAnomaly(source, instanceId)
@@ -239,16 +241,16 @@ local function logCheckpointPassContext(instance, entrant, reportedCheckpoint, t
         table.insert(details, ('route: %s'):format(routeVariant))
     end
 
-    local _ = {
-        playerName = playerName,
-        playerSource = playerSource,
-        checkpointNumber = checkpointNumber,
-        checkpointTotal = checkpointTotal,
-        raceName = raceName,
-        currentLap = currentLap,
-        lapTotal = lapTotal,
-        details = details,
-    }
+    logLevelOne(("[checkpoint] player=%s source=%s race='%s' checkpoint=%s/%s lap=%s/%s details=%s"):format(
+        tostring(playerName),
+        tostring(playerSource),
+        tostring(raceName),
+        tostring(checkpointNumber),
+        tostring(checkpointTotal),
+        tostring(currentLap),
+        tostring(lapTotal),
+        (#details > 0 and table.concat(details, ', ') or 'clean pass')
+    ))
 end
 
 local function hasAdminAccess(sourceId)
@@ -372,6 +374,19 @@ local function buildSecondaryCheckpointFromMetadata(index, primaryCheckpoint, ra
     }
 end
 
+local function cloneMissionValue(value)
+    if type(value) ~= 'table' then
+        return value
+    end
+
+    local cloned = {}
+    for key, item in pairs(value) do
+        cloned[key] = cloneMissionValue(item)
+    end
+
+    return cloned
+end
+
 local function buildCheckpointVariantSnapshot(instance)
     local checkpoints = cloneCheckpoints((instance or {}).checkpoints)
     local raceMetadata = cloneMissionValue(type((instance or {}).raceMetadata) == 'table' and instance.raceMetadata or {})
@@ -421,6 +436,39 @@ local function cloneKnownRaceDefinition(definition)
         raceId = raceId,
         updatedAt = tonumber(definition.updatedAt) or os.time(),
     }
+end
+
+local function buildSavedRaceDefinitions()
+    local definitions = {}
+    for _, definition in pairs(knownRaceDefinitionsByName) do
+        local clonedDefinition = cloneKnownRaceDefinition(definition)
+        if clonedDefinition then
+            definitions[#definitions + 1] = clonedDefinition
+        end
+    end
+
+    table.sort(definitions, function(a, b)
+        if a.sourceType ~= b.sourceType then
+            return tostring(a.sourceType) < tostring(b.sourceType)
+        end
+
+        return tostring(a.name):lower() < tostring(b.name):lower()
+    end)
+
+    local definitionLabels = {}
+    for _, definition in ipairs(definitions) do
+        definitionLabels[#definitionLabels + 1] = ('%s[%s]'):format(
+            tostring(definition.name or 'unnamed'),
+            tostring(definition.sourceType or 'saved')
+        )
+    end
+
+    logVerbose(('Built %s saved race definition(s): %s'):format(
+        #definitions,
+        (#definitionLabels > 0 and table.concat(definitionLabels, ', ') or '(none)')
+    ))
+
+    return definitions
 end
 
 local function saveRaceIndex()
@@ -1728,7 +1776,7 @@ local function syncKnownRaceDefinitionsFromFiles()
             local rawRaceJson = LoadResourceFile(RESOURCE_NAME, filePath)
             local parsedRaceName = nil
             if rawRaceJson and rawRaceJson ~= '' then
-                local parsedRace = parseRaceDefinitionFromJson(rawRaceJson, ('%s race "%s"'):format(sourceType, fileName), fileName)
+                local parsedRace = RacingSystem.Server.parseRaceDefinitionFromJson(rawRaceJson, ('%s race "%s"'):format(sourceType, fileName), fileName)
                 if parsedRace then
                     parsedRaceName = RacingSystem.Trim(parsedRace.name)
                 end
@@ -1815,40 +1863,7 @@ local function syncKnownRaceDefinitionsFromFiles()
     return true
 end
 
-buildSavedRaceDefinitions = function()
-    local definitions = {}
-    for _, definition in pairs(knownRaceDefinitionsByName) do
-        local clonedDefinition = cloneKnownRaceDefinition(definition)
-        if clonedDefinition then
-            definitions[#definitions + 1] = clonedDefinition
-        end
-    end
-
-    table.sort(definitions, function(a, b)
-        if a.sourceType ~= b.sourceType then
-            return tostring(a.sourceType) < tostring(b.sourceType)
-        end
-
-        return tostring(a.name):lower() < tostring(b.name):lower()
-    end)
-
-    local definitionLabels = {}
-    for _, definition in ipairs(definitions) do
-        definitionLabels[#definitionLabels + 1] = ('%s[%s]'):format(
-            tostring(definition.name or 'unnamed'),
-            tostring(definition.sourceType or 'saved')
-        )
-    end
-
-    logVerbose(('Built %s saved race definition(s): %s'):format(
-        #definitions,
-        (#definitionLabels > 0 and table.concat(definitionLabels, ', ') or '(none)')
-    ))
-
-    return definitions
-end
-
-getSavedRaceCounts = function()
+local function getSavedRaceCounts()
     local customRaceCount = countJsonFilesInFolder(CUSTOM_RACE_FOLDER)
     local onlineRaceCount = countJsonFilesInFolder(ONLINE_RACE_FOLDER)
     return customRaceCount, onlineRaceCount
@@ -2009,110 +2024,6 @@ local function fetchUGCJsonContentById(ugcId)
     return nil, lastError or ('No mission JSON variant was found for UGC id "%s".'):format(tostring(ugcId))
 end
 
-local function saveBundledUGCById(ugcId)
-    local normalizedUGCId = sanitizeUGCId(ugcId)
-    if not normalizedUGCId then
-        return nil, 'A valid UGC id is required.'
-    end
-
-    local rawMissionJson, fetchError = fetchUGCJsonContentById(normalizedUGCId)
-    if not rawMissionJson then
-        return nil, fetchError or 'Could not download the UGC JSON.'
-    end
-
-    -- Write the downloaded JSON to disk first, then parse it through the same loader path.
-    local tempFilePath = ('%s/.tmp_%s.tmp'):format(ONLINE_RACE_FOLDER, normalizedUGCId)
-    local function cleanupTempFile()
-        local resourcePath = GetResourcePath(RESOURCE_NAME)
-        if type(resourcePath) ~= 'string' or resourcePath == '' then
-            return
-        end
-
-        local separator = resourcePath:find('\\', 1, true) and '\\' or '/'
-        local absolutePath = resourcePath .. separator .. tempFilePath:gsub('/', separator)
-        os.remove(absolutePath)
-    end
-
-    local tempSaveOk = SaveResourceFile(RESOURCE_NAME, tempFilePath, rawMissionJson, -1)
-    if not tempSaveOk then
-        return nil, ('Could not save temporary file %s.'):format(tempFilePath)
-    end
-
-    local tempRawJson = LoadResourceFile(RESOURCE_NAME, tempFilePath)
-    local parsedRace, parseError = parseRaceDefinitionFromJson(
-        tempRawJson,
-        ('downloaded UGC "%s"'):format(normalizedUGCId),
-        normalizedUGCId
-    )
-    if not parsedRace then
-        cleanupTempFile()
-        return nil, parseError or 'The downloaded UGC could not be parsed.'
-    end
-
-    local displayRaceName = RacingSystem.Trim(parsedRace.name or '')
-    if displayRaceName == '' then
-        displayRaceName = normalizedUGCId
-    end
-
-    local normalizedRaceJson = buildNormalizedOnlineRaceJson(displayRaceName, normalizedUGCId, parsedRace)
-    if type(normalizedRaceJson) ~= 'string' or normalizedRaceJson == '' then
-        cleanupTempFile()
-        return nil, 'Could not encode normalized online race JSON.'
-    end
-
-    local filePath = buildOnlineRaceFilePath(normalizedUGCId)
-    local saveOk = SaveResourceFile(RESOURCE_NAME, filePath, normalizedRaceJson, -1)
-    if not saveOk then
-        cleanupTempFile()
-        logError(("The server could not save imported UGC '%s' to '%s'."):format(tostring(normalizedUGCId), filePath))
-        return nil, ('Could not save %s.'):format(filePath)
-    end
-
-    cleanupTempFile()
-
-    local loadedRace, loadError = loadBundledOnlineRace(normalizedUGCId)
-    if not loadedRace then
-        return nil, loadError or 'The imported race could not be loaded after saving.'
-    end
-
-    return {
-        ugcId = normalizedUGCId,
-        filePath = filePath,
-        raceName = tostring(loadedRace.name or normalizedUGCId),
-        checkpointCount = #(loadedRace.checkpoints or {}),
-        propCount = #(loadedRace.props or {}),
-        modelHideCount = #(loadedRace.modelHides or {}),
-    }
-end
-
-local function validateBundledUGCById(ugcId)
-    local normalizedUGCId = sanitizeUGCId(ugcId)
-    if not normalizedUGCId then
-        return nil, 'A valid UGC id is required.'
-    end
-
-    local rawMissionJson, fetchError = fetchUGCJsonContentById(normalizedUGCId)
-    if not rawMissionJson then
-        return nil, fetchError or 'Could not download the UGC JSON.'
-    end
-
-    local parsedRace, parseError = parseRaceDefinitionFromJson(
-        rawMissionJson,
-        ('downloaded UGC "%s"'):format(normalizedUGCId),
-        normalizedUGCId
-    )
-    if not parsedRace then
-        return nil, parseError or 'The downloaded UGC could not be parsed.'
-    end
-
-    return {
-        ugcId = normalizedUGCId,
-        checkpointCount = #(parsedRace.checkpoints or {}),
-        propCount = #(parsedRace.props or {}),
-        modelHideCount = #(parsedRace.modelHides or {}),
-    }, nil
-end
-
 local function buildOnlineRacePropsFromMission(objectData)
     local props = {}
     if type(objectData) ~= 'table' then
@@ -2181,7 +2092,7 @@ local function buildOnlineRaceModelHidesFromMission(hideObjectData)
     return modelHides
 end
 
-buildCheckpointsFromMissionRace = function(raceData, options)
+local function buildCheckpointsFromMissionRace(raceData, options)
     local checkpoints = {}
     if type(raceData) ~= 'table' then
         return checkpoints
@@ -2211,19 +2122,6 @@ buildCheckpointsFromMissionRace = function(raceData, options)
     return checkpoints
 end
 
-cloneMissionValue = function(value)
-    if type(value) ~= 'table' then
-        return value
-    end
-
-    local cloned = {}
-    for key, item in pairs(value) do
-        cloned[key] = cloneMissionValue(item)
-    end
-
-    return cloned
-end
-
 local function buildMissionRaceMetadata(raceData)
     if type(raceData) ~= 'table' then
         return {}
@@ -2251,7 +2149,7 @@ local function hasTableEntries(value)
     return false
 end
 
-parseRaceDefinitionFromJson = function(rawRaceJson, contextLabel, fileNameHint)
+function RacingSystem.Server.parseRaceDefinitionFromJson(rawRaceJson, contextLabel, fileNameHint)
     local label = tostring(contextLabel or 'race JSON')
     if type(rawRaceJson) ~= 'string' or rawRaceJson == '' then
         return nil, ('No %s content was provided.'):format(label)
@@ -2298,7 +2196,7 @@ parseRaceDefinitionFromJson = function(rawRaceJson, contextLabel, fileNameHint)
     }, nil
 end
 
-buildNormalizedOnlineRaceJson = function(raceName, ugcId, parsedRace)
+local function buildNormalizedOnlineRaceJson(raceName, ugcId, parsedRace)
     local normalized = {
         format = 'racingsystem_online_v1',
         name = tostring(raceName or ''),
@@ -2356,7 +2254,7 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
             return nil
         end
 
-        local parsedRace, parseError = parseRaceDefinitionFromJson(
+        local parsedRace, parseError = RacingSystem.Server.parseRaceDefinitionFromJson(
             rawMissionJson,
             ('%s race "%s"'):format(label, fileName),
             fileName
@@ -2417,7 +2315,7 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
             or buildOnlineRaceFilePath(fileName)
         local rawMissionJson = LoadResourceFile(RESOURCE_NAME, filePath)
         if rawMissionJson and rawMissionJson ~= '' then
-            local parsedRace, parseError = parseRaceDefinitionFromJson(
+            local parsedRace, parseError = RacingSystem.Server.parseRaceDefinitionFromJson(
                 rawMissionJson,
                 ('%s race "%s"'):format(label, fileName),
                 fileName
@@ -2503,8 +2401,112 @@ local function loadCustomRace(raceName)
     return loadMissionRaceFromFolder(raceName, CUSTOM_RACE_FOLDER, 'custom')
 end
 
-loadBundledOnlineRace = function(raceName)
+local function loadBundledOnlineRace(raceName)
     return loadMissionRaceFromFolder(raceName, ONLINE_RACE_FOLDER, 'online')
+end
+
+local function saveBundledUGCById(ugcId)
+    local normalizedUGCId = sanitizeUGCId(ugcId)
+    if not normalizedUGCId then
+        return nil, 'A valid UGC id is required.'
+    end
+
+    local rawMissionJson, fetchError = fetchUGCJsonContentById(normalizedUGCId)
+    if not rawMissionJson then
+        return nil, fetchError or 'Could not download the UGC JSON.'
+    end
+
+    -- Write the downloaded JSON to disk first, then parse it through the same loader path.
+    local tempFilePath = ('%s/.tmp_%s.tmp'):format(ONLINE_RACE_FOLDER, normalizedUGCId)
+    local function cleanupTempFile()
+        local resourcePath = GetResourcePath(RESOURCE_NAME)
+        if type(resourcePath) ~= 'string' or resourcePath == '' then
+            return
+        end
+
+        local separator = resourcePath:find('\\', 1, true) and '\\' or '/'
+        local absolutePath = resourcePath .. separator .. tempFilePath:gsub('/', separator)
+        os.remove(absolutePath)
+    end
+
+    local tempSaveOk = SaveResourceFile(RESOURCE_NAME, tempFilePath, rawMissionJson, -1)
+    if not tempSaveOk then
+        return nil, ('Could not save temporary file %s.'):format(tempFilePath)
+    end
+
+    local tempRawJson = LoadResourceFile(RESOURCE_NAME, tempFilePath)
+    local parsedRace, parseError = RacingSystem.Server.parseRaceDefinitionFromJson(
+        tempRawJson,
+        ('downloaded UGC "%s"'):format(normalizedUGCId),
+        normalizedUGCId
+    )
+    if not parsedRace then
+        cleanupTempFile()
+        return nil, parseError or 'The downloaded UGC could not be parsed.'
+    end
+
+    local displayRaceName = RacingSystem.Trim(parsedRace.name or '')
+    if displayRaceName == '' then
+        displayRaceName = normalizedUGCId
+    end
+
+    local normalizedRaceJson = buildNormalizedOnlineRaceJson(displayRaceName, normalizedUGCId, parsedRace)
+    if type(normalizedRaceJson) ~= 'string' or normalizedRaceJson == '' then
+        cleanupTempFile()
+        return nil, 'Could not encode normalized online race JSON.'
+    end
+
+    local filePath = buildOnlineRaceFilePath(normalizedUGCId)
+    local saveOk = SaveResourceFile(RESOURCE_NAME, filePath, normalizedRaceJson, -1)
+    if not saveOk then
+        cleanupTempFile()
+        logError(("The server could not save imported UGC '%s' to '%s'."):format(tostring(normalizedUGCId), filePath))
+        return nil, ('Could not save %s.'):format(filePath)
+    end
+
+    cleanupTempFile()
+
+    local loadedRace, loadError = loadBundledOnlineRace(normalizedUGCId)
+    if not loadedRace then
+        return nil, loadError or 'The imported race could not be loaded after saving.'
+    end
+
+    return {
+        ugcId = normalizedUGCId,
+        filePath = filePath,
+        raceName = tostring(loadedRace.name or normalizedUGCId),
+        checkpointCount = #(loadedRace.checkpoints or {}),
+        propCount = #(loadedRace.props or {}),
+        modelHideCount = #(loadedRace.modelHides or {}),
+    }
+end
+
+local function validateBundledUGCById(ugcId)
+    local normalizedUGCId = sanitizeUGCId(ugcId)
+    if not normalizedUGCId then
+        return nil, 'A valid UGC id is required.'
+    end
+
+    local rawMissionJson, fetchError = fetchUGCJsonContentById(normalizedUGCId)
+    if not rawMissionJson then
+        return nil, fetchError or 'Could not download the UGC JSON.'
+    end
+
+    local parsedRace, parseError = RacingSystem.Server.parseRaceDefinitionFromJson(
+        rawMissionJson,
+        ('downloaded UGC "%s"'):format(normalizedUGCId),
+        normalizedUGCId
+    )
+    if not parsedRace then
+        return nil, parseError or 'The downloaded UGC could not be parsed.'
+    end
+
+    return {
+        ugcId = normalizedUGCId,
+        checkpointCount = #(parsedRace.checkpoints or {}),
+        propCount = #(parsedRace.props or {}),
+        modelHideCount = #(parsedRace.modelHides or {}),
+    }, nil
 end
 
 local function registerRaceDefinitionIfValid(raceName)
@@ -3157,6 +3159,8 @@ local function broadcastLapCompleted(instance, entrant, lapNumber, lapTimeMs, to
         return
     end
 
+    local totalLaps = math.max(1, tonumber(instance.laps) or 1)
+
     for _, otherEntrant in ipairs(instance.entrants or {}) do
         local entrantSource = tonumber(otherEntrant.source) or 0
         if entrantSource > 0 then
@@ -3166,6 +3170,7 @@ local function broadcastLapCompleted(instance, entrant, lapNumber, lapTimeMs, to
                 playerSource = tonumber(entrant.source) or 0,
                 playerName = tostring(entrant.name or ('Player %s'):format(tostring(entrant.source or '?'))),
                 lapNumber = tonumber(lapNumber) or 1,
+                totalLaps = totalLaps,
                 lapTimeMs = tonumber(lapTimeMs) or 0,
                 totalTimeMs = tonumber(totalTimeMs) or 0,
                 bestLapTimeMs = tonumber(bestLapTimeMs) or 0,
@@ -3180,6 +3185,7 @@ local function emitStableLapTimeIfReady(instance, entrant, lapNumber, lapTimeMs)
     -- Stable-lap event emission is intentionally disabled.
     return
 end
+
 
 local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTimingPayload, passContext)
     local instance = raceInstancesById[tonumber(instanceId) or -1]
@@ -3309,6 +3315,15 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
                 tostring(bestLapDeltaMs)
             ))
             emitStableLapTimeIfReady(instance, entrant, currentLap, currentLapTimeMs)
+
+            local entrantSource = tonumber(entrant.source) or 0
+            local isFirstEntrantLap = #(entrant.lapTimes or {}) <= 1
+            if entrantSource > 0 and not isFirstEntrantLap then
+                TriggerClientEvent('racingsystem:lapTimeAnnotation', entrantSource, {
+                    isInstanceBest = bestLapDeltaMs < 0 or previousBestLapTimeMs == nil,
+                    deltaMs = bestLapDeltaMs,
+                })
+            end
         end
     else
         local nextCheckpoint = reportedCheckpoint + 1
@@ -3858,4 +3873,5 @@ end)
 
 loadRaceIndex()
 runIntegrityScript()
+
 
