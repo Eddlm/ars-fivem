@@ -57,6 +57,7 @@ RacingSystem.Client.InRace.localEntrantIdentity = localEntrantIdentity
 -- These are read lazily at runtime via the shared Config table.
 -- ============================================================
 
+-- getClientAdvancedConfig: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getClientAdvancedConfig()
     return (((RacingSystem or {}).Config or {}).advanced or {}).client or {}
 end
@@ -69,6 +70,7 @@ local METERS_PER_SECOND_TO_MILES_PER_HOUR = 2.236936
 local CHECKPOINT_SOFT_POWER_PENALTY_MULTIPLIER
 local LEADERBOARD_CLIENT_TIEBREAK_ENABLED
 
+-- ensureConstants: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function ensureConstants()
     if CHECKPOINT_PASS_ARM_DISTANCE then
         return
@@ -86,6 +88,7 @@ end
 -- Lap time / duration formatting
 -- ============================================================
 
+-- formatLapTime: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function formatLapTime(ms)
     ms = math.max(0, math.floor(tonumber(ms) or 0))
     local mins = math.floor(ms / 60000)
@@ -98,6 +101,7 @@ local function formatLapTime(ms)
 end
 RacingSystem.Client.InRace.formatLapTime = formatLapTime
 
+-- formatDurationMs: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function formatDurationMs(totalMs)
     local durationMs = math.max(0, math.floor(tonumber(totalMs) or 0))
     local minutes = math.floor(durationMs / 60000)
@@ -111,6 +115,7 @@ RacingSystem.Client.InRace.formatDurationMs = formatDurationMs
 -- Race timing
 -- ============================================================
 
+-- clearPredictedRaceProgress: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function clearPredictedRaceProgress(instanceId)
     local predicted = raceRuntimeState.predictedProgress
     if not predicted then
@@ -122,6 +127,7 @@ local function clearPredictedRaceProgress(instanceId)
 end
 RacingSystem.Client.InRace.clearPredictedRaceProgress = clearPredictedRaceProgress
 
+-- resetLocalRaceTiming: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function resetLocalRaceTiming()
     raceTimingState.instanceId = nil
     raceTimingState.raceStartedAt = nil
@@ -130,6 +136,7 @@ local function resetLocalRaceTiming()
 end
 RacingSystem.Client.InRace.resetLocalRaceTiming = resetLocalRaceTiming
 
+-- ensureLocalRaceTiming: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function ensureLocalRaceTiming(instanceId)
     local numericInstanceId = tonumber(instanceId)
     if raceTimingState.instanceId ~= numericInstanceId then
@@ -143,6 +150,7 @@ RacingSystem.Client.InRace.ensureLocalRaceTiming = ensureLocalRaceTiming
 -- Penalty enforcement
 -- ============================================================
 
+-- clearPowerPenaltyVehicleOverride: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function clearPowerPenaltyVehicleOverride()
     local penaltyVehicle = raceRuntimeState.powerPenaltyVehicle
     if penaltyVehicle and DoesEntityExist(penaltyVehicle) then
@@ -153,6 +161,7 @@ local function clearPowerPenaltyVehicleOverride()
 end
 RacingSystem.Client.InRace.clearPowerPenaltyVehicleOverride = clearPowerPenaltyVehicleOverride
 
+-- applySoftPowerPenalty: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function applySoftPowerPenalty(vehicle, durationMs)
     if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
         return
@@ -167,6 +176,7 @@ local function applySoftPowerPenalty(vehicle, durationMs)
     SetVehicleEnginePowerMultiplier(vehicle, CHECKPOINT_SOFT_POWER_PENALTY_MULTIPLIER)
 end
 
+-- getVehicleForwardVelocityRatio: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getVehicleForwardVelocityRatio(vehicle)
     if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
         return 1.0
@@ -219,6 +229,7 @@ local slowDownObjects = {
     [1832852758] = true,
 }
 
+-- GetPropSpeedModificationParameters: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function GetPropSpeedModificationParameters(model, prpsba)
     if prpsba == -1 then
         return false
@@ -263,10 +274,12 @@ RacingSystem.Client.InRace.GetPropSpeedModificationParameters = GetPropSpeedModi
 -- Checkpoint pass helpers
 -- ============================================================
 
+-- getCheckpointPassArmKey: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getCheckpointPassArmKey(instanceId, checkpointIndex, lapNumber)
     return ('%s:%s:%s'):format(tonumber(instanceId) or 0, tonumber(checkpointIndex) or 0, tonumber(lapNumber) or 1)
 end
 
+-- cloneRuntimeCheckpoint: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function cloneRuntimeCheckpoint(checkpoint)
     if type(checkpoint) ~= 'table' then
         return nil
@@ -280,6 +293,7 @@ local function cloneRuntimeCheckpoint(checkpoint)
     }
 end
 
+-- resolveLastPassedCheckpointTarget: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function resolveLastPassedCheckpointTarget(instance, entrantProgress)
     if type(instance) ~= 'table' then
         return nil, nil
@@ -316,6 +330,7 @@ local function resolveLastPassedCheckpointTarget(instance, entrantProgress)
 end
 RacingSystem.Client.InRace.resolveLastPassedCheckpointTarget = resolveLastPassedCheckpointTarget
 
+-- getEffectiveEntrantProgress: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getEffectiveEntrantProgress(instance, entrant)
     local currentCheckpoint = tonumber(entrant and entrant.currentCheckpoint) or 1
     local currentLap = math.max(1, tonumber(entrant and entrant.currentLap) or 1)
@@ -346,6 +361,7 @@ local function getEffectiveEntrantProgress(instance, entrant)
 end
 RacingSystem.Client.InRace.getEffectiveEntrantProgress = getEffectiveEntrantProgress
 
+-- clearPendingCheckpointIfAdvanced: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function clearPendingCheckpointIfAdvanced(entrant)
     if not raceRuntimeState.pendingCheckpointPass then
         return
@@ -361,6 +377,7 @@ local function clearPendingCheckpointIfAdvanced(entrant)
     end
 end
 
+-- predictCheckpointPass: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function predictCheckpointPass(instance, entrantProgress, totalCheckpoints, targetIndex)
     local instanceId = tonumber(instance and instance.id)
     if not instanceId then
@@ -406,6 +423,7 @@ end
 -- Main loop: checkpoint detection, penalty enforcement, timing
 -- ============================================================
 
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 CreateThread(function()
     ensureConstants()
     while true do
@@ -545,7 +563,7 @@ CreateThread(function()
 
                     if countdownEndsAt and remainingMs <= 0 and not countdownZeroReportedByInstanceId[joinedInstanceId2] then
                         countdownZeroReportedByInstanceId[joinedInstanceId2] = true
-                        TriggerServerEvent('racingsystem:countdownReachedZero', joinedInstanceId2, GetGameTimer())
+                        TriggerServerEvent('racingsystem:race:countdownZero', joinedInstanceId2, GetGameTimer())
                     end
                 elseif joinedInstance.state == RacingSystem.States.running then
                     RacingSystem.Client.Util.ClearCountdownVisual()
@@ -940,7 +958,7 @@ CreateThread(function()
                             }
 
                             predictCheckpointPass(joinedInstance, entrantProgress, totalCheckpoints, targetIndex)
-                            TriggerServerEvent('racingsystem:checkpointPassed', joinedInstance.id, targetIndex, lapTimingPayload, passContextPayload)
+                            TriggerServerEvent('racingsystem:race:checkpointPassed', joinedInstance.id, targetIndex, lapTimingPayload, passContextPayload)
 
                             if applyTeleportPenalty then
                                 local postPassCheckpointIndex = targetIndex + 1
@@ -993,3 +1011,4 @@ CreateThread(function()
         end
     end
 end)
+

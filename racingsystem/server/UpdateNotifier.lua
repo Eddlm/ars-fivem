@@ -9,11 +9,13 @@ local CHECKER_DEFAULTS = {
     timeoutMs = 12000,
 }
 
+-- Trim exists to keep race-system server behavior clear and deterministic.
 local function trim(value)
     local text = tostring(value or '')
     return (text:match('^%s*(.-)%s*$') or '')
 end
 
+-- Get checker config exists to keep race-system server behavior clear and deterministic.
 local function getCheckerConfig()
     return {
         repo = tostring(CHECKER_DEFAULTS.repo),
@@ -24,6 +26,7 @@ local function getCheckerConfig()
     }
 end
 
+-- Build http headers exists to keep race-system server behavior clear and deterministic.
 local function buildHttpHeaders(config)
     local headers = {
         ['User-Agent'] = 'racingsystem-update-notifier',
@@ -37,6 +40,7 @@ local function buildHttpHeaders(config)
     return headers
 end
 
+-- Http request exists to keep race-system server behavior clear and deterministic.
 local function httpRequest(url, headers, timeoutMs)
     local response = {
         done = false,
@@ -70,6 +74,7 @@ local function httpRequest(url, headers, timeoutMs)
     return response, nil
 end
 
+-- Parse version from manifest text exists to keep race-system server behavior clear and deterministic.
 local function parseVersionFromManifestText(content)
     if type(content) ~= 'string' or content == '' then
         return nil
@@ -88,6 +93,7 @@ local function parseVersionFromManifestText(content)
     return version
 end
 
+-- Get local version exists to keep race-system server behavior clear and deterministic.
 local function getLocalVersion()
     local localMetadataVersion = trim(GetResourceMetadata(RESOURCE_NAME, 'version', 0) or '')
     if localMetadataVersion ~= '' then
@@ -103,6 +109,7 @@ local function getLocalVersion()
     return nil, 'missing'
 end
 
+-- Get remote version exists to keep race-system server behavior clear and deterministic.
 local function getRemoteVersion(config, headers)
     local rawUrl = ('https://raw.githubusercontent.com/%s/%s/%s/fxmanifest.lua'):format(
         config.repo,
@@ -127,6 +134,7 @@ local function getRemoteVersion(config, headers)
     return parsed, nil
 end
 
+-- Parse version segments exists to keep race-system server behavior clear and deterministic.
 local function parseVersionSegments(version)
     local cleaned = trim(version)
     if cleaned == '' then
@@ -149,6 +157,7 @@ local function parseVersionSegments(version)
     return segments
 end
 
+-- Is remote version newer exists to keep race-system server behavior clear and deterministic.
 local function isRemoteVersionNewer(localVersion, remoteVersion)
     local localSegments = parseVersionSegments(localVersion)
     local remoteSegments = parseVersionSegments(remoteVersion)
@@ -171,6 +180,7 @@ local function isRemoteVersionNewer(localVersion, remoteVersion)
     return false
 end
 
+-- Perform update check exists to keep race-system server behavior clear and deterministic.
 local function performUpdateCheck()
     local config = getCheckerConfig()
     local headers = buildHttpHeaders(config)
@@ -194,6 +204,7 @@ local function performUpdateCheck()
     return true
 end
 
+-- Has startup check already run exists to keep race-system server behavior clear and deterministic.
 local function hasStartupCheckAlreadyRun()
     if type(GlobalState) ~= 'table' then
         return false
@@ -201,6 +212,7 @@ local function hasStartupCheckAlreadyRun()
     return GlobalState[STARTUP_CHECK_STATE_KEY] == true
 end
 
+-- Mark startup check as run exists to keep race-system server behavior clear and deterministic.
 local function markStartupCheckAsRun()
     if type(GlobalState) ~= 'table' then
         return

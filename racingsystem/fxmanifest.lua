@@ -36,5 +36,15 @@ client_scripts {
 
 server_scripts {
     'server/UpdateNotifier.lua',
-    'server/server.lua'
+    'server/server.lua',
+    'server/state_store.lua',
+    'server/logging_access.lua',
+    'server/race_catalog.lua',
+    'server/snapshot_runtime.lua',
+    'server/race_parsing.lua',
+    'server/race_repository.lua',
+    'server/race_instances.lua',
+    'server/event_handlers.lua',
+    'server/runtime_threads.lua'
 }
+

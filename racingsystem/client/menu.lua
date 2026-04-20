@@ -5,6 +5,7 @@
 RacingSystem = RacingSystem or {}
 RacingSystem.Menu = RacingSystem.Menu or {}
 RacingSystem.Client = RacingSystem.Client or {}
+local PAYLOAD_SYSTEM_DISABLED = (RacingSystem.Client and RacingSystem.Client.PayloadSystemDisabled) == true
 
 RacingSystem.Client.latestSnapshot = RacingSystem.Client.latestSnapshot or {
     definitions = {},
@@ -27,14 +28,24 @@ local CLIENT_EXTRA_PRINT_LEVEL = math.floor(tonumber(MenuConfig.extraPrintLevel)
 
 -- ─── Debug logging ────────────────────────────────────────────────────────────
 
+-- getClientExtraPrintLevel: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getClientExtraPrintLevel()
     return CLIENT_EXTRA_PRINT_LEVEL == 2 and 2 or 0
 end
 
+-- logMenuVerbose: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function logMenuVerbose(message)
     local _ = message
 end
 
+-- notifyPayloadDisabled: handles a focused piece of client race logic to keep behavior modular and maintainable.
+local function notifyPayloadDisabled()
+    if RacingSystem.Client and RacingSystem.Client.Util and type(RacingSystem.Client.Util.NotifyPlayer) == 'function' then
+        RacingSystem.Client.Util.NotifyPlayer('Snapshot payload system disabled (rewrite pending).')
+    end
+end
+
+-- setItemDescriptionRaw: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function setItemDescriptionRaw(item, text)
     if item == nil then
         return
@@ -42,6 +53,7 @@ local function setItemDescriptionRaw(item, text)
     item._Description = tostring(text or '')
 end
 
+-- syncMenuCurrentDescription: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function syncMenuCurrentDescription(menu)
     if not menu or type(menu.Visible) ~= 'function' or not menu:Visible() then
         return
@@ -64,9 +76,36 @@ RacingSystem.Menu.raceMenuInitialized    = false
 RacingSystem.Menu.pendingSelectRaceName  = nil
 RacingSystem.Menu.pendingEditorRaceName  = nil
 RacingSystem.Menu.deleteConfirmRaceName  = nil
+RacingSystem.Menu.countdownAcceptedByInstanceId = RacingSystem.Menu.countdownAcceptedByInstanceId or {}
+
+-- isLocalHostForInstance: handles a focused piece of client race logic to keep behavior modular and maintainable.
+local function isLocalHostForInstance(instance)
+    local ownerSource = tonumber(type(instance) == 'table' and instance.owner)
+    local instanceId = tonumber(type(instance) == 'table' and instance.id)
+    if (ownerSource == nil or ownerSource <= 0) and instanceId then
+        local dynamicCache = type(RacingSystem.Client.instanceDynamicCacheById) == 'table' and RacingSystem.Client.instanceDynamicCacheById or {}
+        local listCache = type(RacingSystem.Client.instanceListCache) == 'table' and RacingSystem.Client.instanceListCache or {}
+        ownerSource = tonumber(type(dynamicCache[instanceId]) == 'table' and dynamicCache[instanceId].owner)
+            or tonumber(type(listCache[instanceId]) == 'table' and listCache[instanceId].owner)
+    end
+    local localSource = tonumber(GetPlayerServerId(PlayerId())) or 0
+    if ownerSource ~= nil and ownerSource > 0 then
+        return ownerSource == localSource
+    end
+
+    -- Fallback for stale snapshots missing owner: treat entrant #1 as host for menu enablement.
+    local entrants = type(instance) == 'table' and type(instance.entrants) == 'table' and instance.entrants or {}
+    local firstEntrantSource = tonumber(type(entrants[1]) == 'table' and entrants[1].source)
+    if firstEntrantSource and firstEntrantSource == localSource then
+        return true
+    end
+
+    return false
+end
 
 -- ─── Helper: determine player's current race state ─────────────────────────────
 
+-- getMenuPlayerState: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getMenuPlayerState()
     -- Returns: 'neutral', 'staging', 'countdown', 'racing', 'finished', or 'editing'
     if type(RacingSystem.Client.editorState) == 'table' and RacingSystem.Client.editorState.active then
@@ -98,6 +137,7 @@ local resetCheckpointMenuItem = UIMenuItem.New(
     'Reset to Checkpoint',
     'Teleport back to your last passed checkpoint.'
 )
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 resetCheckpointMenuItem.Activated = function(menu)
     logMenuVerbose('Reset to Checkpoint activated')
     TriggerEvent('racingsystem:resetToLastCheckpoint')
@@ -108,9 +148,35 @@ local startCountdownMenuItem = UIMenuItem.New(
     'Start Countdown',
     'Start countdown for the race you are currently joined to.'
 )
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 startCountdownMenuItem.Activated = function(menu)
+    if PAYLOAD_SYSTEM_DISABLED then
+        notifyPayloadDisabled()
+        return
+    end
     logMenuVerbose('Start Countdown activated')
-    TriggerEvent('racingsystem:startRace')
+    local instance = type(RacingSystem.Client.getJoinedRaceInstance) == 'function' and RacingSystem.Client.getJoinedRaceInstance() or nil
+    local instanceId = tonumber(instance and instance.id)
+    if instanceId then
+        RacingSystem.Menu.countdownAcceptedByInstanceId[instanceId] = true
+    end
+    TriggerEvent('racingsystem:race:start')
+    RacingSystem.Menu.refreshRaceMenu()
+end
+
+-- Restart Race
+local restartRaceMenuItem = UIMenuItem.New(
+    'Restart Race',
+    'Reset race to idle and teleport all entrants back to the starting grid.'
+)
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
+restartRaceMenuItem.Activated = function(menu)
+    if PAYLOAD_SYSTEM_DISABLED then
+        notifyPayloadDisabled()
+        return
+    end
+    logMenuVerbose('Restart Race activated')
+    TriggerEvent('racingsystem:race:restart')
 end
 
 -- Leave Race
@@ -118,9 +184,10 @@ local leaveRaceMenuItem = UIMenuItem.New(
     'Leave Race',
     'Leave your current race instance.'
 )
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 leaveRaceMenuItem.Activated = function(menu)
     logMenuVerbose('Leave Race activated')
-    TriggerEvent('racingsystem:leaveRace')
+    TriggerEvent('racingsystem:race:leave')
     menu:Visible(false)
 end
 
@@ -129,11 +196,16 @@ local killRaceMenuItem = UIMenuItem.New(
     'Kill Race Instance',
     'Forcibly terminate this race instance for all players.'
 )
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 killRaceMenuItem.Activated = function(menu)
+    if PAYLOAD_SYSTEM_DISABLED then
+        notifyPayloadDisabled()
+        return
+    end
     logMenuVerbose('Kill Race Instance activated')
     local instance = RacingSystem.Client.getJoinedRaceInstance()
     if instance then
-        TriggerServerEvent('racingsystem:killRace', instance.name)
+        TriggerServerEvent('racingsystem:race:kill', instance.name)
     end
     menu:Visible(false)
 end
@@ -176,6 +248,9 @@ stagingMenu:SetBannerColor(SColor.Orange)
 -- Start Countdown (will be enabled dynamically only for host)
 stagingMenu:AddItem(startCountdownMenuItem)
 
+-- Restart Race (enabled dynamically for host)
+stagingMenu:AddItem(restartRaceMenuItem)
+
 -- Leave Race
 stagingMenu:AddItem(leaveRaceMenuItem)
 
@@ -213,7 +288,12 @@ local joinRaceItem = UIMenuItem.New(
 )
 activeRacesSubmenu:AddItem(joinRaceItem)
 
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 activeRacesItem.Activated = function(menu)
+    if PAYLOAD_SYSTEM_DISABLED then
+        notifyPayloadDisabled()
+        return
+    end
     local instances = type(RacingSystem.Client.latestSnapshot) == 'table' and type(RacingSystem.Client.latestSnapshot.instances) == 'table'
         and RacingSystem.Client.latestSnapshot.instances or {}
 
@@ -230,7 +310,12 @@ activeRacesItem.Activated = function(menu)
     menu:SwitchTo(activeRacesSubmenu, 1, true)
 end
 
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 joinRaceItem.Activated = function(menu)
+    if PAYLOAD_SYSTEM_DISABLED then
+        notifyPayloadDisabled()
+        return
+    end
     local instances = type(RacingSystem.Client.latestSnapshot) == 'table' and type(RacingSystem.Client.latestSnapshot.instances) == 'table'
         and RacingSystem.Client.latestSnapshot.instances or {}
     local selectedIndex = tonumber(activeRaceListItem:Index()) or 1
@@ -250,7 +335,7 @@ joinRaceItem.Activated = function(menu)
         tostring(selectedInstance.name)
     ))
 
-    TriggerServerEvent('racingsystem:joinRaceInstanceById', selectedInstance.id)
+    TriggerServerEvent('racingsystem:race:joinById', selectedInstance.id)
     MenuHandler:CloseAndClearHistory()
 end
 
@@ -296,13 +381,19 @@ local acceptItem = UIMenuItem.New(
 )
 hostSubmenu:AddItem(acceptItem)
 
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 importGTAOUrlItem.Activated = function(menu)
     logMenuVerbose('Import GTAO URL activated')
     TriggerEvent('racingsystem:openGTAORaceUrlPrompt')
     MenuHandler:CloseAndClearHistory()
 end
 
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 hostItem.Activated = function(menu)
+    if PAYLOAD_SYSTEM_DISABLED then
+        notifyPayloadDisabled()
+        return
+    end
     -- Refresh the race list from RacingSystem.Client.latestSnapshot.definitions before opening submenu
     logMenuVerbose(('Host submenu activated, RacingSystem.Client.latestSnapshot type: %s'):format(type(RacingSystem.Client.latestSnapshot)))
 
@@ -348,7 +439,12 @@ hostItem.Activated = function(menu)
     menu:SwitchTo(hostSubmenu, 1, true)
 end
 
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 acceptItem.Activated = function(menu)
+    if PAYLOAD_SYSTEM_DISABLED then
+        notifyPayloadDisabled()
+        return
+    end
     local definitions = type(RacingSystem.Client.latestSnapshot) == 'table' and type(RacingSystem.Client.latestSnapshot.definitions) == 'table'
         and RacingSystem.Client.latestSnapshot.definitions or {}
     local selectedIndex = tonumber(raceListItem:Index()) or 1
@@ -396,7 +492,7 @@ acceptItem.Activated = function(menu)
         lateJoinProgressLimitPercent = lateJoinPercent,
     }
 
-    TriggerServerEvent('racingsystem:invokeRace', payload, actualLapCount)
+    TriggerServerEvent('racingsystem:race:invoke', payload, actualLapCount)
     MenuHandler:CloseAndClearHistory()
 end
 
@@ -406,6 +502,7 @@ end
 local editorSessionActive = false
 
 -- New Race keyboard input
+-- promptForRaceName: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function promptForRaceName()
     logMenuVerbose('promptForRaceName: starting')
     AddTextEntry('RACINGSYSTEM_NEW_RACE', 'Enter race name')
@@ -441,6 +538,7 @@ local CHECKPOINT_WIDTH_OPTIONS = {
     })
 }
 
+-- getWidthIndex: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getWidthIndex(value)
     for i, w in ipairs(CHECKPOINT_WIDTH_OPTIONS) do
         if math.abs(w - value) < 0.01 then
@@ -461,6 +559,7 @@ local newRaceMenuItem = UIMenuItem.New(
     'New Race',
     'Create a new race from scratch.'
 )
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 newRaceMenuItem.Activated = function(menu)
     logMenuVerbose('New Race activated')
 
@@ -468,7 +567,7 @@ newRaceMenuItem.Activated = function(menu)
     logMenuVerbose(('New Race: got raceName=%s'):format(tostring(raceName)))
     if raceName then
         logMenuVerbose(('Creating new race: %s'):format(raceName))
-        TriggerServerEvent('racingsystem:requestEditorRace', raceName)
+        TriggerServerEvent('racingsystem:editor:load', raceName)
     else
         logMenuVerbose('New Race: raceName was nil, not firing event')
     end
@@ -484,6 +583,7 @@ editExistingSubmenu:SetBannerColor(SColor.LightBlue)
 local editExistingRaceItems = {}
 
 -- Populate Edit Existing submenu with indexed races
+-- refreshEditExistingRaces: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function refreshEditExistingRaces()
     local definitions = type(RacingSystem.Client.latestSnapshot) == 'table' and type(RacingSystem.Client.latestSnapshot.definitions) == 'table'
         and RacingSystem.Client.latestSnapshot.definitions or {}
@@ -508,9 +608,10 @@ local function refreshEditExistingRaces()
             local raceMenuItem = UIMenuItem.New(label, 'Open this race for editing.')
 
             -- Capture definition in closure
+            -- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
             raceMenuItem.Activated = function(itemMenu)
                 logMenuVerbose(('Loading race for editing: %s'):format(definition.name))
-                TriggerServerEvent('racingsystem:requestEditorRace', definition.name)
+                TriggerServerEvent('racingsystem:editor:load', definition.name)
                 -- Switch back to Race Editor menu
                 itemMenu:GoBack()
             end
@@ -522,6 +623,7 @@ local function refreshEditExistingRaces()
     end
 end
 
+-- findDefinitionByEditorRaceName: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function findDefinitionByEditorRaceName(raceName)
     local normalizedRaceName = RacingSystem.NormalizeRaceName(raceName)
     if not normalizedRaceName then
@@ -550,6 +652,7 @@ local editExistingMenuItem = UIMenuItem.New(
     'Edit Existing',
     'Select an existing race to edit.'
 )
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 editExistingMenuItem.Activated = function(menu)
     logMenuVerbose('Edit Existing activated')
     refreshEditExistingRaces()
@@ -563,6 +666,7 @@ local addCheckpointMenuItem = UIMenuItem.New(
     'Place a checkpoint at your current position.'
 )
 addCheckpointMenuItem:Enabled(false)
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 addCheckpointMenuItem.Activated = function(menu)
     logMenuVerbose('Add Checkpoint activated')
     if editorSessionActive then
@@ -598,6 +702,7 @@ local saveRaceMenuItem = UIMenuItem.New(
     'Save current checkpoints to disk.'
 )
 saveRaceMenuItem:Enabled(false)
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 saveRaceMenuItem.Activated = function(menu)
     logMenuVerbose('Save Race activated')
 
@@ -609,7 +714,7 @@ saveRaceMenuItem.Activated = function(menu)
     logMenuVerbose(('Saving race "%s" with %d checkpoints'):format(RacingSystem.Client.editorState.name, #RacingSystem.Client.editorState.checkpoints))
 
     -- Fire the save event to the server
-    TriggerServerEvent('racingsystem:saveEditorRace', {
+    TriggerServerEvent('racingsystem:editor:save', {
         name = RacingSystem.Client.editorState.name,
         checkpoints = RacingSystem.Client.editorState.checkpoints,
     })
@@ -622,6 +727,7 @@ local deleteRaceMenuItem = UIMenuItem.New(
     'Delete this race definition from disk.'
 )
 deleteRaceMenuItem:Enabled(false)
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 deleteRaceMenuItem.Activated = function(menu)
     if not editorSessionActive then
         return
@@ -637,7 +743,7 @@ deleteRaceMenuItem.Activated = function(menu)
         -- SECOND CLICK - Execute delete
         logMenuVerbose(('Confirmed delete: %s'):format(raceName))
         local selectedDefinition = findDefinitionByEditorRaceName(raceName)
-        TriggerServerEvent('racingsystem:deleteRaceDefinition', {
+        TriggerServerEvent('racingsystem:def:delete', {
             name = raceName,
             lookupName = selectedDefinition and selectedDefinition.lookupName or nil,
             sourceType = selectedDefinition and selectedDefinition.sourceType or nil,
@@ -664,6 +770,7 @@ local exitEditorMenuItem = UIMenuItem.New(
     'End the editing session.'
 )
 exitEditorMenuItem:Enabled(false)
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 exitEditorMenuItem.Activated = function(menu)
     logMenuVerbose('Exit Editor activated')
     if editorSessionActive then
@@ -673,6 +780,7 @@ end
 raceEditorMenu:AddItem(exitEditorMenuItem)
 
 -- Slider change handler
+-- getClosestCheckpoint: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getClosestCheckpoint()
     if not RacingSystem.Client.editorState or not RacingSystem.Client.editorState.checkpoints or #RacingSystem.Client.editorState.checkpoints == 0 then
         return nil
@@ -697,6 +805,7 @@ local function getClosestCheckpoint()
     return closest
 end
 
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 raceEditorMenu.OnSliderChange = function(menu, item, index)
     if item == checkpointWidthSlider then
         local newRadius = CHECKPOINT_WIDTH_OPTIONS[index + 1]
@@ -722,6 +831,7 @@ end
 -- Checkbox change handler
 -- ─── Grab checkpoint implementation ───────────────────────────────────────
 
+-- toggleGrabCheckpoint: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function toggleGrabCheckpoint()
     if not editorSessionActive then
         return
@@ -741,6 +851,7 @@ local function toggleGrabCheckpoint()
 end
 
 -- Editor thread: draw helper line to nearest checkpoint
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 CreateThread(function()
     while true do
         Wait(10)
@@ -763,6 +874,7 @@ CreateThread(function()
     end
 end)
 
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 raceEditorMenu.OnCheckboxChange = function(menu, item, checked)
     if item == grabCheckpointCheckbox then
         logMenuVerbose(('Grab Checkpoint toggled: %s'):format(checked and 'on' or 'off'))
@@ -774,6 +886,7 @@ raceEditorMenu.OnCheckboxChange = function(menu, item, checked)
 end
 
 
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 raceEditorMenuItem.Activated = function(menu)
     logMenuVerbose('Race Editor submenu activated')
     menu:SwitchTo(raceEditorMenu, 1, true)
@@ -783,10 +896,23 @@ RacingSystem.Menu.raceMenuInitialized = true
 
 -- ─── Public interface (called by client.lua) ─────────────────────────────────
 
+-- isRaceMenuVisible: handles a focused piece of client race logic to keep behavior modular and maintainable.
 function RacingSystem.Menu.isRaceMenuVisible()
     return neutralMenu:Visible() or stagingMenu:Visible() or racingMenu:Visible()
 end
 
+-- isRaceControlStackOpen: handles a focused piece of client race logic to keep behavior modular and maintainable.
+local function isRaceControlStackOpen()
+    return neutralMenu:Visible()
+        or stagingMenu:Visible()
+        or racingMenu:Visible()
+        or hostSubmenu:Visible()
+        or activeRacesSubmenu:Visible()
+        or raceEditorMenu:Visible()
+        or editExistingSubmenu:Visible()
+end
+
+-- setVisibleStateMenu: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function setVisibleStateMenu(playerState)
     -- Editing state intentionally routes to neutral so Race Editor stays reachable.
     if playerState == 'neutral' or playerState == 'editing' then
@@ -798,22 +924,56 @@ local function setVisibleStateMenu(playerState)
     end
 end
 
+-- refreshRaceMenu: handles a focused piece of client race logic to keep behavior modular and maintainable.
 function RacingSystem.Menu.refreshRaceMenu()
+    if PAYLOAD_SYSTEM_DISABLED then
+        startCountdownMenuItem:Enabled(false)
+        restartRaceMenuItem:Enabled(false)
+        killRaceMenuItem:Enabled(false)
+        return
+    end
     local playerState = getMenuPlayerState()
     local instance = type(RacingSystem.Client.getJoinedRaceInstance) == 'function' and RacingSystem.Client.getJoinedRaceInstance() or nil
-    local isHost = instance and instance.owner == GetPlayerServerId(PlayerId())
+    local instanceId = tonumber(instance and instance.id)
+    local isHost = isLocalHostForInstance(instance)
+    local isIdleState = instance and instance.state == RacingSystem.States.idle
+    local countdownAccepted = instanceId and RacingSystem.Menu.countdownAcceptedByInstanceId[instanceId] == true
+    local hasEntrants = type(instance) == 'table' and #(instance.entrants or {}) > 0
+    if not hasEntrants and type(RacingSystem.Client.getLocalEntrant) == 'function' then
+        hasEntrants = RacingSystem.Client.getLocalEntrant(instance) ~= nil
+    end
 
-    startCountdownMenuItem:Enabled(playerState == 'staging' and isHost)
+    startCountdownMenuItem:Enabled(playerState == 'staging' and isHost and isIdleState and not countdownAccepted and hasEntrants)
+    restartRaceMenuItem:Enabled((playerState == 'staging' or playerState == 'countdown' or playerState == 'finished') and isHost and hasEntrants)
 
     local viewerIsAdmin = type(RacingSystem.Client.latestSnapshot.viewer) == 'table'
         and RacingSystem.Client.latestSnapshot.viewer.isAdmin == true
     killRaceMenuItem:Enabled(isHost or viewerIsAdmin)
 
-    if RacingSystem.Menu.isRaceMenuVisible() then
+    if MenuHandler:IsAnyMenuOpen() and isRaceControlStackOpen() then
         setVisibleStateMenu(playerState)
     end
 end
 
+-- markCountdownAccepted: handles a focused piece of client race logic to keep behavior modular and maintainable.
+function RacingSystem.Menu.markCountdownAccepted(instanceId)
+    local numericInstanceId = tonumber(instanceId)
+    if not numericInstanceId then
+        return
+    end
+    RacingSystem.Menu.countdownAcceptedByInstanceId[numericInstanceId] = true
+end
+
+-- clearCountdownAccepted: handles a focused piece of client race logic to keep behavior modular and maintainable.
+function RacingSystem.Menu.clearCountdownAccepted(instanceId)
+    local numericInstanceId = tonumber(instanceId)
+    if not numericInstanceId then
+        return
+    end
+    RacingSystem.Menu.countdownAcceptedByInstanceId[numericInstanceId] = nil
+end
+
+-- openRaceMenu: handles a focused piece of client race logic to keep behavior modular and maintainable.
 function RacingSystem.Menu.openRaceMenu()
     if MenuHandler:IsAnyMenuOpen() then
         MenuHandler:CloseAndClearHistory()
@@ -825,6 +985,7 @@ function RacingSystem.Menu.openRaceMenu()
     setVisibleStateMenu(playerState)
 end
 
+-- refreshEditorMenu: handles a focused piece of client race logic to keep behavior modular and maintainable.
 function RacingSystem.Menu.refreshEditorMenu(_)
     -- Called when editor session changes (loaded, saved, deleted)
     logMenuVerbose('refreshEditorMenu called')
@@ -834,12 +995,14 @@ function RacingSystem.Menu.refreshEditorMenu(_)
     grabCheckpointCheckbox:Checked(isGrabbed)
 end
 
+-- buildMenuState: handles a focused piece of client race logic to keep behavior modular and maintainable.
 function RacingSystem.Menu.buildMenuState()
     return {
         editorSessionActive = editorSessionActive,
     }
 end
 
+-- beginEditorSessionUI: handles a focused piece of client race logic to keep behavior modular and maintainable.
 function RacingSystem.Menu.beginEditorSessionUI()
     -- Called when editor session is activated
     logMenuVerbose('beginEditorSessionUI: editor session started')
@@ -868,6 +1031,7 @@ function RacingSystem.Menu.beginEditorSessionUI()
     logMenuVerbose('beginEditorSessionUI: editor controls now enabled')
 end
 
+-- endEditorSessionUI: handles a focused piece of client race logic to keep behavior modular and maintainable.
 function RacingSystem.Menu.endEditorSessionUI()
     -- Called when editor session is ended
     logMenuVerbose('endEditorSessionUI: editor session ended')
@@ -896,12 +1060,15 @@ end
 
 -- ─── Keybind ─────────────────────────────────────────────────────────────────
 
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 RegisterCommand('+racemenu', function()
     RacingSystem.Menu.openRaceMenu()
 end, false)
 
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 RegisterCommand('-racemenu', function() end, false)
 
 RegisterKeyMapping('+racemenu', 'Open race control menu', 'keyboard', 'F7')
+
 
 

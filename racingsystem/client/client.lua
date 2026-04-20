@@ -3,183 +3,17 @@ RacingSystem.Client = RacingSystem.Client or {}
 RacingSystem.Menu = RacingSystem.Menu or {}
 
 RacingSystem.Client.Util = RacingSystem.Client.Util or {}
-
-RacingSystem.Client.Util.NotifyPlayer = function(message)
-    BeginTextCommandThefeedPost('STRING')
-    AddTextComponentSubstringPlayerName(tostring(message or ''))
-    EndTextCommandThefeedPostTicker(false, false)
-end
-
-RacingSystem.Client.Util.ShowWarningSubtitle = function(message, durationMs, colorTag)
-    BeginTextCommandPrint('STRING')
-    local colorPrefix = tostring(colorTag or '~y~')
-    AddTextComponentSubstringPlayerName(('%s%s~s~'):format(colorPrefix, tostring(message or '')))
-    EndTextCommandPrint(math.max(0, math.floor(tonumber(durationMs) or 1000)), true)
-end
-
-RacingSystem.Client.Util.UpdateCountdownVisual = function(instanceId, remainingMs)
-    local seconds = math.floor(remainingMs / 1000)
-    if seconds >= 0 then
-        ScaleformUI.Scaleforms.BigMessageInstance:ShowMpMessageLarge("Race starts in", tostring(seconds), 1000)
-    end
-end
-RacingSystem.Client.Util.ClearCountdownVisual = function()
-    ScaleformUI.Scaleforms.BigMessageInstance:Dispose()
-end
-
-local raceLeaderboardVisualState = {
-    title = 'LEADERBOARD',
-    rows = {},
-    finalizedByKey = {},
-}
-
-local raceEventVisualState = {
-    title = '',
-    subtitle = '',
-    expiresAt = 0,
-}
-
-local function drawLeaderboardText(x, y, scale, text, r, g, b, a, centered)
-    SetTextFont(0)
-    SetTextProportional(1)
-    SetTextScale(scale, scale)
-    SetTextColour(r, g, b, a)
-    SetTextDropshadow(0, 0, 0, 0, 255)
-    SetTextEdge(1, 0, 0, 0, 255)
-    SetTextDropShadow()
-    SetTextOutline()
-    SetTextCentre(centered == true)
-    BeginTextCommandDisplayText('STRING')
-    AddTextComponentSubstringPlayerName(tostring(text or ''))
-    EndTextCommandDisplayText(x, y)
-end
-
-RacingSystem.Client.Util.ShowRaceEventVisual = function(title, subtitle, durationMs)
-    raceEventVisualState.title = tostring(title or '')
-    raceEventVisualState.subtitle = tostring(subtitle or '')
-    raceEventVisualState.expiresAt = GetGameTimer() + math.max(0, math.floor(tonumber(durationMs) or 1200))
-end
-
-RacingSystem.Client.Util.DrawRaceEventVisual = function()
-    local expiresAt = tonumber(raceEventVisualState.expiresAt) or 0
-    local now = GetGameTimer()
-    if expiresAt <= now then
-        raceEventVisualState.title = ''
-        raceEventVisualState.subtitle = ''
-        return
-    end
-
-    local title = raceEventVisualState.title
-    local subtitle = raceEventVisualState.subtitle
-    if title == '' and subtitle == '' then
-        return
-    end
-
-    local bodyX = 0.5
-    local bodyY = 0.185
-    local hasSubtitle = subtitle ~= ''
-    local bodyHeight = hasSubtitle and 0.09 or 0.062
-    DrawRect(bodyX, bodyY, 0.48, bodyHeight, 10, 14, 24, 150)
-    drawLeaderboardText(bodyX, bodyY - (hasSubtitle and 0.024 or 0.012), 0.45, title, 245, 250, 255, 235, true)
-    if hasSubtitle then
-        drawLeaderboardText(bodyX, bodyY + 0.01, 0.32, subtitle, 210, 225, 255, 220, true)
-    end
-end
-
-RacingSystem.Client.Util.UpdateRaceLeaderboardVisual = function(title, rows)
-    raceLeaderboardVisualState.title = tostring(title or 'LEADERBOARD')
-    local previousByKey = {}
-    for _, existing in ipairs(type(raceLeaderboardVisualState.rows) == 'table' and raceLeaderboardVisualState.rows or {}) do
-        if type(existing) == 'table' then
-            previousByKey[tostring(existing.key or '')] = existing
-        end
-    end
-
-    local finalizedByKey = type(raceLeaderboardVisualState.finalizedByKey) == 'table' and raceLeaderboardVisualState.finalizedByKey or {}
-    raceLeaderboardVisualState.finalizedByKey = finalizedByKey
-    raceLeaderboardVisualState.rows = {}
-
-    for index, row in ipairs(type(rows) == 'table' and rows or {}) do
-        local rowKey = tostring((type(row) == 'table' and row.key) or index)
-        local incomingFinalized = type(row) == 'table' and row.finalized == true
-        local wasFinalized = finalizedByKey[rowKey] == true
-        local shouldFinalize = incomingFinalized or wasFinalized
-        local previous = previousByKey[rowKey]
-
-        if shouldFinalize then
-            finalizedByKey[rowKey] = true
-        end
-
-        local resolvedRank = math.max(1, math.floor(tonumber(type(row) == 'table' and row.rank) or index))
-        if shouldFinalize and type(previous) == 'table' and tonumber(previous.rank) then
-            resolvedRank = math.max(1, math.floor(tonumber(previous.rank) or resolvedRank))
-        end
-
-        local resolvedText = tostring((type(row) == 'table' and row.text) or '')
-        if shouldFinalize and type(previous) == 'table' and type(previous.text) == 'string' and previous.text ~= '' then
-            resolvedText = previous.text
-        end
-
-        raceLeaderboardVisualState.rows[index] = {
-            key = rowKey,
-            text = resolvedText,
-            rank = resolvedRank,
-            finalized = shouldFinalize,
-        }
-    end
-end
-
-RacingSystem.Client.Util.DrawRaceLeaderboardVisual = function()
-    local rows = type(raceLeaderboardVisualState.rows) == 'table' and raceLeaderboardVisualState.rows or {}
-    if #rows <= 0 then
-        return
-    end
-
-    local bodyLeftX = 0.03
-    local bodyY = 0.39
-    local rowTextScale = 0.27
-    local bodyWidth = 0.22
-    local baseX = bodyLeftX + (bodyWidth * 0.5)
-    local rowHeight = 0.024
-    local bodyHeight = math.max(0.028, math.min(0.30, (#rows * rowHeight) + 0.012))
-
-    DrawRect(baseX, bodyY, bodyWidth, bodyHeight, 12, 16, 26, 140)
-
-    local firstRowY = bodyY - (bodyHeight * 0.5) + (rowHeight * 0.5) + 0.002
-    local textLeftX = bodyLeftX + 0.008
-    for index, row in ipairs(rows) do
-        local y = firstRowY + ((index - 1) * rowHeight)
-        if y > 0.95 then
-            break
-        end
-
-        local rank = math.max(1, math.floor(tonumber((row or {}).rank) or index))
-        local isFinalized = type(row) == 'table' and row.finalized == true
-        local textR, textG, textB, textA = 235, 240, 255, 225
-        if isFinalized then
-            if rank == 1 then
-                textR, textG, textB, textA = 255, 215, 0, 240
-            elseif rank == 2 then
-                textR, textG, textB, textA = 192, 192, 192, 240
-            elseif rank == 3 then
-                textR, textG, textB, textA = 205, 127, 50, 240
-            else
-                textR, textG, textB, textA = 80, 160, 255, 235
-            end
-        end
-
-        drawLeaderboardText(textLeftX, y - 0.004, rowTextScale, row.text, textR, textG, textB, textA, false)
-    end
-end
-
-RacingSystem.Client.Util.ClearRaceLeaderboardVisual = function()
-    raceLeaderboardVisualState.rows = {}
-    raceLeaderboardVisualState.finalizedByKey = {}
-end
+RacingSystem.Client.PayloadSystemDisabled = true
 
 local latestSnapshot = {
     races = {},
+    definitions = {},
+    instances = {},
     count = 0,
+    definitionCount = 0,
+    customRaceCount = 0,
+    onlineRaceCount = 0,
+    instanceCount = 0,
     viewer = {
         isAdmin = false,
         canDeleteRaceDefinitions = false,
@@ -187,6 +21,14 @@ local latestSnapshot = {
     },
 }
 RacingSystem.Client.latestSnapshot = latestSnapshot
+local definitionCache = {}
+local instanceListCache = {}
+local instanceStaticCacheById = {}
+local instanceDynamicCacheById = {}
+RacingSystem.Client.definitionCache = definitionCache
+RacingSystem.Client.instanceListCache = instanceListCache
+RacingSystem.Client.instanceStaticCacheById = instanceStaticCacheById
+RacingSystem.Client.instanceDynamicCacheById = instanceDynamicCacheById
 
 local editorState = {
     active = false,
@@ -200,7 +42,6 @@ RacingSystem.Client.editorState = editorState
 
 local latestSnapshotVersion = 0
 local snapshotAcceptedAt = 0
-local snapshotRequestedAt = 0
 local latestStandingsVersionByInstanceId = {}
 local latestStandingsByInstanceId = {}
 local reliabilityCounters = {
@@ -244,11 +85,72 @@ local MARKER_TAXONOMY = ClientAdvancedConfig.markerTaxonomy or {
 local isTeleportInProgress = false
 local CLIENT_EXTRA_PRINT_LEVEL = math.floor(tonumber(ClientAdvancedConfig.extraPrintLevel) or 0)
 
+local function rebuildCompatSnapshot()
+    local mergedInstances = {}
+    local orderedIds = {}
+    local seen = {}
+
+    for _, summary in pairs(type(instanceListCache) == 'table' and instanceListCache or {}) do
+        local instanceId = tonumber(summary and summary.id)
+        if instanceId and instanceId > 0 and not seen[instanceId] then
+            seen[instanceId] = true
+            orderedIds[#orderedIds + 1] = instanceId
+        end
+    end
+    for instanceId in pairs(instanceDynamicCacheById) do
+        if not seen[instanceId] then
+            seen[instanceId] = true
+            orderedIds[#orderedIds + 1] = instanceId
+        end
+    end
+    table.sort(orderedIds, function(a, b) return a < b end)
+
+    for _, instanceId in ipairs(orderedIds) do
+        local summary = type(instanceListCache) == 'table' and instanceListCache[instanceId] or nil
+        local dynamicPayload = instanceDynamicCacheById[instanceId]
+        local staticPayload = instanceStaticCacheById[instanceId]
+        local merged = {}
+
+        if type(summary) == 'table' then
+            for key, value in pairs(summary) do
+                merged[key] = value
+            end
+        end
+        if type(dynamicPayload) == 'table' then
+            for key, value in pairs(dynamicPayload) do
+                merged[key] = value
+            end
+        end
+        if type(staticPayload) == 'table' then
+            merged.checkpoints = staticPayload.checkpoints or merged.checkpoints
+            merged.checkpointVariants = staticPayload.checkpointVariants or merged.checkpointVariants
+            merged.raceMetadata = staticPayload.raceMetadata or merged.raceMetadata
+        end
+
+        merged.id = tonumber(merged.id) or instanceId
+        mergedInstances[#mergedInstances + 1] = merged
+    end
+
+    latestSnapshot.definitions = definitionCache
+    latestSnapshot.instances = mergedInstances
+    latestSnapshot.count = #definitionCache
+    latestSnapshot.definitionCount = #definitionCache
+    latestSnapshot.instanceCount = #mergedInstances
+end
+
+-- requestInitialRaceState: explicitly asks server for event-driven state payloads.
+local function requestInitialRaceState()
+    -- Snapshot/payload system disabled during rewrite.
+    return
+end
+
 -- Lazy accessor so client.lua functions can read InRace state without a circular upvalue.
+-- getRaceRuntimeState: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getRaceRuntimeState()
     return RacingSystem.Client.InRace.raceRuntimeState
 end
 
+-- getRouteCheckpointMarkerTypeId: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getRouteCheckpointMarkerTypeId()
     local taxonomyType = tonumber(MARKER_TAXONOMY.routeCheckpointTypeId)
     if taxonomyType then
@@ -257,6 +159,7 @@ local function getRouteCheckpointMarkerTypeId()
     return tonumber(RacingSystem.Config.markerTypeId) or 1
 end
 
+-- getClientExtraPrintLevel: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getClientExtraPrintLevel()
     if CLIENT_EXTRA_PRINT_LEVEL == 2 then
         return 2
@@ -264,6 +167,7 @@ local function getClientExtraPrintLevel()
     return 0
 end
 
+-- logClientVerbose: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function logClientVerbose(message)
     if getClientExtraPrintLevel() ~= 2 then
         return
@@ -271,7 +175,8 @@ local function logClientVerbose(message)
     print(('[racingsystem:client] %s'):format(tostring(message or '')))
 end
 
-RegisterNetEvent('racingsystem:notify', function(payload)
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
+RegisterNetEvent('racingsystem:ui:notify', function(payload)
     local message = ''
     if type(payload) == 'table' then
         message = tostring(payload.message or '')
@@ -284,11 +189,7 @@ RegisterNetEvent('racingsystem:notify', function(payload)
     RacingSystem.Client.Util.NotifyPlayer(message)
 end)
 
-local function requestRaceStateSnapshot()
-    snapshotRequestedAt = GetGameTimer()
-    TriggerServerEvent('racingsystem:requestState')
-end
-
+-- cloneCheckpoints: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function cloneCheckpoints(checkpoints)
     local cloned = {}
 
@@ -312,6 +213,7 @@ local function cloneCheckpoints(checkpoints)
     return cloned
 end
 
+-- normalizeCheckpointIndexes: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function normalizeCheckpointIndexes()
     for index, checkpoint in ipairs(editorState.checkpoints) do
         checkpoint.index = index
@@ -322,6 +224,7 @@ local function normalizeCheckpointIndexes()
     end
 end
 
+-- getPlayerCoords: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getPlayerCoords()
     local ped = PlayerPedId()
     if not DoesEntityExist(ped) then
@@ -331,6 +234,7 @@ local function getPlayerCoords()
     return GetEntityCoords(ped)
 end
 
+-- getCheckpointRaycastIgnoredEntity: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getCheckpointRaycastIgnoredEntity()
     local ped = PlayerPedId()
     if not DoesEntityExist(ped) then
@@ -345,6 +249,7 @@ local function getCheckpointRaycastIgnoredEntity()
     return ped
 end
 
+-- sampleCheckpointSurface: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function sampleCheckpointSurface(x, y, z, topOffset, bottomOffset)
     local ignoredEntity = getCheckpointRaycastIgnoredEntity()
     local rayHandle = StartExpensiveSynchronousShapeTestLosProbe(
@@ -372,6 +277,7 @@ local function sampleCheckpointSurface(x, y, z, topOffset, bottomOffset)
     }
 end
 
+-- refreshCheckpointMarkerAlignment: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function refreshCheckpointMarkerAlignment(checkpoint)
     if type(checkpoint) ~= 'table' then
         return
@@ -386,6 +292,7 @@ local function refreshCheckpointMarkerAlignment(checkpoint)
         { x = x + sampleOffset, y = y },
         { x = x, y = y + sampleOffset },
     }
+    -- collectSampleHits: handles a focused piece of client race logic to keep behavior modular and maintainable.
     local function collectSampleHits(topOffset, bottomOffset)
         local totalZ = 0.0
         local sampleHits = {}
@@ -464,6 +371,7 @@ local function refreshCheckpointMarkerAlignment(checkpoint)
     checkpoint.sampledZ = z
 end
 
+-- ensureCheckpointMarkerAlignment: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function ensureCheckpointMarkerAlignment(checkpoint)
     if type(checkpoint) ~= 'table' then
         return
@@ -492,6 +400,7 @@ local function ensureCheckpointMarkerAlignment(checkpoint)
     end
 end
 
+-- getEditorAnchorCoords: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getEditorAnchorCoords()
     local ped = PlayerPedId()
     if not DoesEntityExist(ped) then
@@ -506,6 +415,7 @@ local function getEditorAnchorCoords()
     return GetEntityCoords(ped)
 end
 
+-- getClosestCheckpointIndex: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getClosestCheckpointIndex()
     local coords = getPlayerCoords()
     if not coords then
@@ -530,6 +440,7 @@ local function getClosestCheckpointIndex()
     return closestIndex, closestDistance
 end
 
+-- isEditorActive: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function isEditorActive()
     if editorState.active then
         return true
@@ -538,6 +449,7 @@ local function isEditorActive()
     return false
 end
 
+-- beginEditorSession: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function beginEditorSession(raceName, checkpoints)
     editorState.active = true
     editorState.name = raceName or 'Untitled Race'
@@ -553,6 +465,7 @@ local function beginEditorSession(raceName, checkpoints)
     RacingSystem.Menu.beginEditorSessionUI()
 end
 
+-- endEditorSession: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function endEditorSession()
     -- Notify menu UI that editor session has ended
     RacingSystem.Menu.endEditorSessionUI()
@@ -564,6 +477,7 @@ local function endEditorSession()
 end
 RacingSystem.Client.endEditorSession = endEditorSession
 
+-- addCheckpointAtPlayer: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function addCheckpointAtPlayer()
     if not isEditorActive() then
         return
@@ -585,38 +499,7 @@ local function addCheckpointAtPlayer()
 end
 RacingSystem.Client.addCheckpointAtPlayer = addCheckpointAtPlayer
 
-local function moveClosestCheckpointToPlayer()
-    if not isEditorActive() then
-        return
-    end
-
-    local closestIndex, closestDistance = getClosestCheckpointIndex()
-    local coords = getPlayerCoords()
-    if not closestIndex or not coords then
-        return
-    end
-
-    local checkpoint = editorState.checkpoints[closestIndex]
-    checkpoint.x = coords.x
-    checkpoint.y = coords.y
-    checkpoint.z = coords.z
-    refreshCheckpointMarkerAlignment(checkpoint)
-end
-
-local function deleteClosestCheckpoint()
-    if not isEditorActive() then
-        return
-    end
-
-    local closestIndex, closestDistance = getClosestCheckpointIndex()
-    if not closestIndex then
-        return
-    end
-
-    table.remove(editorState.checkpoints, closestIndex)
-    normalizeCheckpointIndexes()
-end
-
+-- adjustClosestCheckpointRadius: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function adjustClosestCheckpointRadius(direction)
     if not isEditorActive() then
         return
@@ -640,6 +523,7 @@ local function adjustClosestCheckpointRadius(direction)
     checkpoint.radius = math.max(minimum, math.min(maximum, updatedRadius))
 end
 
+-- toggleGrabClosestCheckpoint: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function toggleGrabClosestCheckpoint()
     if not isEditorActive() then
         return
@@ -662,6 +546,7 @@ local function toggleGrabClosestCheckpoint()
 end
 RacingSystem.Client.toggleGrabClosestCheckpoint = toggleGrabClosestCheckpoint
 
+-- wasEditorControlJustPressed: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function wasEditorControlJustPressed(controlId)
     return IsControlJustPressed(0, controlId)
         or IsControlJustPressed(2, controlId)
@@ -669,23 +554,7 @@ local function wasEditorControlJustPressed(controlId)
         or IsDisabledControlJustPressed(2, controlId)
 end
 
-local function saveEditorRace(optionalName)
-    if not isEditorActive() then
-        return
-    end
-
-    local requestedName = type(optionalName) == 'string' and optionalName or ''
-    local raceName = RacingSystem.Trim(requestedName ~= '' and requestedName or editorState.name)
-    if raceName == '' then
-        return
-    end
-
-    TriggerServerEvent('racingsystem:saveEditorRace', {
-        name = raceName,
-        checkpoints = editorState.checkpoints,
-    })
-end
-
+-- getPreviewCheckpointMarker: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getPreviewCheckpointMarker(checkpoint)
     ensureCheckpointMarkerAlignment(checkpoint)
 
@@ -709,6 +578,7 @@ local function getPreviewCheckpointMarker(checkpoint)
     }
 end
 
+-- getRuntimeCheckpointMarker: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getRuntimeCheckpointMarker(checkpoint)
     local x = tonumber(checkpoint and checkpoint.x) or 0.0
     local y = tonumber(checkpoint and checkpoint.y) or 0.0
@@ -727,27 +597,32 @@ local function getRuntimeCheckpointMarker(checkpoint)
     }
 end
 
+-- getFuturePreviewMarkerHeight: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getFuturePreviewMarkerHeight()
     return 3.0
 end
 RacingSystem.Client.getFuturePreviewMarkerHeight = getFuturePreviewMarkerHeight
 
+-- getMaxFuturePreviewCheckpoints: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getMaxFuturePreviewCheckpoints()
     return MAX_FUTURE_PREVIEW_CHECKPOINTS
 end
 RacingSystem.Client.getMaxFuturePreviewCheckpoints = getMaxFuturePreviewCheckpoints
 
+-- getCheckpointRadiusScaleFactor: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getCheckpointRadiusScaleFactor(instance)
     local sourceType = tostring(type(instance) == 'table' and instance.sourceType or ''):lower()
     return sourceType == 'online' and 2.0 or 1.0
 end
 
+-- getVisualCheckpointRadius: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getVisualCheckpointRadius(checkpoint, instance)
     local baseRadius = tonumber(checkpoint and checkpoint.radius) or 8.0
     local visualScale = tonumber(RacingSystem.Config.visualCheckpointRadiusScale) or 1.0
     return (baseRadius * getCheckpointRadiusScaleFactor(instance) * 0.5) * visualScale
 end
 
+-- isSecondaryCoordinateValid: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function isSecondaryCoordinateValid(x, y, z)
     if not x or not y or not z then
         return false
@@ -764,6 +639,7 @@ local function isSecondaryCoordinateValid(x, y, z)
     return true
 end
 
+-- buildDerivedSecondaryCheckpoint: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function buildDerivedSecondaryCheckpoint(instance, targetIndex, primaryCheckpoint)
     if type(primaryCheckpoint) ~= 'table' then
         return nil
@@ -816,6 +692,7 @@ local function buildDerivedSecondaryCheckpoint(instance, targetIndex, primaryChe
     }
 end
 
+-- getCheckpointVariantEntry: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getCheckpointVariantEntry(instance, targetIndex)
     local checkpoints = type(instance and instance.checkpoints) == 'table' and instance.checkpoints or {}
     local primaryCheckpoint = checkpoints[targetIndex]
@@ -847,6 +724,7 @@ local function getCheckpointVariantEntry(instance, targetIndex)
     }
 end
 
+-- getNextCheckpointForVariant: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getNextCheckpointForVariant(instance, totalCheckpoints, targetIndex, routeVariant)
     local total = math.max(0, math.floor(tonumber(totalCheckpoints) or 0))
     if total <= 1 then
@@ -871,6 +749,7 @@ local function getNextCheckpointForVariant(instance, totalCheckpoints, targetInd
 end
 RacingSystem.Client.getNextCheckpointForVariant = getNextCheckpointForVariant
 
+-- getCheckpointForVariant: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getCheckpointForVariant(instance, index, routeVariant)
     local variantEntry = getCheckpointVariantEntry(instance, index)
     if not variantEntry then
@@ -886,6 +765,7 @@ end
 RacingSystem.Client.getCheckpointForVariant = getCheckpointForVariant
 RacingSystem.Client.getCheckpointVariantEntry = getCheckpointVariantEntry
 
+-- getHeadingToNextCheckpoint: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getHeadingToNextCheckpoint(currentCheckpoint, nextCheckpoint)
     local currentX = tonumber(currentCheckpoint and currentCheckpoint.x) or 0.0
     local currentY = tonumber(currentCheckpoint and currentCheckpoint.y) or 0.0
@@ -899,6 +779,7 @@ local function getHeadingToNextCheckpoint(currentCheckpoint, nextCheckpoint)
     return math.deg(math.atan2(dy, dx)) - 90.0
 end
 
+-- getVehicleHeadingToNextCheckpoint: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getVehicleHeadingToNextCheckpoint(currentCheckpoint, nextCheckpoint)
     local currentX = tonumber(currentCheckpoint and currentCheckpoint.x) or 0.0
     local currentY = tonumber(currentCheckpoint and currentCheckpoint.y) or 0.0
@@ -917,6 +798,7 @@ local function getVehicleHeadingToNextCheckpoint(currentCheckpoint, nextCheckpoi
     return heading
 end
 
+-- getHorizontalDistance: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getHorizontalDistance(origin, checkpoint)
     local originX = tonumber(origin and origin.x) or 0.0
     local originY = tonumber(origin and origin.y) or 0.0
@@ -928,33 +810,19 @@ local function getHorizontalDistance(origin, checkpoint)
 end
 RacingSystem.Client.getHorizontalDistance = getHorizontalDistance
 
+-- getCheckpointPassRadius: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getCheckpointPassRadius(checkpoint, instance)
     local baseRadius = tonumber(checkpoint and checkpoint.radius) or 8.0
     return baseRadius * getCheckpointRadiusScaleFactor(instance)
 end
 
+-- getCheckpointPenaltyRadius: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getCheckpointPenaltyRadius(checkpoint, instance)
     return getCheckpointPassRadius(checkpoint, instance) * 0.5
 end
 RacingSystem.Client.getCheckpointPenaltyRadius = getCheckpointPenaltyRadius
 
-local function getPenaltyPreviewStateByOutsideOffset(outsideOffset)
-    local offset = math.max(0.0, tonumber(outsideOffset) or 0.0)
-    if offset > 20.0 then
-        return 'PENALTY PREVIEW: INVALID', '~o~'
-    end
-    if offset > 10.0 then
-        return 'PENALTY PREVIEW: TELEPORT', '~o~'
-    end
-    if offset >= 1.5 then
-        return 'PENALTY PREVIEW: CUT', '~r~'
-    end
-    if offset >= 0.5 then
-        return 'PENALTY PREVIEW: WARN', '~y~'
-    end
-    return 'PENALTY PREVIEW: CLEAR', '~g~'
-end
-
+-- computeCheckpointChevronEdge: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function computeCheckpointChevronEdge(checkpoint, prevCheckpoint, nextCheckpoint, instance)
     if type(checkpoint) ~= 'table' then
         return nil
@@ -1005,6 +873,7 @@ local function computeCheckpointChevronEdge(checkpoint, prevCheckpoint, nextChec
     }
 end
 
+-- computeCheckpointCornerPoint: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function computeCheckpointCornerPoint(checkpoint, prevCheckpoint, nextCheckpoint, instance)
     if type(checkpoint) ~= 'table' then
         return nil
@@ -1076,6 +945,7 @@ local function computeCheckpointCornerPoint(checkpoint, prevCheckpoint, nextChec
     }
 end
 
+-- clearCornerCones: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function clearCornerCones()
     local conesByKey = type(getRaceRuntimeState().cornerConesByKey) == 'table' and getRaceRuntimeState().cornerConesByKey or {}
     for _, entry in pairs(conesByKey) do
@@ -1088,6 +958,7 @@ local function clearCornerCones()
 end
 RacingSystem.Client.clearCornerCones = clearCornerCones
 
+-- spawnCornerConeIfMissing: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function spawnCornerConeIfMissing(key, x, y, z, heading)
     if key == nil then
         return
@@ -1131,6 +1002,7 @@ local function spawnCornerConeIfMissing(key, x, y, z, heading)
     getRaceRuntimeState().cornerConesByKey = conesByKey
 end
 
+-- releaseCornerConeByKey: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function releaseCornerConeByKey(key)
     if key == nil then
         return
@@ -1147,11 +1019,13 @@ local function releaseCornerConeByKey(key)
     getRaceRuntimeState().cornerConesByKey = conesByKey
 end
 
+-- clearCheckpointChevronEdgeCache: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function clearCheckpointChevronEdgeCache()
     getRaceRuntimeState().chevronEdgeCache = nil
 end
 RacingSystem.Client.clearCheckpointChevronEdgeCache = clearCheckpointChevronEdgeCache
 
+-- getCheckpointChevronEdgeCache: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getCheckpointChevronEdgeCache(instance)
     if type(instance) ~= 'table' then
         return { primary = {}, secondary = {} }
@@ -1216,6 +1090,7 @@ local function getCheckpointChevronEdgeCache(instance)
 end
 RacingSystem.Client.getCheckpointChevronEdgeCache = getCheckpointChevronEdgeCache
 
+-- drawCheckpointConeChevronVariants: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function drawCheckpointConeChevronVariants(checkpoint, prevCheckpoint, nextCheckpoint, currentX, currentY, currentZ, aimX, aimY, nextX, nextY, chevronZ, chevronSize, chevronRotationZ, chevronColor, instance)
     local coneChevronA = nil
     local coneChevronB = nil
@@ -1248,6 +1123,7 @@ local function drawCheckpointConeChevronVariants(checkpoint, prevCheckpoint, nex
         end
     end
 
+    -- drawConeChevronAt: handles a focused piece of client race logic to keep behavior modular and maintainable.
     local function drawConeChevronAt(targetX, targetY, targetZ)
         local toNextX = nextX - targetX
         local toNextY = nextY - targetY
@@ -1295,6 +1171,7 @@ local function drawCheckpointConeChevronVariants(checkpoint, prevCheckpoint, nex
     end
 end
 
+-- drawCheckpointTarget: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, isStart, isFinish, markerColor, chevronColor, hideChevron, spinDegreesPerSecond, chevronEdge, renderAsCheckeredFlag, markerHeightOverride, instance)
     if type(checkpoint) ~= 'table' then
         return
@@ -1417,6 +1294,7 @@ local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, 
     end
     local edgeX = tonumber(edge.x) or currentX
     local edgeY = tonumber(edge.y) or currentY
+    -- drawRouteChevronAt: handles a focused piece of client race logic to keep behavior modular and maintainable.
     local function drawRouteChevronAt(targetX, targetY, flipRotationX, drawZOverride)
         local drawAimX = aimX
         local drawAimY = aimY
@@ -1459,6 +1337,7 @@ local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, 
 end
 RacingSystem.Client.drawCheckpointTarget = drawCheckpointTarget
 
+-- drawIdleStartChevron: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function drawIdleStartChevron(checkpoint)
     if type(checkpoint) ~= 'table' then
         return
@@ -1502,6 +1381,7 @@ local function drawIdleStartChevron(checkpoint)
     )
 end
 
+-- clearFutureCheckpointBlips: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function clearFutureCheckpointBlips()
     local blipsByIndex = type(getRaceRuntimeState().futureCheckpointBlips) == 'table' and getRaceRuntimeState().futureCheckpointBlips or {}
     for _, blip in pairs(blipsByIndex) do
@@ -1515,6 +1395,7 @@ local function clearFutureCheckpointBlips()
 end
 RacingSystem.Client.clearFutureCheckpointBlips = clearFutureCheckpointBlips
 
+-- clearStartLineBlip: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function clearStartLineBlip()
     local blip = getRaceRuntimeState().startLineBlip
     if blip and DoesBlipExist(blip) then
@@ -1524,6 +1405,7 @@ local function clearStartLineBlip()
 end
 RacingSystem.Client.clearStartLineBlip = clearStartLineBlip
 
+-- buildFutureCheckpointIndices: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function buildFutureCheckpointIndices(totalCheckpoints, targetIndex, countAhead, allowWrap)
     local total = math.max(0, math.floor(tonumber(totalCheckpoints) or 0))
     if total <= 0 then
@@ -1558,6 +1440,7 @@ local function buildFutureCheckpointIndices(totalCheckpoints, targetIndex, count
     return indices
 end
 
+-- updateFutureCheckpointBlips: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function updateFutureCheckpointBlips(instance, totalCheckpoints, targetIndex, allowWrap)
     local indices = buildFutureCheckpointIndices(totalCheckpoints, targetIndex, 5, allowWrap)
     if #indices == 0 then
@@ -1604,6 +1487,7 @@ local function updateFutureCheckpointBlips(instance, totalCheckpoints, targetInd
 end
 RacingSystem.Client.updateFutureCheckpointBlips = updateFutureCheckpointBlips
 
+-- resolveStartLineCheckpoint: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function resolveStartLineCheckpoint(checkpoints, totalCheckpoints, fallbackCheckpoint, pointToPoint)
     local list = type(checkpoints) == 'table' and checkpoints or {}
     local checkpointCount = math.max(1, math.floor(tonumber(totalCheckpoints) or #list or 1))
@@ -1632,6 +1516,7 @@ local function resolveStartLineCheckpoint(checkpoints, totalCheckpoints, fallbac
 end
 RacingSystem.Client.resolveStartLineCheckpoint = resolveStartLineCheckpoint
 
+-- getClientRaceStartCheckpoint: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getClientRaceStartCheckpoint(totalCheckpoints, pointToPoint)
     local checkpointCount = math.max(0, math.floor(tonumber(totalCheckpoints) or 0))
     if checkpointCount <= 1 then
@@ -1647,6 +1532,7 @@ local function getClientRaceStartCheckpoint(totalCheckpoints, pointToPoint)
 end
 RacingSystem.Client.getClientRaceStartCheckpoint = getClientRaceStartCheckpoint
 
+-- getClientLapTriggerCheckpoint: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getClientLapTriggerCheckpoint(totalCheckpoints)
     local checkpointCount = math.max(0, math.floor(tonumber(totalCheckpoints) or 0))
     if checkpointCount <= 1 then
@@ -1658,6 +1544,7 @@ local function getClientLapTriggerCheckpoint(totalCheckpoints)
 end
 RacingSystem.Client.getClientLapTriggerCheckpoint = getClientLapTriggerCheckpoint
 
+-- updateStartLineBlip: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function updateStartLineBlip(startCheckpoint)
     if type(startCheckpoint) ~= 'table' then
         clearStartLineBlip()
@@ -1685,6 +1572,7 @@ local function updateStartLineBlip(startCheckpoint)
 end
 RacingSystem.Client.updateStartLineBlip = updateStartLineBlip
 
+-- showJoinHintNotifications: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function showJoinHintNotifications()
     BeginTextCommandThefeedPost('STRING')
     AddTextComponentSubstringPlayerName('Gather near the blue chevron and start the Countdown from the ~b~Race~s~ menu.')
@@ -1696,11 +1584,13 @@ local function showJoinHintNotifications()
 end
 RacingSystem.Client.showJoinHintNotifications = showJoinHintNotifications
 
+-- getCheckpointPassArmKey: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getCheckpointPassArmKey(instanceId, checkpointIndex, lapNumber)
     return ('%s:%s:%s'):format(tonumber(instanceId) or 0, tonumber(checkpointIndex) or 0, tonumber(lapNumber) or 1)
 end
 RacingSystem.Client.getCheckpointPassArmKey = getCheckpointPassArmKey
 
+-- cloneRuntimeCheckpoint: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function cloneRuntimeCheckpoint(checkpoint)
     if type(checkpoint) ~= 'table' then
         return nil
@@ -1716,6 +1606,7 @@ local function cloneRuntimeCheckpoint(checkpoint)
 end
 RacingSystem.Client.cloneRuntimeCheckpoint = cloneRuntimeCheckpoint
 
+-- resolveLastPassedCheckpointTarget: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function resolveLastPassedCheckpointTarget(instance, entrantProgress)
     if type(instance) ~= 'table' then
         return nil, nil
@@ -1757,6 +1648,7 @@ local function resolveLastPassedCheckpointTarget(instance, entrantProgress)
     return cloneRuntimeCheckpoint(lastCheckpoint), cloneRuntimeCheckpoint(nextCheckpoint)
 end
 
+-- normalizeEntrantId: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function normalizeEntrantId(value)
     if value == nil then
         return nil
@@ -1770,6 +1662,7 @@ local function normalizeEntrantId(value)
     return text
 end
 
+-- resolveLocalEntrantEntry: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function resolveLocalEntrantEntry(instance)
     if type(instance) ~= 'table' then
         return nil
@@ -1800,7 +1693,11 @@ local function resolveLocalEntrantEntry(instance)
     return nil
 end
 
+-- getJoinedRaceInstance: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getJoinedRaceInstance()
+    if RacingSystem.Client.PayloadSystemDisabled == true then
+        return nil
+    end
     local instances = type(latestSnapshot.instances) == 'table' and latestSnapshot.instances or {}
     for _, instance in ipairs(instances) do
         local entrant = resolveLocalEntrantEntry(instance)
@@ -1817,6 +1714,7 @@ local function getJoinedRaceInstance()
 end
 RacingSystem.Client.getJoinedRaceInstance = getJoinedRaceInstance
 
+-- normalizeTrafficDensity: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function normalizeTrafficDensity(value)
     local density = tonumber(value)
     if not density then
@@ -1832,6 +1730,7 @@ local function normalizeTrafficDensity(value)
     return density
 end
 
+-- applyJoinedInstanceTrafficMode: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function applyJoinedInstanceTrafficMode()
     local joinedInstance = getJoinedRaceInstance()
     if not joinedInstance then
@@ -1851,19 +1750,7 @@ local function applyJoinedInstanceTrafficMode()
     TriggerServerEvent('traffic_control:requestDensity', targetDensity, 'Traffic control for race', RACE_TRAFFIC_REQUEST_KEY)
 end
 
-local function getOwnedRaceInstance()
-    local serverId = GetPlayerServerId(PlayerId())
-    local instances = type(latestSnapshot.instances) == 'table' and latestSnapshot.instances or {}
-
-    for _, instance in ipairs(instances) do
-        if tonumber(instance.owner) == tonumber(serverId) then
-            return instance
-        end
-    end
-
-    return nil
-end
-
+-- getLocalEntrant: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getLocalEntrant(instance)
     local entrant = resolveLocalEntrantEntry(instance)
     if type(entrant) == 'table' then
@@ -1876,54 +1763,7 @@ local function getLocalEntrant(instance)
 end
 RacingSystem.Client.getLocalEntrant = getLocalEntrant
 
-local function getEffectiveEntrantProgress(instance, entrant)
-    local currentCheckpoint = tonumber(entrant and entrant.currentCheckpoint) or 1
-    local currentLap = math.max(1, tonumber(entrant and entrant.currentLap) or 1)
-    local finishedAt = tonumber(entrant and entrant.finishedAt)
-    local predicted = getRaceRuntimeState().predictedProgress
-    local instanceId = tonumber(instance and instance.id)
-
-    if predicted and instanceId and tonumber(predicted.instanceId) == instanceId then
-        local predictedCheckpoint = tonumber(predicted.currentCheckpoint)
-        local predictedLap = math.max(1, tonumber(predicted.currentLap) or currentLap)
-        local predictedFinished = predicted.finished == true
-
-        if finishedAt or (predictedFinished and predictedCheckpoint == nil) then
-            RacingSystem.Client.InRace.clearPredictedRaceProgress(instanceId)
-        elseif predictedCheckpoint and (predictedLap > currentLap or (predictedLap == currentLap and predictedCheckpoint > currentCheckpoint)) then
-            currentCheckpoint = predictedCheckpoint
-            currentLap = predictedLap
-        else
-            RacingSystem.Client.InRace.clearPredictedRaceProgress(instanceId)
-        end
-    end
-
-    return {
-        currentCheckpoint = currentCheckpoint,
-        currentLap = currentLap,
-        finishedAt = finishedAt,
-    }
-end
-
-local function resetLocalPlayerToLastCheckpoint()
-    local joinedInstance = getJoinedRaceInstance()
-    if type(joinedInstance) ~= 'table' then
-        return
-    end
-
-    local entrant = getLocalEntrant(joinedInstance)
-    local entrantProgress = RacingSystem.Client.InRace.getEffectiveEntrantProgress(joinedInstance, entrant)
-    local lastCheckpoint, nextCheckpoint = RacingSystem.Client.InRace.resolveLastPassedCheckpointTarget(joinedInstance, entrantProgress)
-    if type(lastCheckpoint) ~= 'table' then
-        return
-    end
-
-    TriggerEvent('racingsystem:smartCheckpointTeleport', {
-        checkpoint = lastCheckpoint,
-        nextCheckpoint = nextCheckpoint,
-    })
-end
-
+-- predictCheckpointPass: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function predictCheckpointPass(instance, entrantProgress, totalCheckpoints, targetIndex)
     local instanceId = tonumber(instance and instance.id)
     if not instanceId then
@@ -1968,65 +1808,7 @@ local function predictCheckpointPass(instance, entrantProgress, totalCheckpoints
 end
 RacingSystem.Client.predictCheckpointPass = predictCheckpointPass
 
-local function getDefinitionDisplayName(definition)
-    if type(definition) ~= 'table' then
-        return 'Unknown'
-    end
-
-    local sourceType = tostring(definition.sourceType or 'saved')
-    local sourceLabel = sourceType == 'custom' and 'Custom' or (sourceType == 'online' and 'Online' or 'Saved')
-    return ('%s [%s]'):format(tostring(definition.name or 'Unnamed'), sourceLabel)
-end
-
-local function getInstanceDisplayName(instance)
-    if type(instance) ~= 'table' then
-        return 'Unknown race'
-    end
-
-    local laps = math.max(1, tonumber(instance.laps) or 1)
-    return ('%s (%sl)'):format(tostring(instance.name or 'Unnamed'), laps)
-end
-
-local function getInstanceStateLabel(instance)
-    local state = tostring(instance and instance.state or RacingSystem.States.idle)
-    if state == RacingSystem.States.staging then
-        return 'Staging'
-    elseif state == RacingSystem.States.running then
-        return 'Running'
-    elseif state == RacingSystem.States.finished then
-        return 'Finished'
-    end
-
-    return 'Idle'
-end
-
-local function getInstanceEntrantCount(instance)
-    return #(type(instance and instance.entrants) == 'table' and instance.entrants or {})
-end
-
-local function isJoinableRaceInstance(instance)
-    if type(instance) ~= 'table' then
-        return false
-    end
-
-    local state = tostring(instance.state or RacingSystem.States.idle)
-    return state ~= RacingSystem.States.finished
-end
-
-local function isSameRaceInstance(left, right)
-    if type(left) ~= 'table' or type(right) ~= 'table' then
-        return false
-    end
-
-    local leftId = tonumber(left.id)
-    local rightId = tonumber(right.id)
-    if leftId and rightId then
-        return leftId == rightId
-    end
-
-    return tostring(left.name or '') == tostring(right.name or '')
-end
-
+-- extractGTAOUGCIdFromInput: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function extractGTAOUGCIdFromInput(value)
     local raw = RacingSystem.Trim(value)
     if raw == '' then
@@ -2045,6 +1827,7 @@ local function extractGTAOUGCIdFromInput(value)
     return nil
 end
 
+-- closeGTAORaceUrlPrompt: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function closeGTAORaceUrlPrompt(forceReset)
     if not forceReset and not isGTAORacePromptOpen then
         return
@@ -2058,6 +1841,7 @@ local function closeGTAORaceUrlPrompt(forceReset)
     })
 end
 
+-- openGTAORaceUrlPrompt: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function openGTAORaceUrlPrompt()
     if isGTAORacePromptOpen then
         return
@@ -2071,6 +1855,7 @@ local function openGTAORaceUrlPrompt()
     })
 end
 
+-- cloneEntrantRow: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function cloneEntrantRow(entrant)
     if type(entrant) ~= 'table' then
         return nil
@@ -2093,6 +1878,7 @@ local function cloneEntrantRow(entrant)
     }
 end
 
+-- reconcileInstanceEntrantsWithAuthoritativeStandings: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function reconcileInstanceEntrantsWithAuthoritativeStandings(instance)
     if type(instance) ~= 'table' then
         return
@@ -2122,10 +1908,12 @@ local function reconcileInstanceEntrantsWithAuthoritativeStandings(instance)
 end
 
 -- Local-only event bridge used by menu.lua to open the GTAO URL prompt.
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 AddEventHandler('racingsystem:openGTAORaceUrlPrompt', function()
     openGTAORaceUrlPrompt()
 end)
 
+-- unloadActiveInstanceAssets: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function unloadActiveInstanceAssets()
     for _, objectHandle in ipairs(activeInstanceAssets.objects or {}) do
         if DoesEntityExist(objectHandle) then
@@ -2143,6 +1931,7 @@ local function unloadActiveInstanceAssets()
 end
 RacingSystem.Client.unloadActiveInstanceAssets = unloadActiveInstanceAssets
 
+-- loadInstanceAssets: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function loadInstanceAssets(payload)
     if type(payload) ~= 'table' then
         return false
@@ -2234,23 +2023,7 @@ local function loadInstanceAssets(payload)
 end
 RacingSystem.Client.loadInstanceAssets = loadInstanceAssets
 
-local function getPlayerPositionText(instance, entrant)
-    local position = tonumber(entrant and entrant.position) or 1
-    local totalEntrants = #(type(instance.entrants) == 'table' and instance.entrants or {})
-    totalEntrants = math.max(totalEntrants, 1)
-    return ('POS %s/%s'):format(position, totalEntrants)
-end
-
-local function getPlayerLapText(instance, entrant)
-    local totalLaps = math.max(1, tonumber(instance and instance.laps) or 1)
-    local lap = math.max(1, tonumber(entrant and entrant.currentLap) or 1)
-    if tonumber(entrant and entrant.finishedAt) then
-        lap = totalLaps
-    end
-
-    return ('LAP %s/%s'):format(math.min(lap, totalLaps), totalLaps)
-end
-
+-- clearPendingCheckpointIfAdvanced: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function clearPendingCheckpointIfAdvanced(entrant)
     if not getRaceRuntimeState().pendingCheckpointPass then
         return
@@ -2269,75 +2042,26 @@ local function clearPendingCheckpointIfAdvanced(entrant)
 end
 RacingSystem.Client.clearPendingCheckpointIfAdvanced = clearPendingCheckpointIfAdvanced
 
-RegisterNetEvent('racingsystem:stateSnapshot', function(snapshot)
-    if type(snapshot) ~= 'table' then
+local function handlePostStateRefresh()
+    if RacingSystem.Client.PayloadSystemDisabled == true then
         return
     end
-
-    local incomingVersion = math.floor(tonumber(snapshot.snapshotVersion) or 0)
-    if incomingVersion > 0 and incomingVersion <= latestSnapshotVersion then
-        reliabilityCounters.staleSnapshotsIgnored = reliabilityCounters.staleSnapshotsIgnored + 1
-        if getClientExtraPrintLevel() == 2 then
-            logClientVerbose(("Ignored stale snapshot version=%s latest=%s ignored=%s"):format(
-                tostring(incomingVersion),
-                tostring(latestSnapshotVersion),
-                tostring(reliabilityCounters.staleSnapshotsIgnored)
-            ))
-        end
-        return
-    end
-
-    if incomingVersion > 0 then
-        latestSnapshotVersion = incomingVersion
-    end
-    snapshotAcceptedAt = GetGameTimer()
-    latestSnapshot = snapshot
-    RacingSystem.Client.latestSnapshot = latestSnapshot
-
-    local instances = type(snapshot.instances) == 'table' and snapshot.instances or {}
-    for _, instance in ipairs(instances) do
-        reconcileInstanceEntrantsWithAuthoritativeStandings(instance)
-    end
-
-    -- Refresh menu if it's open (for live state updates)
-    if RacingSystem.Menu.isRaceMenuVisible() then
-        RacingSystem.Menu.refreshRaceMenu()
-    end
-
-    if getClientExtraPrintLevel() == 2 then
-        local definitions = type(snapshot.definitions) == 'table' and snapshot.definitions or {}
-        local samples = {}
-        for _, definition in ipairs(definitions) do
-            if tostring(definition.sourceType or '') == 'online' then
-                samples[#samples + 1] = ("%s|lookup=%s|id=%s"):format(
-                    tostring(definition.name or ''),
-                    tostring(definition.lookupName or ''),
-                    tostring(definition.raceId or 'nil')
-                )
-                if #samples >= 5 then
-                    break
-                end
-            end
-        end
-        logClientVerbose(("Snapshot definitions=%s instances=%s sampleOnline=[%s]"):format(
-            tostring(#definitions),
-            tostring(#(type(snapshot.instances) == 'table' and snapshot.instances or {})),
-            (#samples > 0 and table.concat(samples, '; ') or 'none')
-        ))
-    end
-
     local activeCountdowns = {}
-    local snapshotInstances = type(snapshot.instances) == 'table' and snapshot.instances or {}
-    for _, instance in ipairs(snapshotInstances) do
+    for _, instance in ipairs(type(latestSnapshot.instances) == 'table' and latestSnapshot.instances or {}) do
         local instanceId = tonumber(instance.id)
         if instanceId and instance.state == RacingSystem.States.staging and RacingSystem.Client.InRace.countdownEndTimeByInstanceId[instanceId] then
             activeCountdowns[instanceId] = RacingSystem.Client.InRace.countdownEndTimeByInstanceId[instanceId]
         end
     end
 
-    local cdt = RacingSystem.Client.InRace.countdownEndTimeByInstanceId
-    for k in pairs(cdt) do cdt[k] = nil end
-    for k, v in pairs(activeCountdowns) do cdt[k] = v end
+    local countdownMap = RacingSystem.Client.InRace.countdownEndTimeByInstanceId
+    for key in pairs(countdownMap) do
+        countdownMap[key] = nil
+    end
+    for key, value in pairs(activeCountdowns) do
+        countdownMap[key] = value
+    end
+
     if not getJoinedRaceInstance() then
         RacingSystem.Client.InRace.localEntrantIdentity.entrantId = nil
     end
@@ -2347,9 +2071,133 @@ RegisterNetEvent('racingsystem:stateSnapshot', function(snapshot)
     end
 
     applyJoinedInstanceTrafficMode()
+end
+
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
+RegisterNetEvent('racingsystem:catalog:definitions', function(payload)
+    if RacingSystem.Client.PayloadSystemDisabled == true then
+        return
+    end
+    if type(payload) ~= 'table' then
+        return
+    end
+
+    definitionCache = type(payload.definitions) == 'table' and payload.definitions or {}
+    RacingSystem.Client.definitionCache = definitionCache
+    if type(payload.viewer) == 'table' then
+        latestSnapshot.viewer = payload.viewer
+    end
+    latestSnapshot.count = #definitionCache
+    latestSnapshot.definitionCount = #definitionCache
+    latestSnapshot.customRaceCount = tonumber(payload.customRaceCount) or 0
+    latestSnapshot.onlineRaceCount = tonumber(payload.onlineRaceCount) or 0
+    rebuildCompatSnapshot()
+    handlePostStateRefresh()
 end)
 
-RegisterNetEvent('racingsystem:standingsUpdate', function(payload)
+RegisterNetEvent('racingsystem:instance:list', function(payload)
+    if RacingSystem.Client.PayloadSystemDisabled == true then
+        return
+    end
+    if type(payload) ~= 'table' then
+        return
+    end
+
+    local nextCache = {}
+    for _, instance in ipairs(type(payload.instances) == 'table' and payload.instances or {}) do
+        local instanceId = tonumber(instance.id)
+        if instanceId and instanceId > 0 then
+            nextCache[instanceId] = instance
+        end
+    end
+    for cachedId in pairs(instanceDynamicCacheById) do
+        if not nextCache[cachedId] then
+            instanceDynamicCacheById[cachedId] = nil
+            instanceStaticCacheById[cachedId] = nil
+            latestStandingsByInstanceId[cachedId] = nil
+            latestStandingsVersionByInstanceId[cachedId] = nil
+            instanceAssetCache[cachedId] = nil
+        end
+    end
+    instanceListCache = nextCache
+    RacingSystem.Client.instanceListCache = instanceListCache
+    if type(payload.viewer) == 'table' then
+        latestSnapshot.viewer = payload.viewer
+    end
+    latestSnapshot.instanceCount = tonumber(payload.instanceCount) or 0
+    rebuildCompatSnapshot()
+    handlePostStateRefresh()
+end)
+
+RegisterNetEvent('racingsystem:instance:delta', function(payload)
+    if RacingSystem.Client.PayloadSystemDisabled == true then
+        return
+    end
+    if type(payload) ~= 'table' then
+        return
+    end
+    local instanceId = tonumber(payload.id)
+    if not instanceId or instanceId <= 0 then
+        return
+    end
+
+    instanceDynamicCacheById[instanceId] = payload
+    rebuildCompatSnapshot()
+    handlePostStateRefresh()
+end)
+
+RegisterNetEvent('racingsystem:instance:static', function(payload)
+    if RacingSystem.Client.PayloadSystemDisabled == true then
+        return
+    end
+    if type(payload) ~= 'table' then
+        return
+    end
+    local instanceId = tonumber(payload.instanceId)
+    if not instanceId or instanceId <= 0 then
+        return
+    end
+
+    instanceStaticCacheById[instanceId] = {
+        staticVersion = payload.staticVersion,
+        checkpoints = type(payload.checkpoints) == 'table' and payload.checkpoints or {},
+        checkpointVariants = type(payload.checkpointVariants) == 'table' and payload.checkpointVariants or {},
+        raceMetadata = type(payload.raceMetadata) == 'table' and payload.raceMetadata or {},
+    }
+    instanceAssetCache[instanceId] = {
+        instanceId = instanceId,
+        sourceType = payload.sourceType,
+        sourceName = payload.sourceName,
+        props = type(payload.props) == 'table' and payload.props or {},
+        modelHides = type(payload.modelHides) == 'table' and payload.modelHides or {},
+    }
+    rebuildCompatSnapshot()
+    handlePostStateRefresh()
+end)
+
+RegisterNetEvent('racingsystem:state:snapshot', function(snapshot)
+    if RacingSystem.Client.PayloadSystemDisabled == true then
+        return
+    end
+    if type(snapshot) ~= 'table' then
+        return
+    end
+    local incomingVersion = math.floor(tonumber(snapshot.snapshotVersion) or 0)
+    if incomingVersion > 0 and incomingVersion <= latestSnapshotVersion then
+        reliabilityCounters.staleSnapshotsIgnored = reliabilityCounters.staleSnapshotsIgnored + 1
+        return
+    end
+    if incomingVersion > 0 then
+        latestSnapshotVersion = incomingVersion
+    end
+    snapshotAcceptedAt = GetGameTimer()
+end)
+
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
+RegisterNetEvent('racingsystem:state:standings', function(payload)
+    if RacingSystem.Client.PayloadSystemDisabled == true then
+        return
+    end
     if type(payload) ~= 'table' then
         return
     end
@@ -2395,7 +2243,8 @@ RegisterNetEvent('racingsystem:standingsUpdate', function(payload)
     end
 end)
 
-RegisterNetEvent('racingsystem:startCountdown', function(payload)
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
+RegisterNetEvent('racingsystem:race:countdownStart', function(payload)
     if type(payload) ~= 'table' then
         return
     end
@@ -2404,6 +2253,10 @@ RegisterNetEvent('racingsystem:startCountdown', function(payload)
     local countdownMs = math.max(0, tonumber(payload.countdownMs) or 0)
     if not instanceId then
         return
+    end
+
+    if type(RacingSystem.Menu.markCountdownAccepted) == 'function' then
+        RacingSystem.Menu.markCountdownAccepted(instanceId)
     end
 
     RacingSystem.Client.InRace.ensureLocalRaceTiming(instanceId)
@@ -2420,7 +2273,8 @@ RegisterNetEvent('racingsystem:startCountdown', function(payload)
     end
 end)
 
-RegisterNetEvent('racingsystem:lapCompleted', function(payload)
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
+RegisterNetEvent('racingsystem:race:lapCompleted', function(payload)
     if type(payload) ~= 'table' then
         return
     end
@@ -2452,14 +2306,14 @@ RegisterNetEvent('racingsystem:lapCompleted', function(payload)
             end
             RacingSystem.Client.InRace.finishCueShownByInstanceId[instanceId] = true
         end
-        ScaleformUI.Scaleforms.BigMessageInstance:ShowMissionPassedMessage(('FINISHED  %s'):format(finishOrdinal), 6000)
+        RacingSystem.Client.Util.ShowWarningSubtitle(('FINISHED  %s'):format(finishOrdinal), 6000, '~g~')
     else
         local lapNumber = math.max(1, math.floor(tonumber(payload.lapNumber) or 1))
         local totalLaps = math.max(1, math.floor(tonumber(payload.totalLaps) or tonumber(instance and instance.laps) or 1))
         if totalLaps > 1 and lapNumber == totalLaps - 1 then
-            ScaleformUI.Scaleforms.BigMessageInstance:ShowSimpleShard("FINAL LAP", "", 2500)
+            RacingSystem.Client.Util.ShowWarningSubtitle('FINAL LAP', 2500, '~o~')
         else
-            RacingSystem.Client.Util.ShowRaceEventVisual(('~b~LAP %d COMPLETED'):format(lapNumber), '', 1400)
+            RacingSystem.Client.Util.ShowRaceEventVisual(('~b~LAP %d COMPLETED'):format(lapNumber), '', 3000)
         end
     end
 
@@ -2476,6 +2330,7 @@ RegisterNetEvent('racingsystem:lapCompleted', function(payload)
 
 end)
 
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 RegisterNetEvent('racingsystem:stableLapTime', function(payload)
     if type(payload) ~= 'table' then
         return
@@ -2483,7 +2338,8 @@ RegisterNetEvent('racingsystem:stableLapTime', function(payload)
 
 end)
 
-RegisterNetEvent('racingsystem:lapTimeAnnotation', function(payload)
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
+RegisterNetEvent('racingsystem:race:lapAnnotation', function(payload)
     if type(payload) ~= 'table' then
         return
     end
@@ -2497,7 +2353,8 @@ RegisterNetEvent('racingsystem:lapTimeAnnotation', function(payload)
     end
 end)
 
-RegisterNetEvent('racingsystem:instanceAssets', function(payload)
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
+RegisterNetEvent('racingsystem:race:instanceAssets', function(payload)
     if type(payload) ~= 'table' or tonumber(payload.instanceId) == nil then
         return
     end
@@ -2505,6 +2362,7 @@ RegisterNetEvent('racingsystem:instanceAssets', function(payload)
     instanceAssetCache[tonumber(payload.instanceId)] = payload
 end)
 
+-- waitForFadeState: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function waitForFadeState(targetFadedOut, timeoutMs, pollIntervalMs)
     local maxWaitMs = math.max(0, math.floor(tonumber(timeoutMs) or 2500))
     local pollMs = math.max(1, math.floor(tonumber(pollIntervalMs) or 75))
@@ -2520,29 +2378,7 @@ local function waitForFadeState(targetFadedOut, timeoutMs, pollIntervalMs)
     return false
 end
 
-local function tryResolveTeleportGroundZ(destinationX, destinationY, destinationZ, timeoutMs, pollIntervalMs, probeOffsets)
-    local maxWaitMs = math.max(0, math.floor(tonumber(timeoutMs) or 6000))
-    local pollMs = math.max(1, math.floor(tonumber(pollIntervalMs) or 75))
-    local offsets = type(probeOffsets) == 'table' and probeOffsets or { 160.0, 100.0, 60.0, 30.0, 10.0 }
-    local streamDeadline = GetGameTimer() + maxWaitMs
-    while GetGameTimer() <= streamDeadline do
-        SetFocusPosAndVel(destinationX, destinationY, destinationZ, 0.0, 0.0, 0.0)
-        RequestCollisionAtCoord(destinationX, destinationY, destinationZ)
-
-        for _, probeOffset in ipairs(offsets) do
-            local probeZ = destinationZ + (tonumber(probeOffset) or 0.0)
-            local foundGround, groundZ = GetGroundZFor_3dCoord(destinationX, destinationY, probeZ, false)
-            if foundGround then
-                return true, tonumber(groundZ) or destinationZ
-            end
-        end
-
-        Wait(pollMs)
-    end
-
-    return false, destinationZ
-end
-
+-- resolveTeleportHeading: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function resolveTeleportHeading(payload)
     local heading = tonumber(payload and payload.heading)
     if heading ~= nil then
@@ -2573,6 +2409,7 @@ local function resolveTeleportHeading(payload)
     return 0.0
 end
 
+-- runSmartJoinTeleport: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function runSmartJoinTeleport(payload)
     if type(payload) ~= 'table' then
         return
@@ -2704,123 +2541,7 @@ local function runSmartJoinTeleport(payload)
     isTeleportInProgress = false
 end
 
-local function runSmartJoinTeleportLerp(payload)
-    if type(payload) ~= 'table' then
-        return
-    end
-
-    if isTeleportInProgress then
-        return
-    end
-    isTeleportInProgress = true
-
-    local controlledEntity = 0
-    local pedToUnfreeze = 0
-
-    local ok, _ = pcall(function()
-        local destinationX = tonumber(payload.x) or 0.0
-        local destinationY = tonumber(payload.y) or 0.0
-        local destinationZ = tonumber(payload.z) or 0.0
-        local heading = resolveTeleportHeading(payload)
-        local teleportType = tostring(payload.teleportType or 'join')
-        local checkpointSpeedMph = math.max(0.0, tonumber(payload.speedMph) or 15.0)
-        local checkpointSpeedMps = checkpointSpeedMph * 0.44704
-        local closeEnoughMeters = math.max(0.1, tonumber(payload.closeEnoughMeters) or 3.0)
-        local lerpFactorPerSecond = math.max(0.01, tonumber(payload.lerpFactorPerSecond) or 0.25)
-
-        local ped = PlayerPedId()
-        if not DoesEntityExist(ped) then
-            return
-        end
-
-        local vehicle = GetVehiclePedIsIn(ped, false)
-        local isDriverVehicle = vehicle ~= 0 and GetPedInVehicleSeat(vehicle, -1) == ped
-        local entity = (isDriverVehicle and DoesEntityExist(vehicle)) and vehicle or ped
-        if not DoesEntityExist(entity) then
-            return
-        end
-
-        controlledEntity = entity
-        if entity ~= ped and DoesEntityExist(ped) then
-            pedToUnfreeze = ped
-        end
-
-        FreezeEntityPosition(entity, true)
-        if pedToUnfreeze ~= 0 then
-            FreezeEntityPosition(pedToUnfreeze, true)
-        end
-
-        SetEntityVelocity(entity, 0.0, 0.0, 0.0)
-        if isDriverVehicle then
-            SetVehicleForwardSpeed(vehicle, 0.0)
-        end
-
-        while true do
-            local current = GetEntityCoords(entity)
-            local dx = destinationX - (tonumber(current.x) or 0.0)
-            local dy = destinationY - (tonumber(current.y) or 0.0)
-            local distance = math.sqrt((dx * dx) + (dy * dy))
-            if distance <= closeEnoughMeters then
-                break
-            end
-
-            local alpha = lerpFactorPerSecond * math.max(0.0, tonumber(GetFrameTime()) or 0.0)
-            if alpha < 0.001 then
-                alpha = 0.001
-            elseif alpha > 1.0 then
-                alpha = 1.0
-            end
-
-            local stepX = (tonumber(current.x) or 0.0) + (dx * alpha)
-            local stepY = (tonumber(current.y) or 0.0) + (dy * alpha)
-            local stepZ = destinationZ
-            local currentHeading = tonumber(GetEntityHeading(entity)) or 0.0
-            local headingDelta = ((heading - currentHeading + 540.0) % 360.0) - 180.0
-            local stepHeading = currentHeading + (headingDelta * alpha)
-            if stepHeading < 0.0 then
-                stepHeading = stepHeading + 360.0
-            elseif stepHeading >= 360.0 then
-                stepHeading = stepHeading - 360.0
-            end
-
-            SetEntityCoordsNoOffset(entity, stepX, stepY, stepZ, false, false, false)
-            SetEntityHeading(entity, stepHeading)
-            Wait(0)
-        end
-
-        SetEntityCoordsNoOffset(entity, destinationX, destinationY, destinationZ, false, false, false)
-        SetEntityHeading(entity, heading)
-        SetEntityVelocity(entity, 0.0, 0.0, 0.0)
-
-        if isDriverVehicle then
-            if teleportType == 'checkpoint' then
-                SetVehicleForwardSpeed(vehicle, checkpointSpeedMps)
-            else
-                SetVehicleForwardSpeed(vehicle, 0.0)
-            end
-            SetVehicleHandbrake(vehicle, false)
-            SetVehicleUndriveable(vehicle, false)
-            SetVehicleEngineOn(vehicle, true, true, false)
-            SetVehicleBrakeLights(vehicle, false)
-        else
-            ClearPedTasks(ped)
-        end
-    end)
-
-    if controlledEntity ~= 0 and DoesEntityExist(controlledEntity) then
-        FreezeEntityPosition(controlledEntity, false)
-    end
-    if pedToUnfreeze ~= 0 and DoesEntityExist(pedToUnfreeze) then
-        FreezeEntityPosition(pedToUnfreeze, false)
-    end
-    SetPlayerControl(PlayerId(), true, 0)
-
-    if not ok then
-    end
-
-    isTeleportInProgress = false
-end
-
+-- buildCheckpointTeleportPayload: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function buildCheckpointTeleportPayload(checkpoint, nextCheckpoint)
     if type(checkpoint) ~= 'table' then
         return nil
@@ -2840,6 +2561,7 @@ local function buildCheckpointTeleportPayload(checkpoint, nextCheckpoint)
     return payload
 end
 
+-- getEntrantTargetDistanceToCheckpoint: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function getEntrantTargetDistanceToCheckpoint(instance, entrant, checkpointIndex)
     if type(instance) ~= 'table' or type(entrant) ~= 'table' then
         return math.huge
@@ -2885,6 +2607,7 @@ local function getEntrantTargetDistanceToCheckpoint(instance, entrant, checkpoin
     return math.sqrt((dx * dx) + (dy * dy) + (dz * dz))
 end
 
+-- buildLiveLeaderboardRows: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function buildLiveLeaderboardRows(instance)
     local entrants = type(instance) == 'table' and type(instance.entrants) == 'table' and instance.entrants or {}
     if #entrants == 0 then
@@ -2962,6 +2685,7 @@ local function buildLiveLeaderboardRows(instance)
 end
 RacingSystem.Client.buildLiveLeaderboardRows = buildLiveLeaderboardRows
 
+-- runSmartCheckpointTeleport: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function runSmartCheckpointTeleport(checkpoint, nextCheckpoint)
     local payload = buildCheckpointTeleportPayload(checkpoint, nextCheckpoint)
     if type(payload) ~= 'table' then
@@ -2972,13 +2696,16 @@ local function runSmartCheckpointTeleport(checkpoint, nextCheckpoint)
 end
 RacingSystem.Client.runSmartCheckpointTeleport = runSmartCheckpointTeleport
 
-RegisterNetEvent('racingsystem:teleportToCheckpoint', function(payload)
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
+RegisterNetEvent('racingsystem:race:teleportCheckpoint', function(payload)
+    -- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
     Citizen.CreateThread(function()
         runSmartJoinTeleport(payload)
     end)
 end)
 
 -- Local-only event: triggered by menu via TriggerEvent, never sent from server.
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 AddEventHandler('racingsystem:resetToLastCheckpoint', function()
     local joinedInstance = getJoinedRaceInstance()
     if not joinedInstance or joinedInstance.state ~= RacingSystem.States.running then
@@ -3004,7 +2731,8 @@ AddEventHandler('racingsystem:resetToLastCheckpoint', function()
 end)
 
 -- Local-only event: triggered by menu via TriggerEvent. Pre-validates locally for UX, then forwards to server.
-AddEventHandler('racingsystem:startRace', function()
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
+AddEventHandler('racingsystem:race:start', function()
     local joinedInstance = getJoinedRaceInstance()
     if not joinedInstance then
         return
@@ -3023,7 +2751,22 @@ AddEventHandler('racingsystem:startRace', function()
         return
     end
 
-    if joinedInstance.owner ~= GetPlayerServerId(PlayerId()) then
+    local ownerSource = tonumber(joinedInstance.owner)
+    local joinedInstanceId = tonumber(joinedInstance.id)
+    if (ownerSource == nil or ownerSource <= 0) and joinedInstanceId then
+        local dynamicCache = type(instanceDynamicCacheById) == 'table' and instanceDynamicCacheById or {}
+        local listCache = type(instanceListCache) == 'table' and instanceListCache or {}
+        ownerSource = tonumber(type(dynamicCache[joinedInstanceId]) == 'table' and dynamicCache[joinedInstanceId].owner)
+            or tonumber(type(listCache[joinedInstanceId]) == 'table' and listCache[joinedInstanceId].owner)
+    end
+    local localSource = tonumber(GetPlayerServerId(PlayerId())) or 0
+    if ownerSource == nil or ownerSource <= 0 then
+        local entrants = type(joinedInstance.entrants) == 'table' and joinedInstance.entrants or {}
+        local firstEntrantSource = tonumber(type(entrants[1]) == 'table' and entrants[1].source)
+        if firstEntrantSource ~= localSource then
+            return
+        end
+    elseif ownerSource ~= localSource then
         return
     end
 
@@ -3031,11 +2774,51 @@ AddEventHandler('racingsystem:startRace', function()
         return
     end
 
-    TriggerServerEvent('racingsystem:startRace')
+    TriggerServerEvent('racingsystem:race:start')
+end)
+
+-- Local-only event: triggered by menu via TriggerEvent. Pre-validates locally for UX, then forwards to server.
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
+AddEventHandler('racingsystem:race:restart', function()
+    local joinedInstance = getJoinedRaceInstance()
+    if not joinedInstance then
+        return
+    end
+
+    local entrant = getLocalEntrant(joinedInstance)
+    if not entrant then
+        return
+    end
+
+    local ownerSource = tonumber(joinedInstance.owner)
+    local joinedInstanceId = tonumber(joinedInstance.id)
+    if (ownerSource == nil or ownerSource <= 0) and joinedInstanceId then
+        local dynamicCache = type(instanceDynamicCacheById) == 'table' and instanceDynamicCacheById or {}
+        local listCache = type(instanceListCache) == 'table' and instanceListCache or {}
+        ownerSource = tonumber(type(dynamicCache[joinedInstanceId]) == 'table' and dynamicCache[joinedInstanceId].owner)
+            or tonumber(type(listCache[joinedInstanceId]) == 'table' and listCache[joinedInstanceId].owner)
+    end
+    local localSource = tonumber(GetPlayerServerId(PlayerId())) or 0
+    if ownerSource == nil or ownerSource <= 0 then
+        local entrants = type(joinedInstance.entrants) == 'table' and joinedInstance.entrants or {}
+        local firstEntrantSource = tonumber(type(entrants[1]) == 'table' and entrants[1].source)
+        if firstEntrantSource ~= localSource then
+            return
+        end
+    elseif ownerSource ~= localSource then
+        return
+    end
+
+    if #(joinedInstance.entrants or {}) == 0 then
+        return
+    end
+
+    TriggerServerEvent('racingsystem:race:restart')
 end)
 
 -- Local-only event: triggered by menu via TriggerEvent. Cleans up client state immediately, then notifies server.
-AddEventHandler('racingsystem:leaveRace', function()
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
+AddEventHandler('racingsystem:race:leave', function()
     local joinedInstance = getJoinedRaceInstance()
     if not joinedInstance then
         return
@@ -3058,13 +2841,15 @@ AddEventHandler('racingsystem:leaveRace', function()
     TriggerServerEvent('traffic_control:requestDensity', nil, 'racingsystem_clear', RACE_TRAFFIC_REQUEST_KEY)
 
     -- Async notify server
-    TriggerServerEvent('racingsystem:leaveRace')
+    TriggerServerEvent('racingsystem:race:leave')
 
     MenuHandler:CloseAndClearHistory()
 end)
 
 -- Local-only event: pure client teleport, triggered via TriggerEvent, never sent from server.
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 AddEventHandler('racingsystem:smartCheckpointTeleport', function(payload)
+    -- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
     Citizen.CreateThread(function()
         local checkpoint = type(payload) == 'table' and payload.checkpoint or nil
         local nextCheckpoint = type(payload) == 'table' and payload.nextCheckpoint or nil
@@ -3072,6 +2857,7 @@ AddEventHandler('racingsystem:smartCheckpointTeleport', function(payload)
     end)
 end)
 
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 RegisterNUICallback('racingsystem:gtAoRaceUrlSubmit', function(data, cb)
     closeGTAORaceUrlPrompt()
     cb({})
@@ -3083,18 +2869,21 @@ RegisterNUICallback('racingsystem:gtAoRaceUrlSubmit', function(data, cb)
         return
     end
 
-    TriggerServerEvent('racingsystem:validateGTAORaceUGCId', ugcId)
+    TriggerServerEvent('racingsystem:ugc:importById', ugcId)
 end)
 
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 RegisterNUICallback('racingsystem:gtAoRaceUrlCancel', function(_, cb)
     closeGTAORaceUrlPrompt()
     cb({})
 end)
 
-RegisterNetEvent('racingsystem:gtAoRaceValidationResult', function(payload)
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
+RegisterNetEvent('racingsystem:ugc:importResult', function(payload)
     if type(payload) ~= 'table' then
         return
     end
+    local data = type(payload.data) == 'table' and payload.data or {}
 
     if payload.ok ~= true then
         local message = type(payload.error) == 'string' and payload.error or 'Could not validate GTAO race URL.'
@@ -3102,20 +2891,55 @@ RegisterNetEvent('racingsystem:gtAoRaceValidationResult', function(payload)
         return
     end
 
-    local raceName = tostring(payload.raceName or payload.ugcId or '')
-    local checkpointCount = tostring(math.max(0, math.floor(tonumber(payload.checkpointCount) or 0)))
+    local raceName = tostring(data.raceName or data.ugcId or '')
+    local checkpointCount = tostring(math.max(0, math.floor(tonumber(data.checkpointCount) or 0)))
     if raceName ~= '' then
         RacingSystem.Menu.pendingSelectRaceName = raceName
     end
 end)
 
-RegisterNetEvent('racingsystem:editorRaceLoaded', function(payload)
-    if type(payload) ~= 'table' or payload.ok ~= true then
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
+RegisterNetEvent('racingsystem:race:restarted', function(payload)
+    if type(payload) ~= 'table' then
         return
     end
 
-    local requestedName = RacingSystem.Trim(payload.requestedName)
-    local race = type(payload.race) == 'table' and payload.race or nil
+    local instanceId = tonumber(payload.instanceId)
+    if not instanceId then
+        return
+    end
+
+    if type(RacingSystem.Menu.clearCountdownAccepted) == 'function' then
+        RacingSystem.Menu.clearCountdownAccepted(instanceId)
+    end
+
+    RacingSystem.Client.InRace.countdownEndTimeByInstanceId[instanceId] = nil
+    RacingSystem.Client.InRace.countdownZeroReportedByInstanceId[instanceId] = nil
+    RacingSystem.Client.InRace.raceStartCueShownByInstanceId[instanceId] = nil
+    RacingSystem.Client.InRace.finishCueShownByInstanceId[instanceId] = nil
+
+    local joinedInstance = getJoinedRaceInstance()
+    if joinedInstance and tonumber(joinedInstance.id) == instanceId then
+        RacingSystem.Client.InRace.resetLocalRaceTiming()
+        getRaceRuntimeState().pendingCheckpointPass = nil
+        getRaceRuntimeState().checkpointPassArm = nil
+        getRaceRuntimeState().lastPassedCheckpoint = nil
+    end
+
+    if RacingSystem.Menu.isRaceMenuVisible() then
+        RacingSystem.Menu.refreshRaceMenu()
+    end
+end)
+
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
+RegisterNetEvent('racingsystem:editor:loaded', function(payload)
+    if type(payload) ~= 'table' or payload.ok ~= true then
+        return
+    end
+    local data = type(payload.data) == 'table' and payload.data or {}
+
+    local requestedName = RacingSystem.Trim(data.requestedName)
+    local race = type(data.race) == 'table' and data.race or nil
     local raceName = race and race.name or (requestedName ~= '' and requestedName or 'Untitled Race')
     local checkpoints = race and race.checkpoints or {}
 
@@ -3124,12 +2948,14 @@ RegisterNetEvent('racingsystem:editorRaceLoaded', function(payload)
     RacingSystem.Menu.refreshEditorMenu(RacingSystem.Menu.buildMenuState())
 end)
 
-RegisterNetEvent('racingsystem:editorRaceSaved', function(payload)
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
+RegisterNetEvent('racingsystem:editor:saved', function(payload)
     if type(payload) ~= 'table' or payload.ok ~= true then
         return
     end
+    local data = type(payload.data) == 'table' and payload.data or {}
 
-    local race = payload.race or {}
+    local race = data.race or {}
     editorState.name = race.name or editorState.name
     editorState.selectedName = editorState.name
     editorState.checkpoints = cloneCheckpoints(race.checkpoints or editorState.checkpoints)
@@ -3141,17 +2967,20 @@ RegisterNetEvent('racingsystem:editorRaceSaved', function(payload)
     RacingSystem.Menu.refreshEditorMenu(RacingSystem.Menu.buildMenuState())
 end)
 
-RegisterNetEvent('racingsystem:raceDefinitionRegistered', function(payload)
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
+RegisterNetEvent('racingsystem:def:registered', function(payload)
     if type(payload) ~= 'table' or payload.ok ~= true then
         return
     end
+    local data = type(payload.data) == 'table' and payload.data or {}
 
-    local definition = type(payload.definition) == 'table' and payload.definition or {}
+    local definition = type(data.definition) == 'table' and data.definition or {}
     RacingSystem.Menu.pendingSelectRaceName = definition.name or RacingSystem.Menu.pendingSelectRaceName
     RacingSystem.Menu.pendingEditorRaceName = definition.name or RacingSystem.Menu.pendingEditorRaceName
 end)
 
-RegisterNetEvent('racingsystem:raceDefinitionDeleted', function(payload)
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
+RegisterNetEvent('racingsystem:def:deleted', function(payload)
     RacingSystem.Menu.deleteConfirmRaceName = nil
 
     if type(payload) ~= 'table' or payload.ok ~= true then
@@ -3159,7 +2988,8 @@ RegisterNetEvent('racingsystem:raceDefinitionDeleted', function(payload)
         return
     end
 
-    local definition = type(payload.definition) == 'table' and payload.definition or {}
+    local data = type(payload.data) == 'table' and payload.data or {}
+    local definition = type(data.definition) == 'table' and data.definition or {}
     local deletedName = tostring(definition.name or 'unknown')
 
     if RacingSystem.NormalizeRaceName(editorState.selectedName) == RacingSystem.NormalizeRaceName(deletedName) then
@@ -3167,11 +2997,7 @@ RegisterNetEvent('racingsystem:raceDefinitionDeleted', function(payload)
     end
 end)
 
-CreateThread(function()
-    Wait(1500)
-    requestRaceStateSnapshot()
-end)
-
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 CreateThread(function()
     while true do
         if not editorState.active then
@@ -3259,31 +3085,7 @@ CreateThread(function()
 end)
 
 
-CreateThread(function()
-    local staleThresholdMs = 5000
-    local requestCooldownMs = 1500
-    while true do
-        local joinedInstance = getJoinedRaceInstance()
-        local hasActiveCountdown = next(RacingSystem.Client.InRace.countdownEndTimeByInstanceId) ~= nil
-        local shouldReconcile = joinedInstance ~= nil or hasActiveCountdown or (RacingSystem.Menu.raceMenuInitialized and RacingSystem.Menu.isRaceMenuVisible())
-        if shouldReconcile then
-            local now = GetGameTimer()
-            local lastAcceptedAt = tonumber(snapshotAcceptedAt) or 0
-            local lastRequestedAt = tonumber(snapshotRequestedAt) or 0
-            if (now - lastAcceptedAt) >= staleThresholdMs and (now - lastRequestedAt) >= requestCooldownMs then
-                logClientVerbose(("Requesting snapshot reconciliation (latestVersion=%s ignoredStale=%s)"):format(
-                    tostring(latestSnapshotVersion),
-                    tostring(reliabilityCounters.staleSnapshotsIgnored)
-                ))
-                requestRaceStateSnapshot()
-            end
-            Wait(1000)
-        else
-            Wait(1500)
-        end
-    end
-end)
-
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 CreateThread(function()
     while true do
         RacingSystem.Client.Util.DrawRaceEventVisual()
@@ -3292,6 +3094,7 @@ CreateThread(function()
     end
 end)
 
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 AddEventHandler('onClientResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then
         return
@@ -3311,13 +3114,17 @@ AddEventHandler('onClientResourceStop', function(resourceName)
     unloadActiveInstanceAssets()
 end)
 
+-- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
 AddEventHandler('onClientResourceStart', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then
         return
     end
 
+    requestInitialRaceState()
+
     closeGTAORaceUrlPrompt(true)
     
+    -- Event/callback handler: processes menu, thread, UI, or network flow while preserving existing behavior.
     SetTimeout(250, function()
         closeGTAORaceUrlPrompt(true)
     end)
@@ -3329,3 +3136,4 @@ end)
 
 
 RacingSystem.Client.drawIdleStartChevron = drawIdleStartChevron
+

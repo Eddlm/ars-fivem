@@ -3,34 +3,186 @@ RacingSystem.Client = RacingSystem.Client or {}
 RacingSystem.Menu = RacingSystem.Menu or {}
 RacingSystem.Client.Util = RacingSystem.Client.Util or {}
 
-if type(RacingSystem.Client.Util.NotifyPlayer) ~= 'function' then
-    RacingSystem.Client.Util.NotifyPlayer = function(message)
-        BeginTextCommandThefeedPost('STRING')
-        AddTextComponentSubstringPlayerName(tostring(message or ''))
-        EndTextCommandThefeedPostTicker(false, false)
+local raceLeaderboardVisualState = {
+    title = 'LEADERBOARD',
+    rows = {},
+    finalizedByKey = {},
+}
+
+local raceEventVisualState = {
+    title = '',
+    subtitle = '',
+    expiresAt = 0,
+}
+
+-- drawLeaderboardText: handles a focused piece of client race logic to keep behavior modular and maintainable.
+local function drawLeaderboardText(x, y, scale, text, r, g, b, a, centered)
+    SetTextFont(0)
+    SetTextProportional(1)
+    SetTextScale(scale, scale)
+    SetTextColour(r, g, b, a)
+    SetTextDropshadow(0, 0, 0, 0, 255)
+    SetTextEdge(1, 0, 0, 0, 255)
+    SetTextDropShadow()
+    SetTextOutline()
+    SetTextCentre(centered == true)
+    BeginTextCommandDisplayText('STRING')
+    AddTextComponentSubstringPlayerName(tostring(text or ''))
+    EndTextCommandDisplayText(x, y)
+end
+
+-- NotifyPlayer: handles a focused piece of client race logic to keep behavior modular and maintainable.
+function RacingSystem.Client.Util.NotifyPlayer(message)
+    BeginTextCommandThefeedPost('STRING')
+    AddTextComponentSubstringPlayerName(tostring(message or ''))
+    EndTextCommandThefeedPostTicker(false, false)
+end
+
+-- ShowWarningSubtitle: handles a focused piece of client race logic to keep behavior modular and maintainable.
+function RacingSystem.Client.Util.ShowWarningSubtitle(message, durationMs, colorTag)
+    BeginTextCommandPrint('STRING')
+    local colorPrefix = tostring(colorTag or '~y~')
+    AddTextComponentSubstringPlayerName(('%s%s~s~'):format(colorPrefix, tostring(message or '')))
+    EndTextCommandPrint(math.max(0, math.floor(tonumber(durationMs) or 1000)), true)
+end
+
+-- UpdateCountdownVisual: handles a focused piece of client race logic to keep behavior modular and maintainable.
+function RacingSystem.Client.Util.UpdateCountdownVisual(_, remainingMs)
+    local seconds = math.floor((tonumber(remainingMs) or 0) / 1000)
+    if seconds >= 0 then
+        RacingSystem.Client.Util.ShowWarningSubtitle(('Race starts in %s'):format(tostring(seconds)), 1000, '~b~')
     end
 end
 
-if type(RacingSystem.Client.Util.ShowWarningSubtitle) ~= 'function' then
-    RacingSystem.Client.Util.ShowWarningSubtitle = function(message, durationMs, colorTag)
-        BeginTextCommandPrint('STRING')
-        local colorPrefix = tostring(colorTag or '~y~')
-        AddTextComponentSubstringPlayerName(('%s%s~s~'):format(colorPrefix, tostring(message or '')))
-        EndTextCommandPrint(math.max(0, math.floor(tonumber(durationMs) or 1000)), true)
+-- ClearCountdownVisual: handles a focused piece of client race logic to keep behavior modular and maintainable.
+function RacingSystem.Client.Util.ClearCountdownVisual()
+    -- Subtitle visuals are time-bound and require no explicit disposal.
+end
+
+-- ShowRaceEventVisual: handles a focused piece of client race logic to keep behavior modular and maintainable.
+function RacingSystem.Client.Util.ShowRaceEventVisual(title, subtitle, durationMs)
+    raceEventVisualState.title = tostring(title or '')
+    raceEventVisualState.subtitle = tostring(subtitle or '')
+    raceEventVisualState.expiresAt = GetGameTimer() + math.max(0, math.floor(tonumber(durationMs) or 1200))
+end
+
+-- DrawRaceEventVisual: handles a focused piece of client race logic to keep behavior modular and maintainable.
+function RacingSystem.Client.Util.DrawRaceEventVisual()
+    local expiresAt = tonumber(raceEventVisualState.expiresAt) or 0
+    local now = GetGameTimer()
+    if expiresAt <= now then
+        raceEventVisualState.title = ''
+        raceEventVisualState.subtitle = ''
+        return
+    end
+
+    local title = raceEventVisualState.title
+    local subtitle = raceEventVisualState.subtitle
+    if title == '' and subtitle == '' then
+        return
+    end
+
+    local bodyX = 0.5
+    local bodyY = 0.185
+    local hasSubtitle = subtitle ~= ''
+    local bodyHeight = hasSubtitle and 0.09 or 0.062
+    DrawRect(bodyX, bodyY, 0.48, bodyHeight, 10, 14, 24, 150)
+    drawLeaderboardText(bodyX, bodyY - (hasSubtitle and 0.024 or 0.012), 0.45, title, 245, 250, 255, 235, true)
+    if hasSubtitle then
+        drawLeaderboardText(bodyX, bodyY + 0.01, 0.32, subtitle, 210, 225, 255, 220, true)
     end
 end
 
-if type(RacingSystem.Client.Util.UpdateCountdownVisual) ~= 'function' then
-    RacingSystem.Client.Util.UpdateCountdownVisual = function(_, remainingMs)
-        local seconds = math.floor((tonumber(remainingMs) or 0) / 1000)
-        if seconds >= 0 then
-            ScaleformUI.Scaleforms.BigMessageInstance:ShowMpMessageLarge('Race starts in', tostring(seconds), 1000)
+-- UpdateRaceLeaderboardVisual: handles a focused piece of client race logic to keep behavior modular and maintainable.
+function RacingSystem.Client.Util.UpdateRaceLeaderboardVisual(title, rows)
+    raceLeaderboardVisualState.title = tostring(title or 'LEADERBOARD')
+    local previousByKey = {}
+    for _, existing in ipairs(type(raceLeaderboardVisualState.rows) == 'table' and raceLeaderboardVisualState.rows or {}) do
+        if type(existing) == 'table' then
+            previousByKey[tostring(existing.key or '')] = existing
         end
     end
+
+    local finalizedByKey = type(raceLeaderboardVisualState.finalizedByKey) == 'table' and raceLeaderboardVisualState.finalizedByKey or {}
+    raceLeaderboardVisualState.finalizedByKey = finalizedByKey
+    raceLeaderboardVisualState.rows = {}
+
+    for index, row in ipairs(type(rows) == 'table' and rows or {}) do
+        local rowKey = tostring((type(row) == 'table' and row.key) or index)
+        local incomingFinalized = type(row) == 'table' and row.finalized == true
+        local wasFinalized = finalizedByKey[rowKey] == true
+        local shouldFinalize = incomingFinalized or wasFinalized
+        local previous = previousByKey[rowKey]
+
+        if shouldFinalize then
+            finalizedByKey[rowKey] = true
+        end
+
+        local resolvedRank = math.max(1, math.floor(tonumber(type(row) == 'table' and row.rank) or index))
+        if shouldFinalize and type(previous) == 'table' and tonumber(previous.rank) then
+            resolvedRank = math.max(1, math.floor(tonumber(previous.rank) or resolvedRank))
+        end
+
+        local resolvedText = tostring((type(row) == 'table' and row.text) or '')
+        if shouldFinalize and type(previous) == 'table' and type(previous.text) == 'string' and previous.text ~= '' then
+            resolvedText = previous.text
+        end
+
+        raceLeaderboardVisualState.rows[index] = {
+            key = rowKey,
+            text = resolvedText,
+            rank = resolvedRank,
+            finalized = shouldFinalize,
+        }
+    end
 end
 
-if type(RacingSystem.Client.Util.ClearCountdownVisual) ~= 'function' then
-    RacingSystem.Client.Util.ClearCountdownVisual = function()
-        ScaleformUI.Scaleforms.BigMessageInstance:Dispose()
+-- DrawRaceLeaderboardVisual: handles a focused piece of client race logic to keep behavior modular and maintainable.
+function RacingSystem.Client.Util.DrawRaceLeaderboardVisual()
+    local rows = type(raceLeaderboardVisualState.rows) == 'table' and raceLeaderboardVisualState.rows or {}
+    if #rows <= 0 then
+        return
     end
+
+    local bodyLeftX = 0.03
+    local bodyY = 0.39
+    local rowTextScale = 0.27
+    local bodyWidth = 0.22
+    local baseX = bodyLeftX + (bodyWidth * 0.5)
+    local rowHeight = 0.024
+    local bodyHeight = math.max(0.028, math.min(0.30, (#rows * rowHeight) + 0.012))
+
+    DrawRect(baseX, bodyY, bodyWidth, bodyHeight, 12, 16, 26, 140)
+
+    local firstRowY = bodyY - (bodyHeight * 0.5) + (rowHeight * 0.5) + 0.002
+    local textLeftX = bodyLeftX + 0.008
+    for index, row in ipairs(rows) do
+        local y = firstRowY + ((index - 1) * rowHeight)
+        if y > 0.95 then
+            break
+        end
+
+        local rank = math.max(1, math.floor(tonumber((row or {}).rank) or index))
+        local isFinalized = type(row) == 'table' and row.finalized == true
+        local textR, textG, textB, textA = 235, 240, 255, 225
+        if isFinalized then
+            if rank == 1 then
+                textR, textG, textB, textA = 255, 215, 0, 240
+            elseif rank == 2 then
+                textR, textG, textB, textA = 192, 192, 192, 240
+            elseif rank == 3 then
+                textR, textG, textB, textA = 205, 127, 50, 240
+            else
+                textR, textG, textB, textA = 80, 160, 255, 235
+            end
+        end
+
+        drawLeaderboardText(textLeftX, y - 0.004, rowTextScale, row.text, textR, textG, textB, textA, false)
+    end
+end
+
+-- ClearRaceLeaderboardVisual: handles a focused piece of client race logic to keep behavior modular and maintainable.
+function RacingSystem.Client.Util.ClearRaceLeaderboardVisual()
+    raceLeaderboardVisualState.rows = {}
+    raceLeaderboardVisualState.finalizedByKey = {}
 end
