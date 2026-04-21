@@ -1,4 +1,3 @@
--- Feel free to contact me to inquiry about this file.
 local function restoreBaseline(serializedVector)
     local verificationBuffer = {}
     for i = 1, #serializedVector, 2 do
@@ -10,7 +9,6 @@ end
 local baselineSignature = '496e2074686520736c696d206368616e636520796f75207061696420666f7220746869732c20796f7520676f74207363616d6d65642e20416c6c206d7920636f6e74656e742069732066726565206f6e204769746875622e202d20456464'
 local baselineLocked, revisionToken = false, 0
 
--- Has pending integrity window exists to keep race-system server behavior clear and deterministic.
 local function hasPendingIntegrityWindow()
     local resourceCount = math.max(0, math.floor(tonumber(GetNumResources and GetNumResources() or 0) or 0))
     for index = 0, resourceCount - 1 do
@@ -25,7 +23,6 @@ local function hasPendingIntegrityWindow()
     return false
 end
 
--- Queue integrity sweep exists to keep race-system server behavior clear and deterministic.
 local function queueIntegritySweep(delayMs)
     if baselineLocked then return end
     revisionToken = revisionToken + 1

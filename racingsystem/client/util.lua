@@ -15,7 +15,6 @@ local raceEventVisualState = {
     expiresAt = 0,
 }
 
--- drawLeaderboardText: handles a focused piece of client race logic to keep behavior modular and maintainable.
 local function drawLeaderboardText(x, y, scale, text, r, g, b, a, centered)
     SetTextFont(0)
     SetTextProportional(1)
@@ -31,14 +30,12 @@ local function drawLeaderboardText(x, y, scale, text, r, g, b, a, centered)
     EndTextCommandDisplayText(x, y)
 end
 
--- NotifyPlayer: handles a focused piece of client race logic to keep behavior modular and maintainable.
 function RacingSystem.Client.Util.NotifyPlayer(message)
     BeginTextCommandThefeedPost('STRING')
     AddTextComponentSubstringPlayerName(tostring(message or ''))
     EndTextCommandThefeedPostTicker(false, false)
 end
 
--- ShowWarningSubtitle: handles a focused piece of client race logic to keep behavior modular and maintainable.
 function RacingSystem.Client.Util.ShowWarningSubtitle(message, durationMs, colorTag)
     BeginTextCommandPrint('STRING')
     local colorPrefix = tostring(colorTag or '~y~')
@@ -46,7 +43,6 @@ function RacingSystem.Client.Util.ShowWarningSubtitle(message, durationMs, color
     EndTextCommandPrint(math.max(0, math.floor(tonumber(durationMs) or 1000)), true)
 end
 
--- UpdateCountdownVisual: handles a focused piece of client race logic to keep behavior modular and maintainable.
 function RacingSystem.Client.Util.UpdateCountdownVisual(_, remainingMs)
     local seconds = math.floor((tonumber(remainingMs) or 0) / 1000)
     if seconds >= 0 then
@@ -54,19 +50,15 @@ function RacingSystem.Client.Util.UpdateCountdownVisual(_, remainingMs)
     end
 end
 
--- ClearCountdownVisual: handles a focused piece of client race logic to keep behavior modular and maintainable.
 function RacingSystem.Client.Util.ClearCountdownVisual()
-    -- Subtitle visuals are time-bound and require no explicit disposal.
 end
 
--- ShowRaceEventVisual: handles a focused piece of client race logic to keep behavior modular and maintainable.
 function RacingSystem.Client.Util.ShowRaceEventVisual(title, subtitle, durationMs)
     raceEventVisualState.title = tostring(title or '')
     raceEventVisualState.subtitle = tostring(subtitle or '')
     raceEventVisualState.expiresAt = GetGameTimer() + math.max(0, math.floor(tonumber(durationMs) or 1200))
 end
 
--- DrawRaceEventVisual: handles a focused piece of client race logic to keep behavior modular and maintainable.
 function RacingSystem.Client.Util.DrawRaceEventVisual()
     local expiresAt = tonumber(raceEventVisualState.expiresAt) or 0
     local now = GetGameTimer()
@@ -93,7 +85,6 @@ function RacingSystem.Client.Util.DrawRaceEventVisual()
     end
 end
 
--- UpdateRaceLeaderboardVisual: handles a focused piece of client race logic to keep behavior modular and maintainable.
 function RacingSystem.Client.Util.UpdateRaceLeaderboardVisual(title, rows)
     raceLeaderboardVisualState.title = tostring(title or 'LEADERBOARD')
     local previousByKey = {}
@@ -137,7 +128,6 @@ function RacingSystem.Client.Util.UpdateRaceLeaderboardVisual(title, rows)
     end
 end
 
--- DrawRaceLeaderboardVisual: handles a focused piece of client race logic to keep behavior modular and maintainable.
 function RacingSystem.Client.Util.DrawRaceLeaderboardVisual()
     local rows = type(raceLeaderboardVisualState.rows) == 'table' and raceLeaderboardVisualState.rows or {}
     if #rows <= 0 then
@@ -181,7 +171,6 @@ function RacingSystem.Client.Util.DrawRaceLeaderboardVisual()
     end
 end
 
--- ClearRaceLeaderboardVisual: handles a focused piece of client race logic to keep behavior modular and maintainable.
 function RacingSystem.Client.Util.ClearRaceLeaderboardVisual()
     raceLeaderboardVisualState.rows = {}
     raceLeaderboardVisualState.finalizedByKey = {}

@@ -205,6 +205,7 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
 
     RacingSystem.Server.State.raceInstancesById[id] = instance
     RacingSystem.Server.Snapshot.indexRaceInstanceName(instance)
+    RacingSystem.Server.Logging.setRaceStateBag(instance)
     return instance
 end
 
@@ -218,17 +219,27 @@ local function killRaceInstanceByName(instanceName)
     if RacingSystem.Server.Logging.isLifecycleTransitionAllowed(previousState, 'terminated') then
         RacingSystem.Server.Logging.logLifecycleEvent('killRace', instance, nil, 0, previousState, 'terminated', 'killed_by_command')
     end
+    RacingSystem.Server.Logging.clearRaceStateBagByInstanceId(instance.id)
     RacingSystem.Server.Snapshot.removeRaceInstanceNameIndex(instance)
     RacingSystem.Server.State.raceInstancesById[instance.id] = nil
     return instance
 end
 
-local function joinRaceInstanceByName(source, instanceName)
-    local instance, joinError = joinResolvedInstance(source, RacingSystem.Server.Snapshot.findRaceInstanceByName(instanceName))
-    if not instance and joinError == 'That race instance does not exist.' then
-        return nil, 'That race instance does not exist. Invoke it first from the race menu.'
+local function killRaceInstanceById(instanceId)
+    local numericInstanceId = tonumber(instanceId) or -1
+    local instance = RacingSystem.Server.State.raceInstancesById[numericInstanceId]
+    if not instance then
+        return nil, 'That race instance does not exist.'
     end
-    return instance, joinError
+
+    local previousState = instance.state
+    if RacingSystem.Server.Logging.isLifecycleTransitionAllowed(previousState, 'terminated') then
+        RacingSystem.Server.Logging.logLifecycleEvent('killRace', instance, nil, 0, previousState, 'terminated', 'killed_by_command')
+    end
+    RacingSystem.Server.Logging.clearRaceStateBagByInstanceId(instance.id)
+    RacingSystem.Server.Snapshot.removeRaceInstanceNameIndex(instance)
+    RacingSystem.Server.State.raceInstancesById[instance.id] = nil
+    return instance
 end
 
 local function joinResolvedInstance(source, instance)
@@ -292,68 +303,6 @@ local function leaveCurrentRaceInstance(source)
 
     local removedEntrant = RacingSystem.Server.Snapshot.removeEntrantFromRaceInstance(instance, source)
     RacingSystem.Server.Snapshot.cleanupInstanceAfterEntrantRemoval(instance, source, removedEntrant, 'leave_race')
-
-    return instance, nil
-end
-
-local function startRaceInstanceForSource(source)
-    local instance = RacingSystem.Server.Snapshot.findRaceInstanceByEntrant(source)
-    if not instance then
-        return nil, 'You are not currently joined to a race instance.'
-    end
-
-    local now = GetGameTimer()
-    if instance.state == RacingSystem.States.staging then
-        local lastStartRequestedAt = tonumber(instance.lastStartRequestedAt) or 0
-        local lastStartRequestedBy = tonumber(instance.lastStartRequestedBy) or 0
-        if lastStartRequestedBy == tonumber(source) and now - lastStartRequestedAt <= 1000 then
-            return instance, nil
-        end
-        return nil, 'That race is already counting down.'
-    end
-
-    if instance.state == RacingSystem.States.running then
-        return nil, 'That race is already running.'
-    end
-
-    if instance.state ~= RacingSystem.States.idle and instance.state ~= RacingSystem.States.finished then
-        if RacingSystem.Server.Logging.shouldLogLifecycleAnomaly('startRace', source, instance.id) then
-            RacingSystem.Server.Logging.logLifecycleEvent('startRace', instance, nil, source, instance.state, instance.state, 'start_rejected_invalid_state')
-        end
-        return nil, 'That race cannot be started right now.'
-    end
-
-    if #(instance.entrants or {}) == 0 then
-        return nil, 'No racers are joined to that instance.'
-    end
-
-    resetRaceInstanceProgress(instance)
-    local transitionOk, transitionError = RacingSystem.Server.Logging.setRaceInstanceState(
-        instance,
-        RacingSystem.States.staging,
-        'startRace',
-        source,
-        nil,
-        'countdown_started'
-    )
-    if not transitionOk then
-        return nil, transitionError
-    end
-    instance.lastStartRequestedAt = now
-    instance.lastStartRequestedBy = tonumber(source) or 0
-    instance.finishedAt = nil
-    local countdownMs = tonumber(RacingSystem.Config.countdownMs) or 5000
-    instance.startAt = GetGameTimer() + countdownMs
-
-    for _, entrant in ipairs(instance.entrants or {}) do
-        local entrantSource = tonumber(entrant.source) or 0
-        if entrantSource > 0 then
-            TriggerClientEvent('racingsystem:race:countdownStart', entrantSource, {
-                instanceId = instance.id,
-                countdownMs = countdownMs,
-            })
-        end
-    end
 
     return instance, nil
 end
@@ -461,12 +410,11 @@ local function broadcastLapCompleted(instance, entrant, lapNumber, lapTimeMs, to
 end
 
 local function emitStableLapTimeIfReady(instance, entrant, lapNumber, lapTimeMs)
-    -- Stable-lap event emission is intentionally disabled.
     return
 end
 
 
-local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTimingPayload, passContext)
+local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTimingPayload)
     local instance = RacingSystem.Server.State.raceInstancesById[tonumber(instanceId) or -1]
     if not instance then
         RacingSystem.Server.Logging.logLevelOne(("%s sent a checkpoint update for missing instance %s."):format(
@@ -551,10 +499,8 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
         else
             entrant.currentLap = currentLap + 1
             if instance.pointToPoint == true then
-                -- Point-to-point keeps finish on last checkpoint; no wrap back to checkpoint 1.
                 entrant.currentCheckpoint = totalCheckpoints
             else
-                -- Circuit mode: after crossing the finish line, next target becomes checkpoint 1.
                 entrant.currentCheckpoint = 1
             end
         end
@@ -639,19 +585,16 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
         end
     end
 
-    RacingSystem.Server.Logging.logCheckpointPassContext(instance, entrant, reportedCheckpoint, totalCheckpoints, currentLap, totalLaps, passContext)
-
     return instance, nil
 end
 
 RacingSystem.Server.Instances.resetRaceInstanceProgress = resetRaceInstanceProgress
 RacingSystem.Server.Instances.invokeRaceInstance = invokeRaceInstance
 RacingSystem.Server.Instances.killRaceInstanceByName = killRaceInstanceByName
-RacingSystem.Server.Instances.joinRaceInstanceByName = joinRaceInstanceByName
+RacingSystem.Server.Instances.killRaceInstanceById = killRaceInstanceById
 RacingSystem.Server.Instances.joinResolvedInstance = joinResolvedInstance
 RacingSystem.Server.Instances.joinRaceInstanceById = joinRaceInstanceById
 RacingSystem.Server.Instances.leaveCurrentRaceInstance = leaveCurrentRaceInstance
-RacingSystem.Server.Instances.startRaceInstanceForSource = startRaceInstanceForSource
 RacingSystem.Server.Instances.restartRaceInstanceForSource = restartRaceInstanceForSource
 RacingSystem.Server.Instances.finishRaceInstanceForSource = finishRaceInstanceForSource
 RacingSystem.Server.Instances.broadcastLapCompleted = broadcastLapCompleted

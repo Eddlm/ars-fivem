@@ -127,8 +127,25 @@ local function setRaceInstanceState(instance, nextState, eventName, source, entr
     end
 
     instance.state = targetState
+    if type(GlobalState) == 'table' then
+        GlobalState[('rs:raceState:%s'):format(tostring(tonumber(instance.id) or -1))] = targetState
+    end
     logLifecycleEvent(eventName, instance, entrant, source, currentState, targetState, reason or 'state_transition')
     return true
+end
+
+local function setRaceStateBag(instance)
+    if type(instance) ~= 'table' or type(GlobalState) ~= 'table' then
+        return
+    end
+    GlobalState[('rs:raceState:%s'):format(tostring(tonumber(instance.id) or -1))] = tostring(instance.state or RacingSystem.States.idle)
+end
+
+local function clearRaceStateBagByInstanceId(instanceId)
+    if type(GlobalState) ~= 'table' then
+        return
+    end
+    GlobalState[('rs:raceState:%s'):format(tostring(tonumber(instanceId) or -1))] = nil
 end
 
 local function resolvePlayerLogLabel(sourceId)
@@ -266,6 +283,8 @@ RacingSystem.Server.Logging.logLifecycleEvent = logLifecycleEvent
 RacingSystem.Server.Logging.buildEntrantId = buildEntrantId
 RacingSystem.Server.Logging.isLifecycleTransitionAllowed = isLifecycleTransitionAllowed
 RacingSystem.Server.Logging.setRaceInstanceState = setRaceInstanceState
+RacingSystem.Server.Logging.setRaceStateBag = setRaceStateBag
+RacingSystem.Server.Logging.clearRaceStateBagByInstanceId = clearRaceStateBagByInstanceId
 RacingSystem.Server.Logging.resolvePlayerLogLabel = resolvePlayerLogLabel
 RacingSystem.Server.Logging.resolveReadablePlayerName = resolveReadablePlayerName
 RacingSystem.Server.Logging.logCheckpointPassContext = logCheckpointPassContext

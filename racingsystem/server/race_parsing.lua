@@ -211,7 +211,7 @@ local function buildSavedRaceSnapshot(definition)
         owner = definition.owner,
         state = definition.state or RacingSystem.States.idle,
         createdAt = definition.createdAt or os.time(),
-        checkpoints = cloneCheckpoints(definition.checkpoints),
+        checkpoints = RacingSystem.Server.Catalog.cloneCheckpoints(definition.checkpoints),
         entrants = {},
     }
 end
@@ -401,7 +401,6 @@ local function buildUGCJsonUrlCandidates(ugcId)
         appendLanguage(language)
     end
 
-    -- Some jobs may expose only a generic file name.
     for _, titleId in ipairs(titleIds) do
         if not genericInserted[titleId] then
             candidates[#candidates + 1] = ('https://prod.cloud.rockstargames.com/ugc/gta5mission/%s/%s/0_0.json'):format(titleId, ugcId)

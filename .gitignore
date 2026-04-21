@@ -8,6 +8,7 @@ natives.txt
 Thumbs.db
 vehiclemanager/savedvehicles/*.json
 racingsystem/race_index.json
+racingsystem/CustomRaces/test.json
 CLAUDE.md
 AGENTS.md
 

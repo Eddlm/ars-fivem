@@ -211,11 +211,9 @@ local function getRaceStartCheckpoint(instance)
     end
 
     if type(instance) == 'table' and instance.pointToPoint == true then
-        -- Point-to-point races start on the first checkpoint.
         return 1
     end
 
-    -- Coherency rule: start line is always the final checkpoint in the route.
     return checkpointCount
 end
 
@@ -225,7 +223,6 @@ local function getLapTriggerCheckpoint(instance, totalCheckpoints, totalLaps)
         return 1
     end
 
-    -- Coherency rule: finish/lap trigger is always the final checkpoint.
     return checkpointCount
 end
 
@@ -244,10 +241,8 @@ local function getPreRaceExpectedCheckpoint(instance)
     local checkpointCount = math.max(1, #checkpoints)
     local startCheckpoint = getRaceStartCheckpoint(instance)
     if type(instance) == 'table' and instance.pointToPoint == true then
-        -- Point-to-point races expect the starting checkpoint first.
         return startCheckpoint
     end
-    -- Spawn can stay on start/finish, but expected pass must be the next checkpoint.
     return getNextCheckpointIndex(checkpointCount, startCheckpoint)
 end
 
@@ -412,8 +407,24 @@ local function buildInstanceStandingsPayload(instance)
 end
 
 local function broadcastInstanceStandings(instance)
-    -- Snapshot/payload standings channel disabled during rewrite.
-    local _ = instance
+    if type(instance) ~= 'table' then
+        return
+    end
+
+    local orderedEntrants = buildOrderedEntrants(instance)
+    for _, entrant in ipairs(orderedEntrants) do
+        local entrantSource = tonumber(entrant.source) or 0
+        if entrantSource > 0 then
+            local player = Player(entrantSource)
+            if player and player.state then
+                player.state['rs:position'] = tonumber(entrant.position) or nil
+                player.state['rs:currentLap'] = tonumber(entrant.currentLap) or 1
+                player.state['rs:currentCheckpoint'] = tonumber(entrant.currentCheckpoint) or 1
+                player.state['rs:finishedAt'] = tonumber(entrant.finishedAt) or nil
+            end
+        end
+    end
+
     return
 end
 
@@ -462,7 +473,6 @@ local function canJoinMidRace(instance)
         return false, 'Race has no checkpoints.'
     end
 
-    -- Use instance-specific late join limit if set, otherwise fall back to global config
     local limitPercent = tonumber(instance.lateJoinProgressLimitPercent)
     if not limitPercent or limitPercent < 0 or limitPercent > 100 then
         limitPercent = math.max(0, math.min(100, tonumber(RacingSystem.Config.lateJoinProgressLimitPercent) or 50))
@@ -617,7 +627,6 @@ local function getInstanceStaticSignature(instance)
 end
 
 local function sendDefinitions(target)
-    -- Snapshot/payload definitions channel disabled during rewrite.
     local _ = target
     return
 end
@@ -627,7 +636,6 @@ local function broadcastDefinitions()
 end
 
 local function sendInstanceList(target)
-    -- Snapshot/payload instance-list channel disabled during rewrite.
     local _ = target
     return
 end
@@ -637,7 +645,6 @@ local function broadcastInstanceList()
 end
 
 local function sendInstanceDelta(target, instance)
-    -- Snapshot/payload delta channel disabled during rewrite.
     local _, _instance = target, instance
     return
 end
@@ -648,7 +655,6 @@ local function broadcastInstanceDelta(instance)
 end
 
 local function sendInstanceStaticIfChanged(target, instance, force)
-    -- Snapshot/payload static channel disabled during rewrite.
     local _, _, _force = target, instance, force
     return
 end
@@ -816,6 +822,7 @@ local function cleanupInstanceAfterEntrantRemoval(instance, source, removedEntra
         if RacingSystem.Server.Logging.isLifecycleTransitionAllowed(previousState, 'terminated') then
             RacingSystem.Server.Logging.logLifecycleEvent('terminateRace', instance, removedEntrant, source, previousState, 'terminated', reason or 'empty_after_removal')
         end
+        RacingSystem.Server.Logging.clearRaceStateBagByInstanceId(instance.id)
         removeRaceInstanceNameIndex(instance)
         RacingSystem.Server.State.raceInstancesById[instance.id] = nil
         RacingSystem.Server.State.reliabilityCounters.emptyInstanceAutoDestroyed = RacingSystem.Server.State.reliabilityCounters.emptyInstanceAutoDestroyed + 1

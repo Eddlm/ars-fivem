@@ -77,7 +77,6 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
         }
     end
 
-    -- Fast path: exact file token lookup first (important for UGC id based files).
     local requestedToken = RacingSystem.Trim(raceName)
     local requestedSlug = RacingSystem.Server.Parsing.sanitizeOnlineRaceFileName(requestedToken)
     local requestedUGCId = RacingSystem.Server.Parsing.sanitizeUGCId(requestedToken)
@@ -204,7 +203,6 @@ local function saveBundledUGCById(ugcId)
         return nil, fetchError or 'Could not download the UGC JSON.'
     end
 
-    -- Write the downloaded JSON to disk first, then parse it through the same loader path.
     local tempFilePath = ('%s/.tmp_%s.tmp'):format(RacingSystem.Server.State.onlineRaceFolder, normalizedUGCId)
     local function cleanupTempFile()
         local resourcePath = GetResourcePath(RacingSystem.Server.State.resourceName)
@@ -439,7 +437,6 @@ local function createNewRaceDefinition(ownerSource, raceName)
 
     local filePath = RacingSystem.Server.Parsing.buildCustomRaceFilePath(fileName)
 
-    -- Create empty mission JSON structure
     local missionJson = RacingSystem.Server.Parsing.buildMissionJsonFromCheckpoints({}, nil, sanitizedName)
     local saveOk = SaveResourceFile(RacingSystem.Server.State.resourceName, filePath, missionJson, -1)
     if not saveOk then
@@ -468,7 +465,7 @@ local function saveRaceDefinition(ownerSource, raceName, checkpoints)
         return nil, 'Race name is required.'
     end
 
-    local sanitizedCheckpoints = sanitizeCheckpointList(checkpoints)
+    local sanitizedCheckpoints = RacingSystem.Server.Parsing.sanitizeCheckpointList(checkpoints)
     if #sanitizedCheckpoints == 0 then
         return nil, 'At least one checkpoint is required.'
     end

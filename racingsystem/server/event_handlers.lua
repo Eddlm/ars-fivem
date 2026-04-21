@@ -1,6 +1,86 @@
 RacingSystem = RacingSystem or {}
 RacingSystem.Server = RacingSystem.Server or {}
 
+local function setRaceMembershipStateBagForSource(source, instance)
+    local src = tonumber(source) or 0
+    if src <= 0 or type(instance) ~= 'table' then
+        return
+    end
+
+    local player = Player(src)
+    if not player or type(player.state) ~= 'table' then
+        return
+    end
+
+    local entrant = RacingSystem.Server.Snapshot.findEntrantInRaceInstance(instance, src)
+    player.state['rs:instanceId'] = tonumber(instance.id) or -1
+    player.state['rs:entrantId'] = tostring(type(entrant) == 'table' and entrant.entrantId or '')
+end
+
+local function clearRaceMembershipStateBagForSource(source)
+    local src = tonumber(source) or 0
+    if src <= 0 then
+        return
+    end
+
+    local player = Player(src)
+    if not player or type(player.state) ~= 'table' then
+        return
+    end
+
+    player.state['rs:instanceId'] = nil
+    player.state['rs:entrantId'] = nil
+    player.state['rs:position'] = nil
+    player.state['rs:currentLap'] = nil
+    player.state['rs:currentCheckpoint'] = nil
+    player.state['rs:finishedAt'] = nil
+end
+
+local function syncAdminStateBagForSource(source)
+    local numericSource = tonumber(source) or 0
+    if numericSource <= 0 then
+        return
+    end
+
+    local player = Player(numericSource)
+    if not player or not player.state then
+        return
+    end
+
+    player.state['rs:isAdmin'] = RacingSystem.Server.Logging.hasAdminAccess(numericSource) == true
+end
+
+local function clearAllRacingSystemStateBags()
+    for _, playerSource in ipairs(GetPlayers()) do
+        clearRaceMembershipStateBagForSource(playerSource)
+        local player = Player(tonumber(playerSource) or 0)
+        if player and player.state then
+            player.state['rs:isAdmin'] = nil
+        end
+    end
+
+    if type(GlobalState) == 'table' then
+        for key, _ in pairs(GlobalState) do
+            if type(key) == 'string' and key:sub(1, 13) == 'rs:raceState:' then
+                GlobalState[key] = nil
+            end
+        end
+    end
+end
+
+local function sendRaceInfoToSource(targetSource, instance)
+    local target = tonumber(targetSource) or 0
+    if target <= 0 or type(instance) ~= 'table' then
+        return
+    end
+
+    local payload = RacingSystem.Server.Snapshot.buildRaceInstanceSnapshot(instance)
+    if type(payload) ~= 'table' then
+        return
+    end
+    TriggerClientEvent('racingsystem:race:getRaceInfo', target, payload)
+end
+
 RegisterNetEvent('racingsystem:state:request', function()
     RacingSystem.Server.Snapshot.sendInitialState(source)
 end)
@@ -9,7 +89,6 @@ RegisterNetEvent('racingsystem:editor:load', function(raceName)
     local src = source
     local definition = nil
 
-    -- Always try to load the full race data from disk first
     local customDefinition = RacingSystem.Server.Repository.loadCustomRace(raceName)
     if customDefinition then
         definition = customDefinition
@@ -25,7 +104,6 @@ RegisterNetEvent('racingsystem:editor:load', function(raceName)
     end
 
     if not definition then
-        -- New race: create and save empty file to CustomRaces
         definition = RacingSystem.Server.Repository.createNewRaceDefinition(src, raceName)
         if not definition then
             RacingSystem.Server.Logging.logError(('[requestEditorRace] Failed to create new race "%s"'):format(raceName))
@@ -41,7 +119,6 @@ RegisterNetEvent('racingsystem:editor:load', function(raceName)
         end
         RacingSystem.Server.Logging.logVerbose(('[requestEditorRace] Created new race "%s"'):format(raceName))
     else
-        -- Ensure the definition is registered
         if definition.name then
             RacingSystem.Server.Catalog.registerKnownRaceDefinition(
                 definition.name,
@@ -241,24 +318,33 @@ RegisterNetEvent('racingsystem:race:invoke', function(payload, lapCount)
     local invokePayload = payload
     local raceName = type(payload) == 'table' and (payload.lookupName or payload.name) or payload
     local src = source
-    if type(payload) == 'table' then
-        RacingSystem.Server.Logging.logVerbose(("[invoke:event] %s payload name='%s' lookupName='%s' sourceType='%s' raceId='%s' laps=%s"):format(
-            RacingSystem.Server.Logging.resolvePlayerLogLabel(src),
-            tostring(payload.name or ''),
-            tostring(payload.lookupName or ''),
-            tostring(payload.sourceType or ''),
-            tostring(payload.raceId or ''),
-            tostring(lapCount)
-        ))
-    else
-        RacingSystem.Server.Logging.logVerbose(("[invoke:event] %s payload scalar raceName='%s' laps=%s"):format(
-            RacingSystem.Server.Logging.resolvePlayerLogLabel(src),
-            tostring(raceName),
-            tostring(lapCount)
+    if GetConvarInt('rSystemExtraPrints', 0) >= 2 then
+        local payloadTable = type(payload) == 'table' and payload or {}
+        local raceName = tostring(payloadTable.name or payloadTable.lookupName or payload or 'unknown race')
+        local lookupName = tostring(payloadTable.lookupName or 'nil')
+        local sourceType = tostring(payloadTable.sourceType or 'nil')
+        local raceId = tostring(payloadTable.raceId or 'nil')
+        local trafficMode = tostring(payloadTable.trafficMode or 'nil')
+        local trafficDensity = tonumber(payloadTable.trafficDensity)
+        local trafficLabel = trafficDensity and ('%.2f'):format(trafficDensity) or 'nil'
+        local lateJoinLimit = tonumber(payloadTable.lateJoinProgressLimitPercent)
+        local lateJoinLabel = lateJoinLimit and ('%.0f%%'):format(lateJoinLimit) or 'nil'
+        local lapsLabel = tostring(tonumber(lapCount) or 0)
+        local playerName = GetPlayerName(src) or ('player %s'):format(tostring(src))
+        print(('[racingsystem] %s invoked %s with %s lap(s). lookup=%s sourceType=%s raceId=%s trafficMode=%s trafficDensity=%s lateJoin=%s'):format(
+            playerName,
+            raceName,
+            lapsLabel,
+            lookupName,
+            sourceType,
+            raceId,
+            trafficMode,
+            trafficLabel,
+            lateJoinLabel
         ))
     end
-    local instance, invokeError = RacingSystem.Server.Instances.invokeRaceInstance(src, invokePayload, lapCount)
 
+    local instance, invokeError = RacingSystem.Server.Instances.invokeRaceInstance(src, invokePayload, lapCount)
     if not instance then
         RacingSystem.Server.Logging.logLevelOne(("%s could not invoke race '%s'. Reason: %s."):format(
             RacingSystem.Server.Logging.resolvePlayerLogLabel(src),
@@ -280,41 +366,8 @@ RegisterNetEvent('racingsystem:race:invoke', function(payload, lapCount)
     RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
     RacingSystem.Server.Snapshot.sendInstanceStaticIfChanged(src, instance, true)
     RacingSystem.Server.Snapshot.sendTeleportToLastCheckpoint(src, instance)
-end)
-
-RegisterNetEvent('racingsystem:race:joinByName', function(raceName)
-    local src = source
-    local instance, joinError = RacingSystem.Server.Instances.joinRaceInstanceByName(src, raceName)
-
-    if not instance then
-        RacingSystem.Server.Logging.logLevelOne(("%s could not join race '%s'. Reason: %s."):format(
-            RacingSystem.Server.Logging.resolvePlayerLogLabel(src),
-            tostring(raceName),
-            tostring(joinError or 'unknown error')
-        ))
-        RacingSystem.Server.Logging.notifyPlayer(src, joinError or 'Could not join race.', true)
-        return
-    end
-
-    RacingSystem.Server.Logging.auditLog("joinRace", src, ("joined race '%s' (instance %s). Entrants now: %s"):format(
-        tostring(instance.name or raceName),
-        tostring(instance.id),
-        tostring(#(instance.entrants or {}))
-    ))
-    RacingSystem.Server.Snapshot.broadcastInstanceList()
-    RacingSystem.Server.Snapshot.broadcastInstanceDelta(instance)
-    RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
-    RacingSystem.Server.Snapshot.sendInstanceStaticIfChanged(src, instance, true)
-
-    -- For mid-race joins, teleport to the current checkpoint; otherwise use default start teleport
-    if instance.state == RacingSystem.States.running then
-        local joiningEntrant = instance.entrants[#instance.entrants]
-        if joiningEntrant then
-            RacingSystem.Server.Snapshot.sendTeleportToCheckpoint(src, instance, joiningEntrant.currentCheckpoint)
-        end
-    else
-        RacingSystem.Server.Snapshot.sendTeleportToLastCheckpoint(src, instance)
-    end
+    sendRaceInfoToSource(src, instance)
+    setRaceMembershipStateBagForSource(src, instance)
 end)
 
 RegisterNetEvent('racingsystem:race:joinById', function(instanceId)
@@ -340,8 +393,9 @@ RegisterNetEvent('racingsystem:race:joinById', function(instanceId)
     RacingSystem.Server.Snapshot.broadcastInstanceDelta(instance)
     RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
     RacingSystem.Server.Snapshot.sendInstanceStaticIfChanged(src, instance, true)
+    sendRaceInfoToSource(src, instance)
+    setRaceMembershipStateBagForSource(src, instance)
 
-    -- For mid-race joins, teleport to the current checkpoint; otherwise use default start teleport
     if instance.state == RacingSystem.States.running then
         local joiningEntrant = instance.entrants[#instance.entrants]
         if joiningEntrant then
@@ -354,23 +408,43 @@ end)
 
 RegisterNetEvent('racingsystem:race:start', function()
     local src = source
-    local instance, startError = RacingSystem.Server.Instances.startRaceInstanceForSource(src)
+    local numericSource = tonumber(src) or 0
+    local player = numericSource > 0 and Player(numericSource) or nil
+    local state = player and player.state or nil
+    local stateInstanceId = state and tonumber(state['rs:instanceId']) or nil
+    local instance = stateInstanceId and RacingSystem.Server.State.raceInstancesById[stateInstanceId] or nil
 
     if not instance then
-        RacingSystem.Server.Logging.logLevelOne(("%s could not start the race. Reason: %s."):format(
-            RacingSystem.Server.Logging.resolvePlayerLogLabel(src),
-            tostring(startError or 'unknown error')
-        ))
-        RacingSystem.Server.Logging.notifyPlayer(src, startError or 'Could not start race.', true)
         return
     end
 
-    RacingSystem.Server.Logging.auditLog("startRace", src, ("started race '%s' (instance %s) with %s entrants. Countdown: %sms"):format(
-        tostring(instance.name or 'unknown'),
-        tostring(instance.id),
-        tostring(#(instance.entrants or {})),
-        tostring(tonumber((RacingSystem.Config or {}).countdownMs) or 5000)
-    ))
+    if instance.state ~= RacingSystem.States.idle and instance.state ~= RacingSystem.States.finished then
+        return
+    end
+
+    if #(instance.entrants or {}) == 0 then
+        return
+    end
+
+    RacingSystem.Server.Instances.resetRaceInstanceProgress(instance)
+    local transitionOk = RacingSystem.Server.Logging.setRaceInstanceState(
+        instance,
+        RacingSystem.States.staging,
+        'startRace',
+        src,
+        nil,
+        'countdown_started'
+    )
+    if not transitionOk then
+        return
+    end
+
+    local countdownMs = tonumber(RacingSystem.Config.countdownMs) or 5000
+    instance.lastStartRequestedAt = GetGameTimer()
+    instance.lastStartRequestedBy = numericSource
+    instance.finishedAt = nil
+    instance.startAt = GetGameTimer() + countdownMs
+
     RacingSystem.Server.Snapshot.broadcastInstanceList()
     RacingSystem.Server.Snapshot.broadcastInstanceDelta(instance)
     RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
@@ -410,9 +484,9 @@ RegisterNetEvent('racingsystem:race:restart', function()
     end
 end)
 
-RegisterNetEvent('racingsystem:race:checkpointPassed', function(instanceId, checkpointIndex, lapTimingPayload, passContext)
+RegisterNetEvent('racingsystem:race:checkpointPassed', function(instanceId, checkpointIndex, lapTimingPayload)
     local src = source
-    local instance, checkpointError = RacingSystem.Server.Instances.handleCheckpointPassed(src, instanceId, checkpointIndex, lapTimingPayload, passContext)
+    local instance, checkpointError = RacingSystem.Server.Instances.handleCheckpointPassed(src, instanceId, checkpointIndex, lapTimingPayload)
 
     if not instance then
         if checkpointError ~= 'Ignored out-of-order checkpoint pass.' then
@@ -489,35 +563,37 @@ RegisterNetEvent('racingsystem:race:leave', function()
         RacingSystem.Server.Snapshot.broadcastInstanceDelta(instance)
         RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
     end
+    clearRaceMembershipStateBagForSource(src)
 end)
 
-RegisterNetEvent('racingsystem:race:kill', function(raceName)
+RegisterNetEvent('racingsystem:race:kill', function(instanceId)
     local src = source
-    local instance = RacingSystem.Server.Snapshot.findRaceInstanceByName(raceName)
-    local ownerKillEnabled = true
-    local ownsRace = instance and tonumber(instance.owner) == tonumber(src)
-    if not RacingSystem.Server.Logging.hasAdminAccess(src) and not (ownerKillEnabled and ownsRace) then
-        RacingSystem.Server.Logging.logLevelOne(("%s tried to kill race '%s' without permission."):format(
-            RacingSystem.Server.Logging.resolvePlayerLogLabel(src),
-            tostring(raceName)
-        ))
-        RacingSystem.Server.Logging.notifyPlayer(src, "You do not have permission to kill race instances.", true)
-        return
-    end
-    local killedInstance, killError = RacingSystem.Server.Instances.killRaceInstanceByName(raceName)
+    local numericInstanceId = tonumber(instanceId) or -1
+    print(("User %s requested kill instance %s"):format(
+        tostring(RacingSystem.Server.Logging.resolvePlayerLogLabel(src)),
+        tostring(numericInstanceId)
+    ))
+    local killedInstance, killError = RacingSystem.Server.Instances.killRaceInstanceById(numericInstanceId)
 
     if not killedInstance then
-        RacingSystem.Server.Logging.logLevelOne(("%s could not kill race '%s'. Reason: %s."):format(
+        RacingSystem.Server.Logging.logLevelOne(("%s could not kill race instance %s. Reason: %s."):format(
             RacingSystem.Server.Logging.resolvePlayerLogLabel(src),
-            tostring(raceName),
+            tostring(numericInstanceId),
             tostring(killError or 'unknown error')
         ))
         RacingSystem.Server.Logging.notifyPlayer(src, killError or 'Could not kill race instance.', true)
         return
     end
 
+    for _, entrant in ipairs(killedInstance.entrants or {}) do
+        local entrantSource = tonumber(entrant.source) or 0
+        if entrantSource > 0 then
+            clearRaceMembershipStateBagForSource(entrantSource)
+        end
+    end
+
     RacingSystem.Server.Logging.auditLog("killRace", src, ("killed race '%s' (instance %s)"):format(
-        tostring(raceName),
+        tostring(killedInstance.name or 'unknown'),
         tostring(killedInstance.id or 'unknown')
     ))
     RacingSystem.Server.Snapshot.broadcastInstanceStandings(killedInstance)
@@ -525,6 +601,7 @@ RegisterNetEvent('racingsystem:race:kill', function(raceName)
 end)
 
 AddEventHandler('playerDropped', function()
+    clearRaceMembershipStateBagForSource(source)
     if RacingSystem.Server.Snapshot.removeEntrantFromAllRaceInstances(source, 'player_dropped') then
         RacingSystem.Server.Logging.auditLog("playerDroppedRaceCleanup", source, "disconnected and was removed from one or more active race instances")
         RacingSystem.Server.Snapshot.broadcastInstanceList()
@@ -534,8 +611,26 @@ end)
 AddEventHandler('playerJoining', function()
     local src = source
     SetTimeout(1000, function()
+        syncAdminStateBagForSource(src)
         RacingSystem.Server.Snapshot.sendInitialState(src)
     end)
+end)
+
+AddEventHandler('onResourceStart', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then
+        return
+    end
+    clearAllRacingSystemStateBags()
+    for _, playerSource in ipairs(GetPlayers()) do
+        syncAdminStateBagForSource(playerSource)
+    end
+end)
+
+AddEventHandler('onResourceStop', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then
+        return
+    end
+    clearAllRacingSystemStateBags()
 end)
 
 
