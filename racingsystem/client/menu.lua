@@ -17,14 +17,17 @@ local CLIENT_EXTRA_PRINT_LEVEL = math.floor(tonumber(MenuConfig.extraPrintLevel)
 local function getClientExtraPrintLevel()
     return CLIENT_EXTRA_PRINT_LEVEL == 2 and 2 or 0
 end
+
 local function logMenuVerbose(message)
     local _ = message
 end
+
 local function notifyPayloadDisabled()
     if RacingSystem.Client and RacingSystem.Client.Util and type(RacingSystem.Client.Util.NotifyPlayer) == 'function' then
         RacingSystem.Client.Util.NotifyPlayer('Snapshot payload system disabled (rewrite pending).')
     end
 end
+
 local function loadAvailableRaceDefinitions()
     local resourceName = GetCurrentResourceName()
     local rawIndex = LoadResourceFile(resourceName, 'race_index.json')
@@ -35,12 +38,14 @@ local function loadAvailableRaceDefinitions()
     local definitions = type(decoded) == 'table' and type(decoded.definitions) == 'table' and decoded.definitions or {}
     return definitions
 end
+
 local function setItemDescriptionRaw(item, text)
     if item == nil then
         return
     end
     item._Description = tostring(text or '')
 end
+
 local function syncMenuCurrentDescription(menu)
     if not menu or type(menu.Visible) ~= 'function' or not menu:Visible() then
         return
@@ -64,6 +69,7 @@ local function isLocalHostForInstance(instance)
     local localSource = tonumber(GetPlayerServerId(PlayerId())) or 0
     return ownerSource ~= nil and ownerSource > 0 and ownerSource == localSource
 end
+
 local function getMenuPlayerState()
     if type(RacingSystem.Client.editorState) == 'table' and RacingSystem.Client.editorState.active then
         return 'editing'
@@ -408,6 +414,7 @@ local function refreshEditExistingRaces()
         end
     end
 end
+
 local function findDefinitionByEditorRaceName(raceName)
     local normalizedRaceName = RacingSystem.NormalizeRaceName(raceName)
     if not normalizedRaceName then
@@ -564,6 +571,7 @@ raceEditorMenu.OnSliderChange = function(menu, item, index)
         end
     end
 end
+
 local function toggleGrabCheckpoint()
     if not editorSessionActive then
         return
@@ -579,6 +587,7 @@ local function toggleGrabCheckpoint()
         logMenuVerbose('No checkpoints available')
     end
 end
+
 CreateThread(function()
     while true do
         Wait(10)
@@ -613,6 +622,7 @@ RacingSystem.Menu.raceMenuInitialized = true
 function RacingSystem.Menu.isRaceMenuVisible()
     return neutralMenu:Visible() or stagingMenu:Visible() or racingMenu:Visible()
 end
+
 local function isRaceControlStackOpen()
     return neutralMenu:Visible()
         or stagingMenu:Visible()
@@ -622,6 +632,7 @@ local function isRaceControlStackOpen()
         or raceEditorMenu:Visible()
         or editExistingSubmenu:Visible()
 end
+
 local function setVisibleStateMenu(playerState)
     if playerState == 'neutral' or playerState == 'editing' then
         neutralMenu:Visible(true)
@@ -631,12 +642,14 @@ local function setVisibleStateMenu(playerState)
         stagingMenu:Visible(true)
     end
 end
+
 function RacingSystem.Menu.applyRaceStageMenu(playerState)
     if not MenuHandler:IsAnyMenuOpen() or not isRaceControlStackOpen() then
         return
     end
     setVisibleStateMenu(playerState)
 end
+
 function RacingSystem.Menu.refreshRaceMenu(ctx)
     if type(ctx) ~= 'table' then
         error('RacingSystem.Menu.refreshRaceMenu(ctx) requires a context table.')
@@ -645,6 +658,7 @@ function RacingSystem.Menu.refreshRaceMenu(ctx)
     restartRaceMenuItem:Enabled(ctx.canRestart == true)
     killRaceMenuItem:Enabled(ctx.canKill == true)
 end
+
 function RacingSystem.Menu.markCountdownAccepted(instanceId)
     local numericInstanceId = tonumber(instanceId)
     if not numericInstanceId then
@@ -652,6 +666,7 @@ function RacingSystem.Menu.markCountdownAccepted(instanceId)
     end
     RacingSystem.Menu.countdownAcceptedByInstanceId[numericInstanceId] = true
 end
+
 function RacingSystem.Menu.clearCountdownAccepted(instanceId)
     local numericInstanceId = tonumber(instanceId)
     if not numericInstanceId then
@@ -659,6 +674,7 @@ function RacingSystem.Menu.clearCountdownAccepted(instanceId)
     end
     RacingSystem.Menu.countdownAcceptedByInstanceId[numericInstanceId] = nil
 end
+
 function RacingSystem.Menu.openRaceMenu()
     if MenuHandler:IsAnyMenuOpen() then
         MenuHandler:CloseAndClearHistory()
@@ -668,17 +684,20 @@ function RacingSystem.Menu.openRaceMenu()
     logMenuVerbose(('openRaceMenu: playerState=%s'):format(playerState))
     setVisibleStateMenu(playerState)
 end
+
 function RacingSystem.Menu.refreshEditorMenu(_)
     logMenuVerbose('refreshEditorMenu called')
     refreshEditExistingRaces()
     local isGrabbed = RacingSystem.Client.editorState and RacingSystem.Client.editorState.grabbedCheckpointIndex ~= nil
     grabCheckpointCheckbox:Checked(isGrabbed)
 end
+
 function RacingSystem.Menu.buildMenuState()
     return {
         editorSessionActive = editorSessionActive,
     }
 end
+
 function RacingSystem.Menu.beginEditorSessionUI()
     logMenuVerbose('beginEditorSessionUI: editor session started')
     editorSessionActive = true
@@ -696,6 +715,7 @@ function RacingSystem.Menu.beginEditorSessionUI()
     syncMenuCurrentDescription(raceEditorMenu)
     logMenuVerbose('beginEditorSessionUI: editor controls now enabled')
 end
+
 function RacingSystem.Menu.endEditorSessionUI()
     logMenuVerbose('endEditorSessionUI: editor session ended')
     editorSessionActive = false
@@ -719,3 +739,4 @@ RegisterCommand('+racemenu', function()
 end, false)
 RegisterCommand('-racemenu', function() end, false)
 RegisterKeyMapping('+racemenu', 'Open race control menu', 'keyboard', 'F7')
+

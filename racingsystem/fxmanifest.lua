@@ -31,6 +31,8 @@ client_scripts {
     'client/util.lua',
     'client/menu.lua',
     'client/client.lua',
+    'client/Teleport.lua',
+    'client/RaceEditor.lua',
     'client/InRace.lua'
 }
 

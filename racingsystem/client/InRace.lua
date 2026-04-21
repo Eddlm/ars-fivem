@@ -2,7 +2,6 @@ RacingSystem = RacingSystem or {}
 RacingSystem.Client = RacingSystem.Client or {}
 RacingSystem.Client.InRace = RacingSystem.Client.InRace or {}
 
-
 local raceRuntimeState = {
     pendingCheckpointPass = nil,
     predictedProgress = nil,
@@ -49,7 +48,6 @@ local localEntrantIdentity = {
 }
 RacingSystem.Client.InRace.localEntrantIdentity = localEntrantIdentity
 
-
 local function getClientAdvancedConfig()
     return (((RacingSystem or {}).Config or {}).advanced or {}).client or {}
 end
@@ -75,7 +73,6 @@ local function ensureConstants()
     LEADERBOARD_CLIENT_TIEBREAK_ENABLED = cfg.leaderboardClientTiebreakEnabled == true
 end
 
-
 local function formatLapTime(ms)
     ms = math.max(0, math.floor(tonumber(ms) or 0))
     local mins = math.floor(ms / 60000)
@@ -96,7 +93,6 @@ local function formatDurationMs(totalMs)
     return ('%02d:%02d.%03d'):format(minutes, seconds, milliseconds)
 end
 RacingSystem.Client.InRace.formatDurationMs = formatDurationMs
-
 
 local function clearPredictedRaceProgress(instanceId)
     local predicted = raceRuntimeState.predictedProgress
@@ -125,7 +121,6 @@ local function ensureLocalRaceTiming(instanceId)
     end
 end
 RacingSystem.Client.InRace.ensureLocalRaceTiming = ensureLocalRaceTiming
-
 
 local function clearPowerPenaltyVehicleOverride()
     local penaltyVehicle = raceRuntimeState.powerPenaltyVehicle
@@ -164,7 +159,6 @@ local function getVehicleForwardVelocityRatio(vehicle)
     local forwardSpeed = (velocity.x * forward.x) + (velocity.y * forward.y) + (velocity.z * forward.z)
     return forwardSpeed / math.sqrt(speedSquared)
 end
-
 
 local speedUpObjects = {
     [-1006978322] = true,
@@ -239,7 +233,6 @@ local function GetPropSpeedModificationParameters(model, prpsba)
     return true, speedTarget, durationTarget
 end
 RacingSystem.Client.InRace.GetPropSpeedModificationParameters = GetPropSpeedModificationParameters
-
 
 local function getCheckpointPassArmKey(instanceId, checkpointIndex, lapNumber)
     return ('%s:%s:%s'):format(tonumber(instanceId) or 0, tonumber(checkpointIndex) or 0, tonumber(lapNumber) or 1)
@@ -379,7 +372,6 @@ local function predictCheckpointPass(instance, entrantProgress, totalCheckpoints
         }
     end
 end
-
 
 CreateThread(function()
     ensureConstants()
@@ -930,4 +922,6 @@ CreateThread(function()
         end
     end
 end)
+
+
 
