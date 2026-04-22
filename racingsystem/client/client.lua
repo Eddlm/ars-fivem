@@ -281,6 +281,7 @@ end
 local function getCheckpointPenaltyRadius(checkpoint, instance)
     return getCheckpointPassRadius(checkpoint, instance) * 0.5
 end
+RacingSystem.Client.getCheckpointPassRadius = getCheckpointPassRadius
 RacingSystem.Client.getCheckpointPenaltyRadius = getCheckpointPenaltyRadius
 local function computeCheckpointChevronEdge(checkpoint, prevCheckpoint, nextCheckpoint, instance)
     if type(checkpoint) ~= 'table' then
@@ -718,8 +719,8 @@ local function drawIdleStartChevron(checkpoint)
     if type(checkpoint) ~= 'table' then return end
     local markerDraw = getRuntimeCheckpointMarker(checkpoint)
     local baseRadius = tonumber(checkpoint.radius) or 8.0
-    local flagScale = math.max(1.2, math.min(2.6, baseRadius * 0.2))
-    local drawZ = tonumber(checkpoint.z) or markerDraw.z
+    local flagScale = math.max(1.2, math.min(2.6, baseRadius * 0.2)) * 3.0
+    local drawZ = (tonumber(checkpoint.z) or markerDraw.z) + 5.0
     local nextCheckpoint = nil
     if type(checkpoint.nextCheckpoint) == 'table' then
         nextCheckpoint = checkpoint.nextCheckpoint
@@ -742,9 +743,9 @@ local function drawIdleStartChevron(checkpoint)
         tonumber((MARKER_TAXONOMY.startLineIdleColor or {}).r) or 255,
         tonumber((MARKER_TAXONOMY.startLineIdleColor or {}).g) or 255,
         tonumber((MARKER_TAXONOMY.startLineIdleColor or {}).b) or 255,
-        tonumber((MARKER_TAXONOMY.startLineIdleColor or {}).a) or 220,
+        230,
         false,
-        true,
+        false,
         2,
         false,
         nil,
@@ -802,44 +803,7 @@ local function buildFutureCheckpointIndices(totalCheckpoints, targetIndex, count
 end
 
 local function updateFutureCheckpointBlips(instance, totalCheckpoints, targetIndex, allowWrap)
-    local indices = buildFutureCheckpointIndices(totalCheckpoints, targetIndex, 5, allowWrap)
-    if #indices == 0 then
-        clearFutureCheckpointBlips()
-        return
-    end
-    local desired = {}
-    for _, index in ipairs(indices) do
-        desired[index] = true
-    end
-    local blipsByIndex = type(getRaceRuntimeState().futureCheckpointBlips) == 'table' and getRaceRuntimeState().futureCheckpointBlips or {}
-    for index, blip in pairs(blipsByIndex) do
-        if not desired[index] or not (blip and DoesBlipExist(blip)) then
-            if blip and DoesBlipExist(blip) then
-                RemoveBlip(blip)
-            end
-            blipsByIndex[index] = nil
-        end
-    end
-    for _, index in ipairs(indices) do
-        if not blipsByIndex[index] then
-            local variantEntry = getCheckpointVariantEntry(instance, index)
-            local checkpoint = variantEntry and variantEntry.primary or ((instance or {}).checkpoints or {})[index]
-            if type(checkpoint) == 'table' then
-                local blip = AddBlipForCoord(
-                    tonumber(checkpoint.x) or 0.0,
-                    tonumber(checkpoint.y) or 0.0,
-                    tonumber(checkpoint.z) or 0.0
-                )
-                SetBlipSprite(blip, MARKER_TAXONOMY.futureCheckpointBlipSprite)
-                SetBlipDisplay(blip, 4)
-                SetBlipScale(blip, 0.75)
-                SetBlipColour(blip, 3)
-                SetBlipAsShortRange(blip, false)
-                blipsByIndex[index] = blip
-            end
-        end
-    end
-    getRaceRuntimeState().futureCheckpointBlips = blipsByIndex
+    clearFutureCheckpointBlips()
 end
 RacingSystem.Client.updateFutureCheckpointBlips = updateFutureCheckpointBlips
 local function resolveStartLineCheckpoint(checkpoints, totalCheckpoints, fallbackCheckpoint, pointToPoint)
@@ -1150,6 +1114,34 @@ local function refreshRaceMenuFromCurrentState()
     })
 end
 RacingSystem.Menu.refreshRaceMenuFromCurrentState = refreshRaceMenuFromCurrentState
+local function normalizeTrafficDensity(value)
+    local density = tonumber(value)
+    if not density then
+        return 0.0
+    end
+    if density < 0.0 then
+        density = 0.0
+    elseif density > 1.0 then
+        density = 1.0
+    end
+    return density
+end
+
+local function applyJoinedInstanceTrafficMode()
+    local joinedInstance = getJoinedRaceInstance()
+    if not joinedInstance then
+        if currentTrafficDensity ~= nil then
+            currentTrafficDensity = nil
+            TriggerServerEvent('traffic_control:requestDensity', nil, 'Traffic control lifted', RACE_TRAFFIC_REQUEST_KEY)
+        end
+        return
+    end
+    local targetDensity = normalizeTrafficDensity(joinedInstance and joinedInstance.trafficDensity)
+    if currentTrafficDensity and math.abs(currentTrafficDensity - targetDensity) < 0.0001 then return end
+    currentTrafficDensity = targetDensity
+    TriggerServerEvent('traffic_control:requestDensity', targetDensity, 'Traffic control for race', RACE_TRAFFIC_REQUEST_KEY)
+end
+
 AddStateBagChangeHandler('rs:instanceId', nil, function(bagName, key, value, _, _)
     local source = parsePlayerSourceFromStateBagName(bagName)
     if not source then return end
@@ -1282,34 +1274,6 @@ function getJoinedRaceInstance()
     return nil
 end
 RacingSystem.Client.getJoinedRaceInstance = getJoinedRaceInstance
-local function normalizeTrafficDensity(value)
-    local density = tonumber(value)
-    if not density then
-        return 0.0
-    end
-    if density < 0.0 then
-        density = 0.0
-    elseif density > 1.0 then
-        density = 1.0
-    end
-    return density
-end
-
-local function applyJoinedInstanceTrafficMode()
-    local joinedInstance = getJoinedRaceInstance()
-    if not joinedInstance then
-        if currentTrafficDensity ~= nil then
-            currentTrafficDensity = nil
-            TriggerServerEvent('traffic_control:requestDensity', nil, 'Traffic control lifted', RACE_TRAFFIC_REQUEST_KEY)
-        end
-        return
-    end
-    local targetDensity = normalizeTrafficDensity(joinedInstance and joinedInstance.trafficDensity)
-    if currentTrafficDensity and math.abs(currentTrafficDensity - targetDensity) < 0.0001 then return end
-    currentTrafficDensity = targetDensity
-    TriggerServerEvent('traffic_control:requestDensity', targetDensity, 'Traffic control for race', RACE_TRAFFIC_REQUEST_KEY)
-end
-
 local function getLocalEntrant(instance)
     local entrant = resolveLocalEntrantEntry(instance)
     if type(entrant) == 'table' then
@@ -1516,6 +1480,7 @@ RegisterNetEvent('racingsystem:race:lapCompleted', function(payload)
         if lapOwnerSource ~= localServerId then return end
     end
     if payload.finished == true then
+        RacingSystem.Client.InRace.raceTimingState.lapStartedAt = nil
         local finishPosition = math.max(1, math.floor(tonumber(localEntrant and localEntrant.position) or 1))
         local finishOrdinal = ('%dº'):format(finishPosition)
         local instanceId = tonumber(instance and instance.id)
@@ -1525,6 +1490,11 @@ RegisterNetEvent('racingsystem:race:lapCompleted', function(payload)
         end
         RacingSystem.Client.Util.ShowWarningSubtitle(('FINISHED  %s'):format(finishOrdinal), 6000, '~g~')
     else
+        local lapTimeMs = tonumber(payload.lapTimeMs)
+        if lapTimeMs then
+            RacingSystem.Client.Util.NotifyPlayer('~w~' .. RacingSystem.Client.InRace.formatLapTime(lapTimeMs))
+        end
+        RacingSystem.Client.InRace.raceTimingState.lapStartedAt = GetGameTimer()
         local lapNumber = math.max(1, math.floor(tonumber(payload.lapNumber) or 1))
         local totalLaps = math.max(1, math.floor(tonumber(payload.totalLaps) or tonumber(instance and instance.laps) or 1))
         if totalLaps > 1 and lapNumber == totalLaps - 1 then
@@ -1840,7 +1810,6 @@ end)
 CreateThread(function()
     while true do
         RacingSystem.Client.Util.DrawRaceEventVisual()
-        RacingSystem.Client.Util.DrawRaceLeaderboardVisual()
         Wait(0)
     end
 end)

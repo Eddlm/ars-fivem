@@ -16,7 +16,6 @@ client_scripts {
     'client/wheelies.lua',
     'client/rollovers.lua',
     'client/power.lua',
-    'client/nitrous.lua',
     'client/client.lua'
 }
 

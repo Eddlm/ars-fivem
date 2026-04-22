@@ -68,7 +68,7 @@ end
 
 -- Applies native wheelie suppression during launch conditions when configured.
 local function applyNativeWheelieSuppression(vehicle)
-    if CustomPhysics.Config.nativeWheeliesDisabled == false then
+    if not GetConvarBool('cp_wheelies_native_disabled', true) then
         state.nativeWheelieControlActive = false
         return
     end

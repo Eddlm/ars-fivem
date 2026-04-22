@@ -59,6 +59,30 @@ local function syncMenuCurrentDescription(menu)
         menu:UpdateDescription()
     end
 end
+
+local intendedGreyStateByItem = {}
+local intendedGreyItems = {}
+local intendedGreyRoundRobinIndex = 1
+
+local function setIntendedGreyState(item, shouldGrey)
+    if item == nil then
+        return
+    end
+    if shouldGrey == true then
+        if intendedGreyStateByItem[item] ~= true then
+            intendedGreyStateByItem[item] = true
+            intendedGreyItems[#intendedGreyItems + 1] = item
+        end
+        return
+    end
+    intendedGreyStateByItem[item] = nil
+end
+
+local function EnsureGreyedOrActive(item, active)
+    setIntendedGreyState(item, active ~= true)
+    item:Enabled(active == true)
+end
+
 RacingSystem.Menu.raceMenuInitialized    = false
 RacingSystem.Menu.pendingSelectRaceName  = nil
 RacingSystem.Menu.pendingEditorRaceName  = nil
@@ -107,6 +131,7 @@ startCountdownMenuItem.Activated = function(menu)
     local instanceId = tonumber(instance and instance.id)
     if instanceId then
         RacingSystem.Menu.countdownAcceptedByInstanceId[instanceId] = true
+        setIntendedGreyState(startCountdownMenuItem, true)
     end
     TriggerEvent('racingsystem:race:start')
     RacingSystem.Menu.refreshRaceMenuFromCurrentState()
@@ -462,6 +487,14 @@ local checkpointWidthSlider = UIMenuSliderItem.New(
 )
 checkpointWidthSlider:Enabled(false)
 raceEditorMenu:AddItem(checkpointWidthSlider)
+local checkpointTypeListItem = UIMenuListItem.New(
+    'Type',
+    { 'Checkpoint', 'Finish Line' },
+    1,
+    'Set the closest checkpoint as normal or finish line.'
+)
+checkpointTypeListItem:Enabled(false)
+raceEditorMenu:AddItem(checkpointTypeListItem)
 local grabCheckpointCheckbox = UIMenuCheckboxItem.New(
     'Grab Checkpoint',
     false,
@@ -481,10 +514,13 @@ saveRaceMenuItem.Activated = function(menu)
         logMenuVerbose('Save cancelled: session not active or no checkpoints')
         return
     end
-    logMenuVerbose(('Saving race "%s" with %d checkpoints'):format(RacingSystem.Client.editorState.name, #RacingSystem.Client.editorState.checkpoints))
+    local checkpointsToSave = type(RacingSystem.Client.prepareEditorCheckpointsForSave) == 'function'
+        and RacingSystem.Client.prepareEditorCheckpointsForSave()
+        or RacingSystem.Client.editorState.checkpoints
+    logMenuVerbose(('Saving race "%s" with %d checkpoints'):format(RacingSystem.Client.editorState.name, #checkpointsToSave))
     TriggerServerEvent('racingsystem:editor:save', {
         name = RacingSystem.Client.editorState.name,
-        checkpoints = RacingSystem.Client.editorState.checkpoints,
+        checkpoints = checkpointsToSave,
     })
 end
 raceEditorMenu:AddItem(saveRaceMenuItem)
@@ -536,22 +572,47 @@ exitEditorMenuItem.Activated = function(menu)
 end
 raceEditorMenu:AddItem(exitEditorMenuItem)
 local function getClosestCheckpoint()
+    if type(RacingSystem.Client.getEditorClosestCheckpoint) == 'function' then
+        local closest = RacingSystem.Client.getEditorClosestCheckpoint()
+        if closest then
+            return closest
+        end
+    end
     if not RacingSystem.Client.editorState or not RacingSystem.Client.editorState.checkpoints or #RacingSystem.Client.editorState.checkpoints == 0 then
         return nil
     end
-    local playerPed = PlayerPedId()
-    local playerCoords = GetEntityCoords(playerPed)
+    local targetCoords = type(RacingSystem.Client.getEditorTargetCoords) == 'function' and RacingSystem.Client.getEditorTargetCoords() or nil
+    if not targetCoords then
+        return nil
+    end
     local closest = nil
     local closestDistance = math.huge
     for i, checkpoint in ipairs(RacingSystem.Client.editorState.checkpoints) do
         local checkpointCoords = vector3(checkpoint.x, checkpoint.y, checkpoint.z)
-        local distance = #(playerCoords - checkpointCoords)
+        local distance = #(targetCoords - checkpointCoords)
         if distance < closestDistance then
             closest = { index = i, distance = distance, checkpoint = checkpoint }
             closestDistance = distance
         end
     end
     return closest
+end
+local function syncCheckpointTypeListToClosest()
+    if not editorSessionActive then
+        return
+    end
+    local typeValue = 'Checkpoint'
+    if type(RacingSystem.Client.getClosestCheckpointType) == 'function' then
+        typeValue = RacingSystem.Client.getClosestCheckpointType()
+    end
+    if typeValue == nil then
+        return
+    end
+    if typeValue == 'Finish Line' then
+        checkpointTypeListItem:Index(2)
+        return
+    end
+    checkpointTypeListItem:Index(1)
 end
 raceEditorMenu.OnSliderChange = function(menu, item, index)
     if item == checkpointWidthSlider then
@@ -570,6 +631,19 @@ raceEditorMenu.OnSliderChange = function(menu, item, index)
             end
         end
     end
+end
+raceEditorMenu.OnListChange = function(menu, item, index)
+    if item ~= checkpointTypeListItem then
+        return
+    end
+    if not editorSessionActive then
+        return
+    end
+    local selectedType = index == 2 and 'Finish Line' or 'Checkpoint'
+    if type(RacingSystem.Client.setClosestCheckpointType) == 'function' then
+        RacingSystem.Client.setClosestCheckpointType(selectedType)
+    end
+    syncCheckpointTypeListToClosest()
 end
 
 local function toggleGrabCheckpoint()
@@ -592,17 +666,39 @@ CreateThread(function()
     while true do
         Wait(10)
         if editorSessionActive and RacingSystem.Client.editorState and RacingSystem.Client.editorState.checkpoints and #RacingSystem.Client.editorState.checkpoints > 0 then
-            local playerPed = PlayerPedId()
-            local playerCoords = GetEntityCoords(playerPed)
             local closest = getClosestCheckpoint()
-            if closest then
+            local targetCoords = type(RacingSystem.Client.getEditorTargetCoords) == 'function' and RacingSystem.Client.getEditorTargetCoords() or nil
+            if closest and targetCoords then
                 local checkpointCoords = vector3(closest.checkpoint.x, closest.checkpoint.y, closest.checkpoint.z)
                 DrawLine(
-                    playerCoords.x, playerCoords.y, playerCoords.z,
+                    targetCoords.x, targetCoords.y, targetCoords.z,
                     checkpointCoords.x, checkpointCoords.y, checkpointCoords.z,
                     255, 255, 255, 255
                 )
             end
+            syncCheckpointTypeListToClosest()
+        end
+    end
+end)
+
+CreateThread(function()
+    while true do
+        local itemCount = #intendedGreyItems
+        if itemCount <= 0 then
+            intendedGreyRoundRobinIndex = 1
+            Wait(500)
+        else
+            if intendedGreyRoundRobinIndex > itemCount then
+                intendedGreyRoundRobinIndex = 1
+            end
+            local item = intendedGreyItems[intendedGreyRoundRobinIndex]
+            if item and intendedGreyStateByItem[item] == true then
+                item:Enabled(false)
+                intendedGreyRoundRobinIndex = intendedGreyRoundRobinIndex + 1
+            else
+                table.remove(intendedGreyItems, intendedGreyRoundRobinIndex)
+            end
+            Wait(100)
         end
     end
 end)
@@ -665,6 +761,7 @@ function RacingSystem.Menu.markCountdownAccepted(instanceId)
         return
     end
     RacingSystem.Menu.countdownAcceptedByInstanceId[numericInstanceId] = true
+    setIntendedGreyState(startCountdownMenuItem, true)
 end
 
 function RacingSystem.Menu.clearCountdownAccepted(instanceId)
@@ -673,6 +770,7 @@ function RacingSystem.Menu.clearCountdownAccepted(instanceId)
         return
     end
     RacingSystem.Menu.countdownAcceptedByInstanceId[numericInstanceId] = nil
+    setIntendedGreyState(startCountdownMenuItem, false)
 end
 
 function RacingSystem.Menu.openRaceMenu()
@@ -690,6 +788,7 @@ function RacingSystem.Menu.refreshEditorMenu(_)
     refreshEditExistingRaces()
     local isGrabbed = RacingSystem.Client.editorState and RacingSystem.Client.editorState.grabbedCheckpointIndex ~= nil
     grabCheckpointCheckbox:Checked(isGrabbed)
+    syncCheckpointTypeListToClosest()
 end
 
 function RacingSystem.Menu.buildMenuState()
@@ -703,12 +802,14 @@ function RacingSystem.Menu.beginEditorSessionUI()
     editorSessionActive = true
     addCheckpointMenuItem:Enabled(true)
     checkpointWidthSlider:Enabled(true)
+    checkpointTypeListItem:Enabled(true)
     grabCheckpointCheckbox:Enabled(true)
     saveRaceMenuItem:Enabled(true)
     exitEditorMenuItem:Enabled(true)
     deleteRaceMenuItem:Enabled(true)
     local isGrabbed = RacingSystem.Client.editorState and RacingSystem.Client.editorState.grabbedCheckpointIndex ~= nil
     grabCheckpointCheckbox:Checked(isGrabbed)
+    syncCheckpointTypeListToClosest()
     RacingSystem.Menu.deleteConfirmRaceName = nil
     deleteRaceMenuItem:Label('Delete Selected Race')
     setItemDescriptionRaw(deleteRaceMenuItem, 'Delete this race definition from disk.')
@@ -721,6 +822,8 @@ function RacingSystem.Menu.endEditorSessionUI()
     editorSessionActive = false
     addCheckpointMenuItem:Enabled(false)
     checkpointWidthSlider:Enabled(false)
+    checkpointTypeListItem:Enabled(false)
+    checkpointTypeListItem:Index(1)
     grabCheckpointCheckbox:Enabled(false)
     grabCheckpointCheckbox:Checked(false)
     saveRaceMenuItem:Enabled(false)

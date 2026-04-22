@@ -81,6 +81,26 @@ local function sendRaceInfoToSource(targetSource, instance)
     TriggerClientEvent('racingsystem:race:getRaceInfo', target, payload)
 end
 
+local function completeJoinForSource(src, instance)
+    RacingSystem.Server.Snapshot.broadcastInstanceList()
+    RacingSystem.Server.Snapshot.broadcastInstanceDelta(instance)
+    RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
+    RacingSystem.Server.Snapshot.sendInstanceStaticIfChanged(src, instance, true)
+    RacingSystem.Server.Snapshot.sendInstanceAssets(src, instance)
+    sendRaceInfoToSource(src, instance)
+    setRaceMembershipStateBagForSource(src, instance)
+
+    if instance.state == RacingSystem.States.running then
+        local joiningEntrant = RacingSystem.Server.Snapshot.findEntrantInRaceInstance(instance, src)
+        if type(joiningEntrant) == 'table' then
+            RacingSystem.Server.Snapshot.sendTeleportToCheckpoint(src, instance, joiningEntrant.currentCheckpoint)
+        end
+        return
+    end
+
+    RacingSystem.Server.Snapshot.sendTeleportToLastCheckpoint(src, instance)
+end
+
 RegisterNetEvent('racingsystem:state:request', function()
     RacingSystem.Server.Snapshot.sendInitialState(source)
 end)
@@ -165,6 +185,11 @@ RegisterNetEvent('racingsystem:editor:save', function(payload)
         tostring(definition.name or ""),
         tostring(#(definition.checkpoints or {}))
     ))
+    RacingSystem.Server.Catalog.registerKnownRaceDefinition(
+        definition.name,
+        definition.sourceType or 'custom',
+        definition.ugcId or definition.fileName
+    )
     RacingSystem.Server.Snapshot.broadcastDefinitions()
     local savedLookup = RacingSystem.NormalizeRaceName(definition.name)
     if savedLookup then
@@ -318,7 +343,7 @@ RegisterNetEvent('racingsystem:race:invoke', function(payload, lapCount)
     local invokePayload = payload
     local raceName = type(payload) == 'table' and (payload.lookupName or payload.name) or payload
     local src = source
-    if GetConvarInt('rSystemExtraPrints', 0) >= 2 then
+    if GetConvarInt('rSystemPrintLevel', 0) == 2 then
         local payloadTable = type(payload) == 'table' and payload or {}
         local raceName = tostring(payloadTable.name or payloadTable.lookupName or payload or 'unknown race')
         local lookupName = tostring(payloadTable.lookupName or 'nil')
@@ -361,13 +386,7 @@ RegisterNetEvent('racingsystem:race:invoke', function(payload, lapCount)
         tostring(instance.laps),
         tostring(instance.sourceType or 'unknown')
     ))
-    RacingSystem.Server.Snapshot.broadcastInstanceList()
-    RacingSystem.Server.Snapshot.broadcastInstanceDelta(instance)
-    RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
-    RacingSystem.Server.Snapshot.sendInstanceStaticIfChanged(src, instance, true)
-    RacingSystem.Server.Snapshot.sendTeleportToLastCheckpoint(src, instance)
-    sendRaceInfoToSource(src, instance)
-    setRaceMembershipStateBagForSource(src, instance)
+    completeJoinForSource(src, instance)
 end)
 
 RegisterNetEvent('racingsystem:race:joinById', function(instanceId)
@@ -389,21 +408,7 @@ RegisterNetEvent('racingsystem:race:joinById', function(instanceId)
         tostring(instance.name or 'unnamed'),
         tostring(#(instance.entrants or {}))
     ))
-    RacingSystem.Server.Snapshot.broadcastInstanceList()
-    RacingSystem.Server.Snapshot.broadcastInstanceDelta(instance)
-    RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
-    RacingSystem.Server.Snapshot.sendInstanceStaticIfChanged(src, instance, true)
-    sendRaceInfoToSource(src, instance)
-    setRaceMembershipStateBagForSource(src, instance)
-
-    if instance.state == RacingSystem.States.running then
-        local joiningEntrant = instance.entrants[#instance.entrants]
-        if joiningEntrant then
-            RacingSystem.Server.Snapshot.sendTeleportToCheckpoint(src, instance, joiningEntrant.currentCheckpoint)
-        end
-    else
-        RacingSystem.Server.Snapshot.sendTeleportToLastCheckpoint(src, instance)
-    end
+    completeJoinForSource(src, instance)
 end)
 
 RegisterNetEvent('racingsystem:race:start', function()

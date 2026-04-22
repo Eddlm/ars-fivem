@@ -413,6 +413,10 @@ local function emitStableLapTimeIfReady(instance, entrant, lapNumber, lapTimeMs)
     return
 end
 
+local function getLapIncrementUnlockCheckpoint(totalCheckpoints)
+    local checkpointCount = math.max(1, math.floor(tonumber(totalCheckpoints) or 1))
+    return math.max(1, math.ceil(checkpointCount * 0.5))
+end
 
 local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTimingPayload)
     local instance = RacingSystem.Server.State.raceInstancesById[tonumber(instanceId) or -1]
@@ -469,6 +473,10 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
 
     local currentLap = math.max(1, tonumber(entrant.currentLap) or 1)
     local lapTriggerCheckpoint = RacingSystem.Server.Snapshot.getLapTriggerCheckpoint(instance, totalCheckpoints, totalLaps)
+    local lapIncrementUnlockCheckpoint = getLapIncrementUnlockCheckpoint(totalCheckpoints)
+    if entrant.lapIncrementUnlocked ~= true and reportedCheckpoint == lapIncrementUnlockCheckpoint then
+        entrant.lapIncrementUnlocked = true
+    end
     RacingSystem.Server.Logging.logVerbose(("[startfinish] pass player=%s race='%s' instance=%s expected=%s reported=%s lap=%s/%s lapTrigger=%s startCheckpoint=%s totalCheckpoints=%s"):format(
         RacingSystem.Server.Logging.resolveReadablePlayerName(source, entrant),
         tostring(instance.name or 'unknown'),
@@ -482,7 +490,8 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
         tostring(totalCheckpoints)
     ))
 
-    if reportedCheckpoint == lapTriggerCheckpoint then
+    local canIncrementLap = entrant.lapIncrementUnlocked == true
+    if reportedCheckpoint == lapTriggerCheckpoint and canIncrementLap then
         local currentLapTimeMs = tonumber(type(lapTimingPayload) == 'table' and lapTimingPayload.lapTimeMs) or nil
         local currentTotalTimeMs = tonumber(type(lapTimingPayload) == 'table' and lapTimingPayload.totalTimeMs) or nil
 

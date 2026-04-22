@@ -20,6 +20,7 @@ CreateThread(function()
                     instance.startedAt = now
                     instance.startAt = nil
                     for _, entrant in ipairs(instance.entrants or {}) do
+                        entrant.currentCheckpoint = 1
                         entrant.lapStartedAt = now
                     end
                     RacingSystem.Server.Logging.logVerbose(("Race '%s' (instance %s) moved from staging to running with %s entrants."):format(
@@ -49,6 +50,12 @@ CreateThread(function()
         end
 
         Wait(250)
+    end
+end)
+
+CreateThread(function()
+    while true do
+        RacingSystem.Server.Snapshot.runSnapshotRoundRobinTick()
     end
 end)
 

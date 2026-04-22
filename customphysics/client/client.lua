@@ -19,7 +19,6 @@ local function clearOverrides(vehicle)
     CustomPhysicsPower.reset(vehicle)
     CustomPhysicsWheelies.reset()
     CustomPhysicsRollovers.reset()
-    CustomPhysicsNitrous.reset(vehicle)
 end
 
 -- Runtime entrypoints
@@ -58,7 +57,6 @@ CreateThread(function()
             CustomPhysicsRollovers.update(vehicle)
             CustomPhysicsWheelies.update(vehicle)
             CustomPhysicsPower.update(vehicle, now)
-            CustomPhysicsNitrous.update(vehicle, now)
             lastVehicle = vehicle
         else
             if lastVehicle then

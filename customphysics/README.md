@@ -38,10 +38,10 @@ This is the most WIP, subject to changes to the rules.
   - Effective default: `'0'`
   - Example: `setr ars_skip_uptodate_print 1`
 
-- `cPhysicsExtraPrints`
+- `cPhysicsPrintLevel`
   - Read via: `GetConvarInt`
   - Effective default: `0`
-  - Example: `setr cPhysicsExtraPrints 1`
+  - Example: `setr cPhysicsPrintLevel 1`
 
 - `cp_rollover_start_speed`
   - Read via: `GetConvar`

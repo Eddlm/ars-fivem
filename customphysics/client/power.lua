@@ -352,7 +352,7 @@ end
 
 -- Updates the offroad multiplier on its own interval and returns the current live value.
 local function getOffroadMultiplier(snapshot, now)
-    if CustomPhysics.Config.offroadBoostEnabled == false then
+    if not GetConvarBool('cp_offroad_boost_enabled', true) then
         state.offroadPowerMultiplier = 1.0
         state.offroadTargetMultiplier = 1.0
         return 1.0
@@ -370,7 +370,8 @@ local function getOffroadMultiplier(snapshot, now)
     state.offroadUpdateAt = now + intervalMs
     local updateDeltaSeconds = intervalMs / 1000.0
     state.offroadTargetMultiplier = 1.0
-    local offroadMaxMultiplier = CustomPhysics.Config.offroadMaxMultiplier or 4.0
+    local offroadMaxMultiplier = tonumber(GetConvar('cp_offroad_max_multiplier', '5.0')) or 5.0
+    offroadMaxMultiplier = math.max(1.0, offroadMaxMultiplier)
     state.offroadTargetMultiplier = calculateOffroadTargetMultiplier(snapshot, now, offroadMaxMultiplier)
     return advanceOffroadMultiplier(updateDeltaSeconds, offroadMaxMultiplier)
 end
@@ -498,7 +499,7 @@ local function updatePowerMultiplierStack(vehicle, now)
     local offroadMultiplier = getOffroadMultiplier(snapshot, now)
     SetVehicleCheatPowerIncrease(vehicle, slideMultiplier * offroadMultiplier * state.overspeedPowerMultiplier * state.antiBoostMultiplier)
 
-    if GetConvarInt('cPhysicsExtraPrints', 0) > 0 then
+    if GetConvarInt('cPhysicsPrintLevel', 0) == 2 then
         local atFull = state.antiBoostMultiplier >= 1.0
         local r, g, b = 255, atFull and 255 or 0, atFull and 255 or 0
         SetTextFont(0)

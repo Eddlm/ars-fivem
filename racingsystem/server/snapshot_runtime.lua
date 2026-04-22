@@ -201,6 +201,7 @@ local function resetEntrantProgress(entrant)
     entrant.totalTimeMs = nil
     entrant.finishedAt = nil
     entrant.position = nil
+    entrant.lapIncrementUnlocked = false
 end
 
 local function getRaceStartCheckpoint(instance)
@@ -214,7 +215,7 @@ local function getRaceStartCheckpoint(instance)
         return 1
     end
 
-    return checkpointCount
+    return checkpointCount - 1
 end
 
 local function getLapTriggerCheckpoint(instance, totalCheckpoints, totalLaps)
@@ -286,6 +287,7 @@ local function buildEntrant(source, instance)
         totalTimeMs = nil,
         finishedAt = nil,
         position = nil,
+        lapIncrementUnlocked = false,
     }
 end
 
@@ -498,6 +500,7 @@ local function inheritLastPlaceProgress(newEntrant, lastPlaceEntrant)
     newEntrant.lapStartedAt = tonumber(lastPlaceEntrant.lapStartedAt) or 0
     newEntrant.lastCheckpointAt = GetGameTimer()
     newEntrant.lapTimes = cloneNumberArray(lastPlaceEntrant.lapTimes)
+    newEntrant.lapIncrementUnlocked = lastPlaceEntrant.lapIncrementUnlocked == true
 
     return newEntrant
 end
@@ -710,6 +713,7 @@ local function sendTeleportToLastCheckpoint(target, instance)
         y = tonumber(startCheckpoint.y) or 0.0,
         z = (tonumber(startCheckpoint.z) or 0.0) + 1.0,
         teleportType = 'join',
+        sourceType = tostring(instance.sourceType or ''),
     })
 end
 
@@ -745,6 +749,7 @@ local function sendTeleportToCheckpoint(target, instance, checkpointIndex)
         y = tonumber(checkpoint.y) or 0.0,
         z = (tonumber(checkpoint.z) or 0.0) + 1.0,
         teleportType = 'join',
+        sourceType = tostring(instance.sourceType or ''),
     })
 end
 
@@ -864,6 +869,20 @@ local function buildRaceInstanceSnapshot(instance)
     return dynamicPayload
 end
 
+local function sendRaceInfoToTarget(target, instance)
+    local source = tonumber(target) or 0
+    if source <= 0 or type(instance) ~= 'table' then
+        return
+    end
+
+    local payload = buildRaceInstanceSnapshot(instance)
+    if type(payload) ~= 'table' then
+        return
+    end
+
+    TriggerClientEvent('racingsystem:race:getRaceInfo', source, payload)
+end
+
 local function buildFullSnapshot(viewerSource)
     local definitionsPayload = buildDefinitionsPayload(viewerSource)
     local listPayload = buildInstanceListPayload(viewerSource)
@@ -901,8 +920,64 @@ local function broadcastSnapshot()
     return
 end
 
+local snapshotRoundRobinCursor = 0
+
+local function buildSnapshotRoundRobinTargets()
+    local targets = {}
+    for instanceId, instance in pairs(RacingSystem.Server.State.raceInstancesById) do
+        if type(instance) == 'table' then
+            local resolvedInstanceId = tonumber(instance.id) or tonumber(instanceId) or 0
+            for _, entrant in ipairs(listEntrantsFromState(instance)) do
+                local targetSource = tonumber(type(entrant) == 'table' and entrant.source) or 0
+                if targetSource > 0 then
+                    targets[#targets + 1] = {
+                        instanceId = resolvedInstanceId,
+                        source = targetSource,
+                        instance = instance,
+                    }
+                end
+            end
+        end
+    end
+
+    table.sort(targets, function(a, b)
+        if tonumber(a.instanceId) ~= tonumber(b.instanceId) then
+            return (tonumber(a.instanceId) or 0) < (tonumber(b.instanceId) or 0)
+        end
+        return (tonumber(a.source) or 0) < (tonumber(b.source) or 0)
+    end)
+    return targets
+end
+
 local function runSnapshotRoundRobinTick()
-    Wait(math.max(250, tonumber((RacingSystem.Server.State.config or {}).snapshotFullCycleTargetMs) or 4000))
+    local targets = buildSnapshotRoundRobinTargets()
+    local targetCount = #targets
+    if targetCount <= 0 then
+        snapshotRoundRobinCursor = 0
+        Wait(500)
+        return
+    end
+
+    if snapshotRoundRobinCursor < 1 or snapshotRoundRobinCursor > targetCount then
+        snapshotRoundRobinCursor = 1
+    end
+
+    local turnTarget = targets[snapshotRoundRobinCursor]
+    if type(turnTarget) == 'table' and type(turnTarget.instance) == 'table' then
+        broadcastInstanceStandings(turnTarget.instance)
+        sendRaceInfoToTarget(turnTarget.source, turnTarget.instance)
+        sendInstanceStaticIfChanged(turnTarget.source, turnTarget.instance, false)
+        sendInstanceAssets(turnTarget.source, turnTarget.instance)
+    end
+
+    snapshotRoundRobinCursor = snapshotRoundRobinCursor + 1
+    if snapshotRoundRobinCursor > targetCount then
+        snapshotRoundRobinCursor = 1
+    end
+
+    local minTickMs = math.max(1, math.floor(tonumber((RacingSystem.Server.State.config or {}).snapshotMinTickMs) or 1))
+    local tickMs = math.max(minTickMs, math.floor(2000 / targetCount))
+    Wait(tickMs)
 end
 
 RacingSystem.Server.Snapshot.cloneOnlineRaceProps = cloneOnlineRaceProps
@@ -946,6 +1021,7 @@ RacingSystem.Server.Snapshot.buildInstanceStaticPayload = buildInstanceStaticPay
 RacingSystem.Server.Snapshot.sendInstanceStaticIfChanged = sendInstanceStaticIfChanged
 RacingSystem.Server.Snapshot.sendInitialState = sendInitialState
 RacingSystem.Server.Snapshot.buildRaceInstanceSnapshot = buildRaceInstanceSnapshot
+RacingSystem.Server.Snapshot.sendRaceInfoToTarget = sendRaceInfoToTarget
 RacingSystem.Server.Snapshot.buildFullSnapshot = buildFullSnapshot
 RacingSystem.Server.Snapshot.sendSnapshot = sendSnapshot
 RacingSystem.Server.Snapshot.broadcastSnapshot = broadcastSnapshot

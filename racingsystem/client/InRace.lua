@@ -401,6 +401,9 @@ CreateThread(function()
             RacingSystem.Client.Util.ClearCountdownVisual()
             RacingSystem.Client.Util.ClearRaceLeaderboardVisual()
             if RacingSystem.Client.activeInstanceAssets.instanceId then
+                if type(RacingSystem.Client.runSafetyExitTeleportIfNeeded) == 'function' then
+                    RacingSystem.Client.runSafetyExitTeleportIfNeeded()
+                end
                 RacingSystem.Client.unloadActiveInstanceAssets()
             end
             Wait(1000)
@@ -688,7 +691,7 @@ CreateThread(function()
                     end
                 end
 
-                if joinedInstance.state == RacingSystem.States.idle then
+                if joinedInstance.state == RacingSystem.States.idle or joinedInstance.state == RacingSystem.States.staging then
                     local startCheckpoint = RacingSystem.Client.resolveStartLineCheckpoint(checkpoints, totalCheckpoints, targetCheckpoint, isPointToPoint)
                     if startCheckpoint then
                         local startLineIndex = math.max(1, math.floor(tonumber(startCheckpoint.index) or totalCheckpoints or 1))
@@ -704,86 +707,82 @@ CreateThread(function()
                         and tonumber(pending.instanceId) == tonumber(joinedInstance.id)
                         and tonumber(pending.checkpointIndex) == tonumber(targetIndex)
                         and GetGameTimer() <= (pending.expiresAt or 0)
-                    local withinPassDetectionRange = false
                     local nearestCheckpointDistance = math.huge
                     local nearestCheckpoint = targetCheckpoint
+                    local nearestCheckpointCandidate = nil
                     for _, candidate in ipairs(checkpointCandidates) do
                         local candidateDistance = tonumber(candidate.distance) or math.huge
                         if candidateDistance < nearestCheckpointDistance then
                             nearestCheckpointDistance = candidateDistance
                             nearestCheckpoint = candidate.checkpoint or targetCheckpoint
-                        end
-                        if candidateDistance <= CHECKPOINT_PASS_ARM_DISTANCE then
-                            withinPassDetectionRange = true
+                            nearestCheckpointCandidate = candidate
                         end
                     end
-                    if nearestCheckpointDistance < math.huge and not withinPassDetectionRange then
+                    local isArmRangeReached = nearestCheckpointDistance <= CHECKPOINT_PASS_ARM_DISTANCE
+                    if nearestCheckpointDistance < math.huge and not isArmRangeReached then
                         raceRuntimeState.penaltyPreviewText = nil
                     end
 
-                    local checkpointPassed = false
-                    local passedOutsideRadius = false
-                    local outsideLateralDistance = nil
-                    local passedTargetCheckpoint = targetCheckpoint
-                    local passedRouteVariant = 'primary'
+                    local hasProximityExitCrossed = false
+                    local isOutsidePenaltyRadius = false
+                    local closestApproachDistanceMeters = nil
+                    local crossedCheckpointTarget = targetCheckpoint
+                    local crossedRouteVariant = 'primary'
+                    local lapTriggerCheckpoint = RacingSystem.Client.getClientLapTriggerCheckpoint(totalCheckpoints)
+                    local isFinishCheckpointTarget = targetIndex == lapTriggerCheckpoint
                     local currentLap = math.max(1, tonumber(entrantProgress.currentLap) or 1)
-                    local currentArmKey = getCheckpointPassArmKey(joinedInstance.id, targetIndex, currentLap)
-                    local checkpointPassArm = raceRuntimeState.checkpointPassArm
+                    local passDetectorKey = getCheckpointPassArmKey(joinedInstance.id, targetIndex, currentLap)
+                    local proximityReleaseState = raceRuntimeState.checkpointPassArm
 
-                    if withinPassDetectionRange and not isPendingSameCheckpoint then
-                        if checkpointPassArm == nil or checkpointPassArm.key ~= currentArmKey then
-                            checkpointPassArm = {
-                                key = currentArmKey,
+                    if isArmRangeReached and not isPendingSameCheckpoint then
+                        if proximityReleaseState == nil or proximityReleaseState.key ~= passDetectorKey then
+                            local nearestRouteVariant = tostring((nearestCheckpointCandidate and nearestCheckpointCandidate.routeVariant) or 'primary')
+                            proximityReleaseState = {
+                                key = passDetectorKey,
                                 minDistanceByVariant = {},
                             }
-                            for _, candidate in ipairs(checkpointCandidates) do
-                                checkpointPassArm.minDistanceByVariant[candidate.routeVariant] = tonumber(candidate.distance) or math.huge
-                            end
-                            raceRuntimeState.checkpointPassArm = checkpointPassArm
+                            proximityReleaseState.minDistanceByVariant[nearestRouteVariant] = nearestCheckpointDistance
+                            raceRuntimeState.checkpointPassArm = proximityReleaseState
                         else
-                            checkpointPassArm.minDistanceByVariant = type(checkpointPassArm.minDistanceByVariant) == 'table' and checkpointPassArm.minDistanceByVariant or {}
-                            local bestPassDistance = nil
-                            local bestPassCandidate = nil
+                            proximityReleaseState.minDistanceByVariant = type(proximityReleaseState.minDistanceByVariant) == 'table' and proximityReleaseState.minDistanceByVariant or {}
+                            local activeCandidate = nearestCheckpointCandidate
+                                or { routeVariant = 'primary', checkpoint = targetCheckpoint, distance = nearestCheckpointDistance }
+                            local routeVariant = tostring(activeCandidate.routeVariant or 'primary')
+                            local distance = tonumber(activeCandidate.distance) or math.huge
+                            local previousMinDistance = tonumber(proximityReleaseState.minDistanceByVariant[routeVariant]) or distance
+                            local newMinDistance = math.min(previousMinDistance, distance)
+                            proximityReleaseState.minDistanceByVariant[routeVariant] = newMinDistance
 
-                            for _, candidate in ipairs(checkpointCandidates) do
-                                local routeVariant = tostring(candidate.routeVariant or 'primary')
-                                local distance = tonumber(candidate.distance) or math.huge
-                                local previousMinDistance = tonumber(checkpointPassArm.minDistanceByVariant[routeVariant]) or distance
-                                local newMinDistance = math.min(previousMinDistance, distance)
-                                checkpointPassArm.minDistanceByVariant[routeVariant] = newMinDistance
-
-                                if distance >= (newMinDistance + CHECKPOINT_PASS_RELEASE_THRESHOLD) then
-                                    if bestPassDistance == nil or newMinDistance < bestPassDistance then
-                                        bestPassDistance = newMinDistance
-                                        bestPassCandidate = candidate
-                                    end
+                            if (not isFinishCheckpointTarget) then
+                                local noPenaltyRadiusDistance = math.max(0.0, tonumber(RacingSystem.Client.getCheckpointPenaltyRadius(activeCandidate.checkpoint or targetCheckpoint, joinedInstance)) or 0.0)
+                                if noPenaltyRadiusDistance > 0.0 and distance <= noPenaltyRadiusDistance then
+                                    hasProximityExitCrossed = true
+                                    closestApproachDistanceMeters = distance
+                                    crossedCheckpointTarget = activeCandidate.checkpoint or targetCheckpoint
+                                    crossedRouteVariant = routeVariant
+                                    isOutsidePenaltyRadius = false
+                                    raceRuntimeState.checkpointPassArm = nil
                                 end
                             end
 
-                            if bestPassCandidate then
-                                checkpointPassed = true
-                                outsideLateralDistance = tonumber(bestPassDistance) or 0.0
-                                passedTargetCheckpoint = bestPassCandidate.checkpoint or targetCheckpoint
-                                passedRouteVariant = tostring(bestPassCandidate.routeVariant or 'primary')
-                                passedOutsideRadius = outsideLateralDistance > RacingSystem.Client.getCheckpointPenaltyRadius(passedTargetCheckpoint, joinedInstance)
+                            if (not hasProximityExitCrossed) and distance >= (newMinDistance + CHECKPOINT_PASS_RELEASE_THRESHOLD) then
+                                hasProximityExitCrossed = true
+                                closestApproachDistanceMeters = tonumber(newMinDistance) or 0.0
+                                crossedCheckpointTarget = activeCandidate.checkpoint or targetCheckpoint
+                                crossedRouteVariant = routeVariant
+                                isOutsidePenaltyRadius = closestApproachDistanceMeters > RacingSystem.Client.getCheckpointPenaltyRadius(crossedCheckpointTarget, joinedInstance)
                                 raceRuntimeState.checkpointPassArm = nil
                             end
                         end
-                    elseif checkpointPassArm and checkpointPassArm.key == currentArmKey then
-                        local shouldClearArm = true
-                        for _, candidate in ipairs(checkpointCandidates) do
-                            if (tonumber(candidate.distance) or math.huge) <= (CHECKPOINT_PASS_ARM_DISTANCE + 5.0) then
-                                shouldClearArm = false
-                                break
-                            end
-                        end
-                        if shouldClearArm then
+                    elseif proximityReleaseState and proximityReleaseState.key == passDetectorKey then
+                        local shouldClearProximityReleaseState = nearestCheckpointDistance > (CHECKPOINT_PASS_ARM_DISTANCE + 5.0)
+                        if shouldClearProximityReleaseState then
                             raceRuntimeState.checkpointPassArm = nil
                         end
                     end
 
-                    if checkpointPassed then
-                        local checkpointPassIsValid = true
+                    if hasProximityExitCrossed then
+                        local isCheckpointPassValid = true
                         local lowSpeedRecoveryPass = false
                         local offWheelsRecoveryPass = false
                         local outsideOffset = 0.0
@@ -801,15 +800,15 @@ CreateThread(function()
                             end
                         end
                         local isRecoveryPenaltyBypass = lowSpeedRecoveryPass or offWheelsRecoveryPass
-                        if passedOutsideRadius then
-                            outsideOffset = math.max(0.0, (tonumber(outsideLateralDistance) or 0.0) - RacingSystem.Client.getCheckpointPenaltyRadius(passedTargetCheckpoint, joinedInstance))
+                        if isOutsidePenaltyRadius then
+                            outsideOffset = math.max(0.0, (tonumber(closestApproachDistanceMeters) or 0.0) - RacingSystem.Client.getCheckpointPenaltyRadius(crossedCheckpointTarget, joinedInstance))
                             if isRecoveryPenaltyBypass then
                                 if offWheelsRecoveryPass then
                                 else
                                 end
                             else
                                 if outsideOffset > 20.0 then
-                                    checkpointPassIsValid = false
+                                    isCheckpointPassValid = false
                                 elseif outsideOffset > 10.0 then
                                     applyTeleportPenalty = true
                                 elseif outsideOffset >= 1.5 then
@@ -827,30 +826,18 @@ CreateThread(function()
                             end
                         end
 
-                        if checkpointPassIsValid then
+                        if isCheckpointPassValid then
                             local lapTimingPayload = nil
-                            local didFinishLap = false
                             local totalLaps = math.max(1, tonumber(joinedInstance.laps) or 1)
-                            local lapTriggerCheckpoint = RacingSystem.Client.getClientLapTriggerCheckpoint(totalCheckpoints)
                             if targetIndex == lapTriggerCheckpoint then
                                 local nowMs = GetGameTimer()
                                 local raceStartedAt = tonumber(raceTimingState.raceStartedAt) or nowMs
                                 local lapStartedAt = tonumber(raceTimingState.lapStartedAt) or raceStartedAt
-                                local currentLapNum = math.max(1, tonumber(entrantProgress.currentLap) or 1)
-                                didFinishLap = currentLapNum >= totalLaps
 
                                 lapTimingPayload = {
                                     lapTimeMs = math.max(0, nowMs - lapStartedAt),
                                     totalTimeMs = math.max(0, nowMs - raceStartedAt),
                                 }
-
-                                if didFinishLap then
-                                    raceTimingState.lapStartedAt = nil
-                                else
-                                    raceTimingState.lapStartedAt = nowMs
-                                end
-
-                                RacingSystem.Client.Util.NotifyPlayer('~w~' .. formatLapTime(lapTimingPayload.lapTimeMs))
                             end
 
                             raceRuntimeState.pendingCheckpointPass = {
@@ -858,12 +845,12 @@ CreateThread(function()
                                 checkpointIndex = targetIndex,
                                 expiresAt = GetGameTimer() + 1500,
                             }
-                            local nextCheckpointForPassedVariant = RacingSystem.Client.getNextCheckpointForVariant(joinedInstance, totalCheckpoints, targetIndex, passedRouteVariant)
+                            local nextCheckpointForPassedVariant = RacingSystem.Client.getNextCheckpointForVariant(joinedInstance, totalCheckpoints, targetIndex, crossedRouteVariant)
                             raceRuntimeState.lastPassedCheckpoint = {
                                 instanceId = tonumber(joinedInstance.id),
                                 checkpointIndex = tonumber(targetIndex) or 1,
-                                routeVariant = passedRouteVariant,
-                                checkpoint = cloneRuntimeCheckpoint(passedTargetCheckpoint or targetCheckpoint),
+                                routeVariant = crossedRouteVariant,
+                                checkpoint = cloneRuntimeCheckpoint(crossedCheckpointTarget or targetCheckpoint),
                                 nextCheckpoint = cloneRuntimeCheckpoint(nextCheckpointForPassedVariant),
                                 updatedAt = GetGameTimer(),
                             }
@@ -877,12 +864,14 @@ CreateThread(function()
                                     postPassCheckpointIndex = 1
                                 end
                                 local lapTriggerCheckpoint2 = RacingSystem.Client.getClientLapTriggerCheckpoint(totalCheckpoints)
+                                local currentLapNum = math.max(1, tonumber(entrantProgress.currentLap) or 1)
+                                local didFinishLap = currentLapNum >= totalLaps
                                 if targetIndex == lapTriggerCheckpoint2 and lapTimingPayload ~= nil and not didFinishLap then
                                     postPassCheckpointIndex = 1
                                 end
 
-                                local passedCheckpoint = passedTargetCheckpoint or targetCheckpoint
-                                local newCurrentCheckpoint = RacingSystem.Client.getNextCheckpointForVariant(joinedInstance, totalCheckpoints, targetIndex, passedRouteVariant) or checkpoints[postPassCheckpointIndex]
+                                local passedCheckpoint = crossedCheckpointTarget or targetCheckpoint
+                                local newCurrentCheckpoint = RacingSystem.Client.getNextCheckpointForVariant(joinedInstance, totalCheckpoints, targetIndex, crossedRouteVariant) or checkpoints[postPassCheckpointIndex]
                                 RacingSystem.Client.runSmartCheckpointTeleport(passedCheckpoint, newCurrentCheckpoint)
                             elseif applyThrottlePenalty then
                                 if pedVehicle ~= 0 and DoesEntityExist(pedVehicle) then

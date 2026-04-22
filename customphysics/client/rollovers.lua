@@ -71,7 +71,7 @@ end
 
 -- Applies rollover recovery force when the cached trigger conditions say the vehicle is unstable.
 function CustomPhysicsRollovers.update(vehicle)
-    if CustomPhysics.Config.rolloversEnabled ~= true then
+    if not GetConvarBool('cp_rollovers_enabled', true) then
         CustomPhysicsRollovers.reset()
         return
     end
@@ -214,7 +214,7 @@ end
 
 CreateThread(function()
     while true do
-        if CustomPhysics.Config.rolloversEnabled == true and GetConvarInt('cPhysicsExtraPrints', 0) >= 1 then
+        if GetConvarBool('cp_rollovers_enabled', true) and GetConvarInt('cPhysicsPrintLevel', 0) == 2 then
             CustomPhysicsRollovers.drawDebugPanel()
         end
         Wait(0)

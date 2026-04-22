@@ -128,49 +128,6 @@ function RacingSystem.Client.Util.UpdateRaceLeaderboardVisual(title, rows)
     end
 end
 
-function RacingSystem.Client.Util.DrawRaceLeaderboardVisual()
-    local rows = type(raceLeaderboardVisualState.rows) == 'table' and raceLeaderboardVisualState.rows or {}
-    if #rows <= 0 then
-        return
-    end
-
-    local bodyLeftX = 0.03
-    local bodyY = 0.39
-    local rowTextScale = 0.27
-    local bodyWidth = 0.22
-    local baseX = bodyLeftX + (bodyWidth * 0.5)
-    local rowHeight = 0.024
-    local bodyHeight = math.max(0.028, math.min(0.30, (#rows * rowHeight) + 0.012))
-
-    DrawRect(baseX, bodyY, bodyWidth, bodyHeight, 12, 16, 26, 140)
-
-    local firstRowY = bodyY - (bodyHeight * 0.5) + (rowHeight * 0.5) + 0.002
-    local textLeftX = bodyLeftX + 0.008
-    for index, row in ipairs(rows) do
-        local y = firstRowY + ((index - 1) * rowHeight)
-        if y > 0.95 then
-            break
-        end
-
-        local rank = math.max(1, math.floor(tonumber((row or {}).rank) or index))
-        local isFinalized = type(row) == 'table' and row.finalized == true
-        local textR, textG, textB, textA = 235, 240, 255, 225
-        if isFinalized then
-            if rank == 1 then
-                textR, textG, textB, textA = 255, 215, 0, 240
-            elseif rank == 2 then
-                textR, textG, textB, textA = 192, 192, 192, 240
-            elseif rank == 3 then
-                textR, textG, textB, textA = 205, 127, 50, 240
-            else
-                textR, textG, textB, textA = 80, 160, 255, 235
-            end
-        end
-
-        drawLeaderboardText(textLeftX, y - 0.004, rowTextScale, row.text, textR, textG, textB, textA, false)
-    end
-end
-
 function RacingSystem.Client.Util.ClearRaceLeaderboardVisual()
     raceLeaderboardVisualState.rows = {}
     raceLeaderboardVisualState.finalizedByKey = {}
