@@ -20,6 +20,7 @@ client_scripts {
     'client/vehiclemanager.lua',
     'client/tuningpackmanager.lua',
     'client/surfacegrip.lua',
+    'client/DynamicCurveLateral.lua',
     'client/menusliders.lua',
     'client/performancepanel.lua',
     'client/runtimebindings.lua',
