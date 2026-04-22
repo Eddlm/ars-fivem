@@ -7,8 +7,7 @@ local NitrousVisuals = {
 }
 
 local function getNitrousLevelMultiplier(nitrousLevel)
-    local packs = (PerformanceTuning._internals or {}).NITROUS_PACKS or {}
-    for _, pack in ipairs(packs) do
+    for _, pack in ipairs((PerformanceTuning._internals or {}).NITROUS_PACKS or {}) do
         if pack.id == nitrousLevel then
             return tonumber(pack.powerMultiplier) or 0.0
         end
@@ -17,35 +16,29 @@ local function getNitrousLevelMultiplier(nitrousLevel)
     return 0.0
 end
 
-function PerformanceTuning.Nitrous.wasControlJustPressed()
-    return IsControlJustPressed(0, 73) or IsControlJustPressed(1, 73) or IsControlJustPressed(2, 73)
+local function wasControlJustPressed()
+    return IsControlJustPressed(0, 73)
 end
 
 local function requestNitrousPtfxAsset()
-    if HasNamedPtfxAssetLoaded(NitrousVisuals.ptfxAsset) then
-        return
+    if not HasNamedPtfxAssetLoaded(NitrousVisuals.ptfxAsset) then
+        RequestNamedPtfxAsset(NitrousVisuals.ptfxAsset)
     end
-
-    RequestNamedPtfxAsset(NitrousVisuals.ptfxAsset)
 end
 
 local function showSubtitle(text, durationMs)
     BeginTextCommandPrint('STRING')
     AddTextComponentSubstringPlayerName(tostring(text or ''))
-    EndTextCommandPrint(math.max(0, math.floor(tonumber(durationMs) or 1000)), true)
+    durationMs = math.max(0, math.floor(tonumber(durationMs) or 1000))
+    EndTextCommandPrint(durationMs, true)
 end
 
 local function getMaxNitrousShots(nitrousConfig)
     return math.max(1, math.floor(tonumber((nitrousConfig or {}).shotsPerRefill) or 3))
 end
 
-local function getNitrousShotCooldownMs(_)
-    local convarCooldownMs = GetConvarInt('pt_nitrous_shot_cooldown_ms', 0)
-    if convarCooldownMs > 0 then
-        return convarCooldownMs
-    end
-
-    return 40000
+local function getNitrousShotCooldownMs()
+    return GetConvarInt('pt_nitrous_shot_cooldown_ms', 0)
 end
 
 local function getAvailableShots(nitrousState, maxShots)
@@ -59,16 +52,16 @@ local activeShot = {
 }
 
 local function stopNitrousOverride(vehicle)
-    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then return end
+    if not PerformanceTuning.VehicleManager.isVehicleEntityValid(vehicle) then return end
     SetOverrideNitrousLevel(vehicle, false, 10.0, 0.0, 100.0, true)
     SetVehicleHudSpecialAbilityBarActive(vehicle, false)
 end
 
 local function executeShot(vehicle, instructions)
-    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) or type(instructions) ~= 'table' then return end
+    if not PerformanceTuning.VehicleManager.isVehicleEntityValid(vehicle) or type(instructions) ~= 'table' then return end
     local durationMs = math.max(250, math.floor(tonumber(instructions.durationMs) or 0))
     local power = math.max(0.0, tonumber(instructions.power) or 0.0)
-    if durationMs <= 0 or power <= 0.0 then return end
+    if power <= 0.0 then return end
     FullyChargeNitrous(vehicle)
     Citizen.InvokeNative(0xC8E9B6B71B8E660D, vehicle, true, tonumber(instructions.overrideLevel) or 1.0, power, tonumber(instructions.hudFill) or 100.0, instructions.disableSound == true)
     SetVehicleHudSpecialAbilityBarActive(vehicle, false)
@@ -77,53 +70,32 @@ local function executeShot(vehicle, instructions)
 end
 
 local function clearShot(vehicle)
-    local target = vehicle or activeShot.vehicle
-    stopNitrousOverride(target)
+    stopNitrousOverride(vehicle or activeShot.vehicle)
     activeShot.vehicle = nil
     activeShot.activeUntil = 0
 end
-
--- Per-frame loop: disables the nitrous control input and auto-clears when the shot expires.
-CreateThread(function()
-    while true do
-        if activeShot.vehicle ~= nil then
-            local now = GetGameTimer()
-            local v = activeShot.vehicle
-            if not DoesEntityExist(v) or now >= activeShot.activeUntil then
-                clearShot(v)
-            else
-                DisableControlAction(0, 73, true)
-                DisableControlAction(1, 73, true)
-                DisableControlAction(2, 73, true)
-                Wait(0)
-            end
-        else
-            Wait(100)
-        end
-    end
-end)
 
 function PerformanceTuning.Nitrous.clearShot(vehicle)
     clearShot(vehicle)
 end
 
 local function dispatchShot(vehicle, instructions)
-    executeShot(vehicle, instructions)
+    return executeShot(vehicle, instructions)
 end
 
 local function canTriggerShot(nitrousState, nitrousLevelMultiplier, now)
-    return nitrousState ~= nil
+    return nitrousState
         and nitrousLevelMultiplier > 0.0
         and (tonumber(nitrousState.nitrousActiveUntil) or 0) <= now
 end
 
-function PerformanceTuning.Nitrous.triggerShotIfAvailable(vehicle)
-    local bindings = PerformanceTuning.ClientBindings or {}
-    local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
+local function triggerShotIfAvailable(vehicle)
     if not PerformanceTuning.VehicleManager.isVehicleEntityValid(vehicle) then
         return
     end
 
+    local bindings = PerformanceTuning.ClientBindings or {}
+    local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
     local nitrousState = bindings.ensureTuningState and bindings.ensureTuningState(vehicle) or nil
     local now = GetGameTimer()
     local nitrousLevelMultiplier = getNitrousLevelMultiplier(nitrousState and nitrousState.nitrousLevel)
@@ -135,7 +107,7 @@ function PerformanceTuning.Nitrous.triggerShotIfAvailable(vehicle)
     local maxShots = getMaxNitrousShots(nitrousConfig)
     local availableShots = getAvailableShots(nitrousState, maxShots)
     if availableShots <= 0 then
-        showSubtitle(('~o~No nitro shots remaining.'), 2000)
+        showSubtitle('~o~No nitro shots remaining.', 2000)
         return
     end
 
@@ -181,15 +153,16 @@ function PerformanceTuning.Nitrous.triggerShotIfAvailable(vehicle)
     nitrousState.nitrousCooldownStartedAt = now
     nitrousState.nitrousCooldownUntil = now + shotCooldownMs
     nitrousState.nitrousAvailableNotified = false
-    showSubtitle(('~b~%s~w~ shots remaining.'):format(nitrousState.nitrousAvailableCharge), 2000)
+    showSubtitle(('~b~%d~w~ shots remaining.'):format(nitrousState.nitrousAvailableCharge), 2000)
 end
 
-function PerformanceTuning.Nitrous.refillAvailability(vehicle, now)
-    local bindings = PerformanceTuning.ClientBindings or {}
-    local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
+local function refillAvailability(vehicle, now)
     if not PerformanceTuning.VehicleManager.isVehicleEntityValid(vehicle) then
         return
     end
+
+    local bindings = PerformanceTuning.ClientBindings or {}
+    local runtimeConfig = PerformanceTuning.RuntimeConfig or {}
 
     -- Stationary refill model: nitrous becomes fully available only when essentially stopped.
     if GetEntitySpeed(vehicle) > 0.5 then
@@ -217,43 +190,16 @@ function PerformanceTuning.Nitrous.refillAvailability(vehicle, now)
     end
 end
 
--- Rev limiter: disables throttle input at redline. Moved here from customphysics/power.lua
--- to remove the dependency on that resource for this performancetuning-owned feature.
-local accelDisabledAt = 0
-
-local function updateRevLimiter(vehicle, now)
-    local bucket = PerformanceTuning.VehicleManager.ensureTuningState(vehicle)
-    if not bucket or bucket.revLimiterEnabled ~= true then
-        accelDisabledAt = 0
-        return
-    end
-
-    local currentGear = GetVehicleCurrentGear(vehicle)
-    local highGear = math.max(GetVehicleHighGear(vehicle) or 0, 0)
-    local currentRpm = GetVehicleCurrentRpm(vehicle)
-    local moving = GetEntitySpeed(vehicle) * 2.2369362921 > 1.0
-    local validGear = currentGear >= 1 and (highGear <= 1 or currentGear < highGear)
-
-    if moving and validGear and currentRpm >= 1.0 then
-        accelDisabledAt = now + 10
-    end
-
-    if now < accelDisabledAt then
-        DisableControlAction(0, 71, true)
-        DisableControlAction(2, 71, true)
-    end
-end
+local vehicleManager = PerformanceTuning.VehicleManager or {}
 
 CreateThread(function()
-    local vehicleManager = PerformanceTuning.VehicleManager or {}
     while true do
         local vehicle = vehicleManager.getCurrentVehicle and vehicleManager.getCurrentVehicle() or nil
         if vehicle then
-            if PerformanceTuning.Nitrous.wasControlJustPressed() then
+            if wasControlJustPressed() then
                 requestNitrousPtfxAsset()
-                PerformanceTuning.Nitrous.triggerShotIfAvailable(vehicle)
+                triggerShotIfAvailable(vehicle)
             end
-            updateRevLimiter(vehicle, GetGameTimer())
             Wait(0)
         else
             Wait(250)
@@ -262,13 +208,30 @@ CreateThread(function()
 end)
 
 CreateThread(function()
-    local vehicleManager = PerformanceTuning.VehicleManager or {}
     while true do
         local vehicle = vehicleManager.getCurrentVehicle and vehicleManager.getCurrentVehicle() or nil
         if vehicle then
-            PerformanceTuning.Nitrous.refillAvailability(vehicle, GetGameTimer())
+            refillAvailability(vehicle, GetGameTimer())
         end
         Wait(500)
+    end
+end)
+
+-- Per-frame loop: disables the nitrous control input and auto-clears when the shot expires.
+CreateThread(function()
+    while true do
+        if activeShot.vehicle ~= nil then
+            local now = GetGameTimer()
+            local v = activeShot.vehicle
+            if not DoesEntityExist(v) or now >= activeShot.activeUntil then
+                clearShot(v)
+            else
+                DisableControlAction(0, 73, true)
+                Wait(0)
+            end
+        else
+            Wait(100)
+        end
     end
 end)
 

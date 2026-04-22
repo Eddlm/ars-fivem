@@ -1,10 +1,5 @@
 -- Dynamically updates fTractionCurveLateral based on front-wheel surface grip.
 PerformanceTuning = PerformanceTuning or {}
-PerformanceTuning.DynamicCurveLateral = PerformanceTuning.DynamicCurveLateral or {}
-
-local function isValidNumber(value)
-    return value ~= nil
-end
 
 local function showSubtitle(text, durationMs)
     BeginTextCommandPrint('STRING')
@@ -41,7 +36,7 @@ local function restoreLiveSurfaceLateral(vehicle)
     end
 
     local bucket = PerformanceTuning.RuntimeState.liveSurfaceLateralByVehicle[key]
-    if not bucket or not isValidNumber(bucket.originalLateral) or not DoesEntityExist(vehicle) then
+    if not bucket or bucket.originalLateral == nil or not DoesEntityExist(vehicle) then
         return
     end
 
@@ -53,11 +48,29 @@ local function restoreLiveSurfaceLateral(vehicle)
     )
 end
 
+local function restoreAllLiveSurfaceLateral()
+    local runtimeState = PerformanceTuning.RuntimeState or {}
+    local buckets = runtimeState.liveSurfaceLateralByVehicle or {}
+    local vehicleManager = PerformanceTuning.VehicleManager or {}
+
+    for key in pairs(buckets) do
+        local entity = vehicleManager.resolveTrackedVehicleEntity and vehicleManager.resolveTrackedVehicleEntity(key) or 0
+        if entity ~= 0 and DoesEntityExist(entity) then
+            restoreLiveSurfaceLateral(entity)
+        end
+    end
+
+    local vehicle = GetVehiclePedIsIn(PlayerPedId(), false)
+    if vehicle ~= 0 and DoesEntityExist(vehicle) then
+        restoreLiveSurfaceLateral(vehicle)
+    end
+end
+
 local function getAverageFrontWheelTyreGrip(vehicle)
     local leftFrontGrip = PerformanceTuning.SurfaceGrip.getMaterialTyreGripByIndex(GetVehicleWheelSurfaceMaterial(vehicle, 0))
     local rightFrontGrip = PerformanceTuning.SurfaceGrip.getMaterialTyreGripByIndex(GetVehicleWheelSurfaceMaterial(vehicle, 1))
 
-    if isValidNumber(leftFrontGrip) and isValidNumber(rightFrontGrip) then
+    if leftFrontGrip ~= nil and rightFrontGrip ~= nil then
         return (leftFrontGrip + rightFrontGrip) * 0.5
     end
 
@@ -70,12 +83,12 @@ local function updateLiveSurfaceLateral(vehicle)
     end
 
     local bucket = getLiveSurfaceLateralBucket(vehicle, true)
-    if not bucket or not isValidNumber(bucket.originalLateral) then
+    if not bucket or bucket.originalLateral == nil then
         return nil
     end
 
     local tyreGrip = getAverageFrontWheelTyreGrip(vehicle)
-    if not isValidNumber(tyreGrip) then
+    if tyreGrip == nil then
         return nil
     end
 
@@ -84,7 +97,7 @@ local function updateLiveSurfaceLateral(vehicle)
         'float',
         PerformanceTuning.Definitions.handlingFields.tires.tractionLoss
     )
-    if not isValidNumber(tractionLossMult) then
+    if tractionLossMult == nil then
         return nil
     end
 
@@ -96,8 +109,9 @@ local function updateLiveSurfaceLateral(vehicle)
         PerformanceTuning.Definitions.handlingFields.tires.lateral,
         updatedLateral
     )
-    showSubtitle(('fTractionCurveLateral: %.2f'):format(updatedLateral), 550)
-    ModifyVehicleTopSpeed(vehicle, 0.01)
+    if bucket.lastAppliedLateral ~= updatedLateral then
+        ModifyVehicleTopSpeed(vehicle, 0.01)
+    end
     bucket.lastAppliedLateral = updatedLateral
     return tyreGrip, updatedLateral
 end
@@ -125,4 +139,12 @@ CreateThread(function()
         lastVehicleKey = currentVehicleKey
         Wait(500)
     end
+end)
+
+AddEventHandler('onResourceStop', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then
+        return
+    end
+
+    restoreAllLiveSurfaceLateral()
 end)

@@ -19,7 +19,7 @@ local RuntimeState = {
 }
 
 local function trim(value)
-    return (tostring(value or ''):match('^%s*(.-)%s*$'))
+    return tostring(value or ''):match('^%s*(.-)%s*$')
 end
 
 local function startsWith(value, prefix)
@@ -51,23 +51,26 @@ local function drawPerformanceIndexPanelInstance(vehicle, options)
 end
 
 local function setKeepPersonalPiPanelActive(source, active)
-    if PerformanceTuning.PerformancePanel and PerformanceTuning.PerformancePanel.setKeepPersonalPiPanelActive then
-        PerformanceTuning.PerformancePanel.setKeepPersonalPiPanelActive(source, active)
+    local performancePanel = PerformanceTuning.PerformancePanel
+    if type(performancePanel) == 'table' and type(performancePanel.setKeepPersonalPiPanelActive) == 'function' then
+        performancePanel.setKeepPersonalPiPanelActive(source, active)
         return true
     end
     return false
 end
 
 local function setPanelDrawRequest(source, requestKey, vehicle, options, settings)
-    if PerformanceTuning.PerformancePanel and PerformanceTuning.PerformancePanel.setPanelDrawRequest then
-        return PerformanceTuning.PerformancePanel.setPanelDrawRequest(source, requestKey, vehicle, options, settings)
+    local performancePanel = PerformanceTuning.PerformancePanel
+    if type(performancePanel) == 'table' and type(performancePanel.setPanelDrawRequest) == 'function' then
+        return performancePanel.setPanelDrawRequest(source, requestKey, vehicle, options, settings)
     end
     return false
 end
 
 local function clearPanelDrawRequest(source, requestKey)
-    if PerformanceTuning.PerformancePanel and PerformanceTuning.PerformancePanel.clearPanelDrawRequest then
-        return PerformanceTuning.PerformancePanel.clearPanelDrawRequest(source, requestKey)
+    local performancePanel = PerformanceTuning.PerformancePanel
+    if type(performancePanel) == 'table' and type(performancePanel.clearPanelDrawRequest) == 'function' then
+        return performancePanel.clearPanelDrawRequest(source, requestKey)
     end
     return false
 end
@@ -103,35 +106,21 @@ local function refreshVehicleAfterHandlingChange(vehicle)
 end
 
 local function flatVelToEstimatedMaxSpeedMs(flatVel)
-    local resolvedFlatVel = tonumber(flatVel) or 0.0
-    return (resolvedFlatVel * 0.6213712 / 0.75) * 0.44704
+    return ((tonumber(flatVel) or 0.0) * 0.6213712 / 0.75) * 0.44704
 end
 
 local function calculateTargetDragCoeff(topSpeedFlatVel, powerValue)
-    local resolvedTopSpeedFlatVel = tonumber(topSpeedFlatVel) or 0.0
-    local resolvedPowerValue = tonumber(powerValue) or 0.0
-    local estimatedTopSpeedMs = flatVelToEstimatedMaxSpeedMs(resolvedTopSpeedFlatVel)
+    local estimatedTopSpeedMs = flatVelToEstimatedMaxSpeedMs(topSpeedFlatVel)
     local refSpeedDrag = ((((estimatedTopSpeedMs / 0.75) / 5.0) ^ 2.0) / 2500.0)
     if refSpeedDrag <= 0.0 then
         return nil
     end
 
-    return (resolvedPowerValue / refSpeedDrag) * 2.0
-end
-
-local function syncVehicleHandlingState(vehicle)
-    return PerformanceTuning.VehicleManager.syncVehicleHandlingState(vehicle)
+    return ((tonumber(powerValue) or 0.0) / refSpeedDrag) * 2.0
 end
 
 local function ensureTuningState(vehicle)
     return PerformanceTuning.VehicleManager.ensureTuningState(vehicle)
-end
-
-local function buildPerformanceIndex(vehicle, bucket)
-    return PerformanceTuning.PerformancePanel.buildPerformanceIndex(vehicle, bucket)
-end
-
-local function notifyDragRebalanceFinished()
 end
 
 local function requestDragRebalance(vehicle, options)
@@ -139,10 +128,13 @@ local function requestDragRebalance(vehicle, options)
         return false
     end
 
-    options = type(options) == 'table' and options or {}
-    local dragField = HandlingFields.engine and HandlingFields.engine.drag or 'fInitialDragCoeff'
-    local powerField = HandlingFields.engine and HandlingFields.engine.power or 'fInitialDriveForce'
-    local topSpeedField = HandlingFields.engine and HandlingFields.engine.topSpeed or 'fInitialDriveMaxFlatVel'
+    if type(options) ~= 'table' then
+        options = {}
+    end
+    local engineFields = HandlingFields.engine or {}
+    local dragField = engineFields.drag or 'fInitialDragCoeff'
+    local powerField = engineFields.power or 'fInitialDriveForce'
+    local topSpeedField = engineFields.topSpeed or 'fInitialDriveMaxFlatVel'
     local currentPower = readHandlingValue(vehicle, 'float', powerField)
     local currentTopSpeedFlatVel = readHandlingValue(vehicle, 'float', topSpeedField)
     if not isFiniteNumber(currentPower) or not isFiniteNumber(currentTopSpeedFlatVel) then
@@ -157,12 +149,11 @@ local function requestDragRebalance(vehicle, options)
     PerformanceTuning.HandlingManager.rememberOriginalValue(vehicle, dragField, 'float')
     writeHandlingValue(vehicle, 'float', dragField, targetDragCoeff)
     if options.skipSync ~= true then
-        syncVehicleHandlingState(vehicle)
+        PerformanceTuning.VehicleManager.syncVehicleHandlingState(vehicle)
     end
     if options.skipRefresh ~= true then
         refreshVehicleAfterHandlingChange(vehicle)
     end
-    notifyDragRebalanceFinished()
     return true
 end
 
@@ -195,118 +186,101 @@ CreateThread(function()
         end
         Wait(waitMs)
 
-        if not PerformanceTuning.VehicleManager.isPedDrivingVehicle(ped, vehicle) then
-            goto continue
-        end
+        if PerformanceTuning.VehicleManager.isPedDrivingVehicle(ped, vehicle) then
+            local bucket = ensureTuningState and ensureTuningState(vehicle) or nil
+            if type(bucket) == 'table' then
+                local vehicleKey = PerformanceTuning.VehicleManager.getVehicleCacheKey(vehicle)
+                local mode = bucket.steeringLockMode or 'stock'
+                local factor = PerformanceTuning.TuningPackManager.getSteeringLockModeFactor(mode)
 
-        local bucket = ensureTuningState and ensureTuningState(vehicle) or nil
-        if type(bucket) ~= 'table' then
-            goto continue
-        end
-
-        local vehicleKey = PerformanceTuning.VehicleManager.getVehicleCacheKey(vehicle)
-        local mode = bucket.steeringLockMode or 'stock'
-        local factor = PerformanceTuning.TuningPackManager.getSteeringLockModeFactor(mode)
-
-        if type(factor) == 'number' then
-            local lateral = readHandlingValue(vehicle, 'float', tractionLateralField)
-            if not isFiniteNumber(lateral) then
-                goto continue
-            end
-
-
-
-            local baseSteeringLock = tonumber(bucket.baseSteeringLock)
-            if not isFiniteNumber(baseSteeringLock) then
-                -- Prefer the pre-override original value stored by rememberOriginalValue,
-                -- so we never seed baseSteeringLock from an already-overridden live field.
-                local origBucket = PerformanceTuning.VehicleManager.getVehicleBucket(vehicle, false)
-                local origEntry = origBucket and origBucket[steeringLockField]
-                if origEntry and isFiniteNumber(origEntry.value) then
-                    baseSteeringLock = origEntry.value
+                if type(factor) == 'number' then
+                    local lateral = readHandlingValue(vehicle, 'float', tractionLateralField)
+                    if isFiniteNumber(lateral) then
+                        local baseSteeringLock = tonumber(bucket.baseSteeringLock)
+                        if not isFiniteNumber(baseSteeringLock) then
+                            -- Prefer the pre-override original value stored by rememberOriginalValue,
+                            -- so we never seed baseSteeringLock from an already-overridden live field.
+                            local origBucket = PerformanceTuning.VehicleManager.getVehicleBucket(vehicle, false)
+                            local origEntry = origBucket and origBucket[steeringLockField]
+                            if origEntry and isFiniteNumber(origEntry.value) then
+                                baseSteeringLock = origEntry.value
+                            else
+                                baseSteeringLock = readHandlingValue(vehicle, 'float', steeringLockField)
+                            end
+                            if isFiniteNumber(baseSteeringLock) then
+                                bucket.baseSteeringLock = baseSteeringLock
+                            end
+                        end
+                        local targetSteeringLock = lateral * ( baseSteeringLock/lateral) * factor
+                        if isFiniteNumber(targetSteeringLock) then
+                            -- If steering input and lateral slide are opposite, the driver is countersteering —
+                            -- restore original lock. Same direction means sliding with steering, apply factor.
+                            local localVel = GetEntitySpeedVector(vehicle, true)
+                            local lateralSlide = localVel.x  -- positive = sliding right in vehicle space
+                            local steeringInput = GetVehicleSteeringAngle(vehicle)  -- positive = turning right
+                            local threshold = lateral / 3.0
+                            local oppositeSide = (lateralSlide > threshold and steeringInput < -threshold) or (lateralSlide < -threshold and steeringInput > threshold)
+                            if oppositeSide and isFiniteNumber(baseSteeringLock) then
+                                targetSteeringLock = baseSteeringLock
+                            else
+                                if isFiniteNumber(baseSteeringLock) then
+                                    local minBlendSpeedMph = 5.0
+                                    local maxBlendSpeedMph = 30.0
+                                    if speedMph <= minBlendSpeedMph then
+                                        targetSteeringLock = baseSteeringLock
+                                    elseif speedMph < maxBlendSpeedMph then
+                                        local blend = (speedMph - minBlendSpeedMph) / (maxBlendSpeedMph - minBlendSpeedMph)
+                                        targetSteeringLock = baseSteeringLock + ((targetSteeringLock - baseSteeringLock) * blend)
+                                    end
+                                end
+                            end
+                        
+                            if type(vehicleKey) == 'string' and vehicleKey ~= '' then
+                                steeringLockTargetByVehicleKey[vehicleKey] = targetSteeringLock
+                                appliedOverrides[vehicleKey] = true
+                            end
+                            PerformanceTuning.HandlingManager.rememberOriginalValue(vehicle, steeringLockField, 'float')
+                        end
+                    end
                 else
-                    baseSteeringLock = readHandlingValue(vehicle, 'float', steeringLockField)
-                end
-                if isFiniteNumber(baseSteeringLock) then
-                    bucket.baseSteeringLock = baseSteeringLock
-                end
-            end
-            local targetSteeringLock = lateral * ( baseSteeringLock/lateral) * factor
-            if not isFiniteNumber(targetSteeringLock) then
-                goto continue
-            end
-            -- If steering input and lateral slide are opposite, the driver is countersteering —
-            -- restore original lock. Same direction means sliding with steering, apply factor.
-            local localVel = GetEntitySpeedVector(vehicle, true)
-            local lateralSlide = localVel.x  -- positive = sliding right in vehicle space
-            local steeringInput = GetVehicleSteeringAngle(vehicle)  -- positive = turning right
-            local threshold = lateral / 3.0
-            local oppositeSide = (lateralSlide > threshold and steeringInput < -threshold) or (lateralSlide < -threshold and steeringInput > threshold)
-            if oppositeSide and isFiniteNumber(baseSteeringLock) then
-                targetSteeringLock = baseSteeringLock
-            else
-                if isFiniteNumber(baseSteeringLock) then
-                    local minBlendSpeedMph = 5.0
-                    local maxBlendSpeedMph = 30.0
-                    if speedMph <= minBlendSpeedMph then
-                        targetSteeringLock = baseSteeringLock
-                    elseif speedMph < maxBlendSpeedMph then
-                        local blend = (speedMph - minBlendSpeedMph) / (maxBlendSpeedMph - minBlendSpeedMph)
-                        targetSteeringLock = baseSteeringLock + ((targetSteeringLock - baseSteeringLock) * blend)
+                    local shouldRestore = type(vehicleKey) == 'string' and vehicleKey ~= '' and appliedOverrides[vehicleKey] == true
+                    if shouldRestore then
+                        local baseSteeringLock = tonumber(bucket.baseSteeringLock)
+                        if not isFiniteNumber(baseSteeringLock) then
+                            baseSteeringLock = readHandlingValue(vehicle, 'float', steeringLockField)
+                            bucket.baseSteeringLock = baseSteeringLock
+                        end
+                        if type(vehicleKey) == 'string' and vehicleKey ~= '' then
+                            steeringLockTargetByVehicleKey[vehicleKey] = baseSteeringLock
+                        end
+                        appliedOverrides[vehicleKey] = nil
+                        steeringLockActiveByVehicleKey[vehicleKey] = nil
                     end
                 end
             end
-        
-            if type(vehicleKey) == 'string' and vehicleKey ~= '' then
-                steeringLockTargetByVehicleKey[vehicleKey] = targetSteeringLock
-                appliedOverrides[vehicleKey] = true
-            end
-            PerformanceTuning.HandlingManager.rememberOriginalValue(vehicle, steeringLockField, 'float')
-        else
-            local shouldRestore = type(vehicleKey) == 'string' and vehicleKey ~= '' and appliedOverrides[vehicleKey] == true
-            if shouldRestore then
-                local baseSteeringLock = tonumber(bucket.baseSteeringLock)
-                if not isFiniteNumber(baseSteeringLock) then
-                    baseSteeringLock = readHandlingValue(vehicle, 'float', steeringLockField)
-                    bucket.baseSteeringLock = baseSteeringLock
-                end
-                if type(vehicleKey) == 'string' and vehicleKey ~= '' then
-                    steeringLockTargetByVehicleKey[vehicleKey] = baseSteeringLock
-                end
-                appliedOverrides[vehicleKey] = nil
-                steeringLockActiveByVehicleKey[vehicleKey] = nil
-            end
         end
-
-        ::continue::
     end
 end)
 
 CreateThread(function()
     local steeringLockField = (HandlingFields.steering or {}).lock or 'fSteeringLock'
     while true do
-                Wait(0)
+        Wait(0)
 
         local ped = PlayerPedId()
         local vehicle = GetVehiclePedIsIn(ped, false)
-        if not PerformanceTuning.VehicleManager.isPedDrivingVehicle(ped, vehicle) then
-            goto continueFrame
+        if PerformanceTuning.VehicleManager.isPedDrivingVehicle(ped, vehicle) then
+            local vehicleKey = PerformanceTuning.VehicleManager.getVehicleCacheKey(vehicle)
+            if type(vehicleKey) == 'string' and vehicleKey ~= '' then
+                local target = steeringLockTargetByVehicleKey[vehicleKey]
+                if isFiniteNumber(target) then
+                    local current = steeringLockActiveByVehicleKey[vehicleKey] or target
+                    local applied = current + (target - current) * 0.5
+                    steeringLockActiveByVehicleKey[vehicleKey] = applied
+                    writeHandlingValue(vehicle, 'float', steeringLockField, applied)
+                end
+            end
         end
-        local vehicleKey = PerformanceTuning.VehicleManager.getVehicleCacheKey(vehicle)
-        if type(vehicleKey) ~= 'string' or vehicleKey == '' then
-            goto continueFrame
-        end
-        local target = steeringLockTargetByVehicleKey[vehicleKey]
-        if not isFiniteNumber(target) then
-            goto continueFrame
-        end
-        local current = steeringLockActiveByVehicleKey[vehicleKey] or target
-
-        local applied = current + (target - current) * 0.5
-        steeringLockActiveByVehicleKey[vehicleKey] = applied
-        writeHandlingValue(vehicle, 'float', steeringLockField, applied)
-
-        ::continueFrame::
     end
 end)
 
@@ -328,20 +302,16 @@ end
 
 local function getVehicleDisplayName(vehicle)
     local displayCode = GetDisplayNameFromVehicleModel(GetEntityModel(vehicle)) or ''
-    local displayName = displayCode
-
-    if displayCode ~= '' and displayCode ~= 'CARNOTFOUND' then
-        local label = GetLabelText(displayCode)
-        if label and label ~= '' and label ~= 'NULL' then
-            displayName = label
-        end
+    if displayCode == '' or displayCode == 'CARNOTFOUND' then
+        return 'CURRENT CAR'
     end
 
-    if displayName == '' or displayName == 'CARNOTFOUND' then
-        displayName = 'CURRENT CAR'
+    local label = GetLabelText(displayCode)
+    if label and label ~= '' and label ~= 'NULL' then
+        return label
     end
 
-    return displayName
+    return displayCode
 end
 
 local function getVehicleModelAudioName(vehicle)
@@ -386,7 +356,7 @@ local function buildNativeListState(context)
         return targetGripValue < baseTireMax
     end
 
-    if context == 'tires' and bucket and bucket.tireCompoundPack and bucket.tireCompoundPack ~= 'stock' then
+    if context == 'tires' and bucket.tireCompoundPack and bucket.tireCompoundPack ~= 'stock' then
         local tireCompoundPacks = ((((PerformanceTuning.Config or {}).packDefinitions) or {}).tires) or {}
         for _, pack in ipairs(tireCompoundPacks) do
             if pack.id == bucket.tireCompoundPack then
@@ -416,27 +386,29 @@ local function buildNativeListState(context)
             ),
             nitrous = PerformanceTuning.TuningPackManager.getNitrousPackLabel(bucket.nitrousLevel),
         },
-        performanceIndex = buildPerformanceIndex(vehicle, bucket),
+        performanceIndex = PerformanceTuning.PerformancePanel.buildPerformanceIndex(vehicle, bucket),
         context = contextDetails,
     }
 end
 
 local function applyCurrentVehicleStateBagTuningForMenu()
-    local vehicle = PerformanceTuning.VehicleManager.getCurrentVehicle()
+    local vehicleManager = PerformanceTuning.VehicleManager
+    local vehicle = vehicleManager.getCurrentVehicle()
     if not vehicle then
         return false
     end
 
-    if not PerformanceTuning.VehicleManager.ensureVehicleNetworked(vehicle, 1500) then
+    if not vehicleManager.ensureVehicleNetworked(vehicle, 1500) then
         return false
     end
 
-    local state = Entity(vehicle).state[((PerformanceTuning.Definitions or {}).stateBagKeys or {}).tune]
+    local stateBagKeys = (PerformanceTuning.Definitions or {}).stateBagKeys or {}
+    local state = Entity(vehicle).state[stateBagKeys.tune]
     if type(state) ~= 'table' then
         return true
     end
 
-    if PerformanceTuning.VehicleManager.tuneStatesEqual(PerformanceTuning.VehicleManager.getLastAppliedTuneState(vehicle), state) then
+    if vehicleManager.tuneStatesEqual(vehicleManager.getLastAppliedTuneState(vehicle), state) then
         return true
     end
 
@@ -450,15 +422,15 @@ end
 local function applyNativeMenuSelection(context, index)
     local vehicle, vehicleError = PerformanceTuning.VehicleManager.getCurrentVehicle()
     if not vehicle then
-        if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.closeMenu then
-            PerformanceTuning.ScaleformUI.closeMenu()
+        local scaleformUI = PerformanceTuning.ScaleformUI
+        if type(scaleformUI) == 'table' and type(scaleformUI.closeMenu) == 'function' then
+            scaleformUI.closeMenu()
         end
         return false, vehicleError
     end
 
-    local scaleformUIState = PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.state or nil
-    local optionsByContext = scaleformUIState and scaleformUIState.options or nil
-    local options = optionsByContext and optionsByContext[context] or nil
+    local scaleformUIState = (PerformanceTuning.ScaleformUI or {}).state
+    local options = scaleformUIState and scaleformUIState.options and scaleformUIState.options[context] or nil
     local option = type(options) == 'table' and options[index] or nil
     local bucket = PerformanceTuning.VehicleManager.ensureTuningState(vehicle)
     local selectionByContext = {
@@ -546,8 +518,9 @@ exports('DrawPerformanceIndexPanel', function(vehicle)
         return false
     end
 
-    PerformanceTuning.PerformancePanel.state = PerformanceTuning.PerformancePanel.state or {}
-    PerformanceTuning.PerformancePanel.state.externalKeepAliveUntil = GetGameTimer() + 100
+    local performancePanel = PerformanceTuning.PerformancePanel
+    performancePanel.state = performancePanel.state or {}
+    performancePanel.state.externalKeepAliveUntil = GetGameTimer() + 100
     drawPerformanceIndexPanel(vehicle)
     return true
 end)
@@ -557,8 +530,9 @@ exports('DrawPerformanceIndexPanelInstance', function(vehicle, options)
         return false
     end
 
-    PerformanceTuning.PerformancePanel.state = PerformanceTuning.PerformancePanel.state or {}
-    PerformanceTuning.PerformancePanel.state.externalKeepAliveUntil = GetGameTimer() + 100
+    local performancePanel = PerformanceTuning.PerformancePanel
+    performancePanel.state = performancePanel.state or {}
+    performancePanel.state.externalKeepAliveUntil = GetGameTimer() + 100
     return drawPerformanceIndexPanelInstance(vehicle, options)
 end)
 
@@ -575,32 +549,36 @@ exports('ClearPanelDrawRequest', function(source, requestKey)
 end)
 
 exports('OpenPerformanceTuningMenu', function()
-    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.openMainMenu then
-        return PerformanceTuning.ScaleformUI.openMainMenu() == true
+    local scaleformUI = PerformanceTuning.ScaleformUI
+    if type(scaleformUI) == 'table' and type(scaleformUI.openMainMenu) == 'function' then
+        return scaleformUI.openMainMenu() == true
     end
 
     return false
 end)
 
 exports('GetPiDisplayModeIndex', function()
-    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.getPiDisplayModeIndex then
-        return PerformanceTuning.ScaleformUI.getPiDisplayModeIndex()
+    local scaleformUI = PerformanceTuning.ScaleformUI
+    if type(scaleformUI) == 'table' and type(scaleformUI.getPiDisplayModeIndex) == 'function' then
+        return scaleformUI.getPiDisplayModeIndex()
     end
 
     return 1
 end)
 
 exports('SetPiDisplayModeIndex', function(index)
-    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.setPiDisplayModeIndex then
-        return PerformanceTuning.ScaleformUI.setPiDisplayModeIndex(index)
+    local scaleformUI = PerformanceTuning.ScaleformUI
+    if type(scaleformUI) == 'table' and type(scaleformUI.setPiDisplayModeIndex) == 'function' then
+        return scaleformUI.setPiDisplayModeIndex(index)
     end
 
     return 1
 end)
 
 exports('GetPerformanceBarsDisplayMode', function()
-    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.getPerformanceBarsDisplayMode then
-        return PerformanceTuning.ScaleformUI.getPerformanceBarsDisplayMode()
+    local scaleformUI = PerformanceTuning.ScaleformUI
+    if type(scaleformUI) == 'table' and type(scaleformUI.getPerformanceBarsDisplayMode) == 'function' then
+        return scaleformUI.getPerformanceBarsDisplayMode()
     end
 
     return 'absolute_benchmark'
@@ -608,7 +586,10 @@ end)
 
 local function applyPerformanceBarsModeRequest(requestedMode)
     local scaleformUI = PerformanceTuning.ScaleformUI
-    if not scaleformUI or type(scaleformUI.setPerformanceBarsDisplayMode) ~= 'function' or type(scaleformUI.getPerformanceBarsDisplayMode) ~= 'function' then
+    if type(scaleformUI) ~= 'table'
+        or type(scaleformUI.setPerformanceBarsDisplayMode) ~= 'function'
+        or type(scaleformUI.getPerformanceBarsDisplayMode) ~= 'function'
+    then
         return 'absolute_benchmark'
     end
 
@@ -626,32 +607,36 @@ exports('SetPerformanceBarsDisplayMode', function(mode)
 end)
 
 exports('GetCurrentVehicleRevLimiterEnabled', function()
-    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.getCurrentVehicleRevLimiterEnabled then
-        return PerformanceTuning.ScaleformUI.getCurrentVehicleRevLimiterEnabled()
+    local scaleformUI = PerformanceTuning.ScaleformUI
+    if type(scaleformUI) == 'table' and type(scaleformUI.getCurrentVehicleRevLimiterEnabled) == 'function' then
+        return scaleformUI.getCurrentVehicleRevLimiterEnabled()
     end
 
     return nil
 end)
 
 exports('SetCurrentVehicleRevLimiterEnabled', function(enabled)
-    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.setCurrentVehicleRevLimiterEnabled then
-        return PerformanceTuning.ScaleformUI.setCurrentVehicleRevLimiterEnabled(enabled)
+    local scaleformUI = PerformanceTuning.ScaleformUI
+    if type(scaleformUI) == 'table' and type(scaleformUI.setCurrentVehicleRevLimiterEnabled) == 'function' then
+        return scaleformUI.setCurrentVehicleRevLimiterEnabled(enabled)
     end
 
     return false
 end)
 
 exports('GetCurrentVehicleSteeringLockMode', function()
-    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.getCurrentVehicleSteeringLockMode then
-        return PerformanceTuning.ScaleformUI.getCurrentVehicleSteeringLockMode()
+    local scaleformUI = PerformanceTuning.ScaleformUI
+    if type(scaleformUI) == 'table' and type(scaleformUI.getCurrentVehicleSteeringLockMode) == 'function' then
+        return scaleformUI.getCurrentVehicleSteeringLockMode()
     end
 
     return nil
 end)
 
 exports('SetCurrentVehicleSteeringLockMode', function(mode)
-    if PerformanceTuning.ScaleformUI and PerformanceTuning.ScaleformUI.setCurrentVehicleSteeringLockMode then
-        return PerformanceTuning.ScaleformUI.setCurrentVehicleSteeringLockMode(mode)
+    local scaleformUI = PerformanceTuning.ScaleformUI
+    if type(scaleformUI) == 'table' and type(scaleformUI.setCurrentVehicleSteeringLockMode) == 'function' then
+        return scaleformUI.setCurrentVehicleSteeringLockMode(mode)
     end
 
     return false, nil
@@ -751,6 +736,41 @@ RegisterNetEvent('performancetuning:stableLapStored', function(payload)
         tonumber(pi.grip) or 0,
         tonumber(pi.brake) or 0
     ))
+end)
+
+-- TODO: move this into a shared driving update loop to avoid extra per-frame threads.
+CreateThread(function()
+    local throttleDisabledUntil = 0
+    while true do
+        local vehicle = PerformanceTuning.VehicleManager.getCurrentVehicle()
+        if not vehicle then
+            throttleDisabledUntil = 0
+            Wait(250)
+        else
+            local now = GetGameTimer()
+            local tuningState = ensureTuningState(vehicle)
+            if not tuningState or tuningState.revLimiterEnabled ~= true then
+                throttleDisabledUntil = 0
+                Wait(0)
+            else
+                local currentGear = GetVehicleCurrentGear(vehicle)
+                local highGear = math.max(GetVehicleHighGear(vehicle) or 0, 0)
+                local currentRpm = GetVehicleCurrentRpm(vehicle)
+                local moving = GetEntitySpeed(vehicle) * 2.2369362921 > 1.0
+                local validGear = currentGear >= 1 and (highGear <= 1 or currentGear < highGear)
+
+                if moving and validGear and currentRpm >= 1.0 then
+                    throttleDisabledUntil = now + 10
+                    DisableControlAction(0, 71, true)
+                    DisableControlAction(2, 71, true)
+                elseif now < throttleDisabledUntil then
+                    DisableControlAction(0, 71, true)
+                    DisableControlAction(2, 71, true)
+                end
+                Wait(0)
+            end
+        end
+    end
 end)
 
 
