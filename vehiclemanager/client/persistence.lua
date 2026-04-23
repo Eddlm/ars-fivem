@@ -68,6 +68,10 @@ function VehicleManager.Persistence.create(deps)
     local tyreMapping = constants.TYRE_MAPPING or {}
     local tuningSelectionSchema = constants.TUNING_SELECTION_SCHEMA or {}
 
+
+
+
+
     local function iterateVehicleState(vehicle, mapping, stateReader)
         local output = {}
         for index, name in pairs(mapping) do
@@ -197,6 +201,10 @@ function VehicleManager.Persistence.create(deps)
     local ensureVehicleNetworked = waitForVehicleOwnership
     local waitForVehicleNetworkState = waitForVehicleOwnership
 
+
+
+
+
     local function roundToThreeDecimals(value, fallback)
         local numeric = tonumber(value)
         if numeric == nil then
@@ -293,7 +301,7 @@ function VehicleManager.Persistence.create(deps)
         end
 
         if type(normalizedTuneState) == "table" then
-            entityState:set(stateBagKeys.tuneState, normalizedTuneState, true)
+            entityState[stateBagKeys.tuneState] = normalizedTuneState
         end
     end
 
@@ -308,7 +316,7 @@ function VehicleManager.Persistence.create(deps)
         if not entityState then
             return
         end
-        entityState:set(stateBagKeys.saveId, saveId, true)
+        entityState[stateBagKeys.saveId] = saveId
     end
 
     local function getVehicleSaveIdState(vehicle)
@@ -328,6 +336,10 @@ function VehicleManager.Persistence.create(deps)
         end
         return saveId
     end
+
+
+
+
 
     local function setVehicleModEntry(vehicle, modType, modData)
         if type(modData) ~= "table" then
@@ -512,6 +524,10 @@ function VehicleManager.Persistence.create(deps)
         end
     end
 
+
+
+
+
     local function requestModel(model)
         if not IsModelInCdimage(model) or not IsModelAVehicle(model) then
             return false
@@ -652,6 +668,10 @@ function VehicleManager.Persistence.create(deps)
         return displayName
     end
 
+
+
+
+
     local function buildSavedVehicleLabel(entry)
         local piValue = tonumber(entry and entry.pi)
         local piLabel = piValue and tostring(math.max(0, math.floor(piValue + 0.5))) or "--"
@@ -740,6 +760,10 @@ function VehicleManager.Persistence.create(deps)
         vehicleMenuPool:RefreshIndex()
     end
 
+
+
+
+
     local function buildVehicleSavePayload(vehicle)
         local model = GetEntityModel(vehicle)
         local primaryColor, secondaryColor = GetVehicleColours(vehicle)
@@ -810,6 +834,10 @@ function VehicleManager.Persistence.create(deps)
             tuning = tuningState,
         }
     end
+
+
+
+
 
     local function saveCurrentVehicle(promptForSaveId)
         local vehicle = getCurrentVehicle(true)
@@ -887,6 +915,10 @@ function VehicleManager.Persistence.create(deps)
     local function forgetSavedVehicle(file)
         triggerServerEvent("vehiclemanager:forgetSavedVehicle", file)
     end
+
+
+
+
 
     return {
         iterateVehicleState = iterateVehicleState,

@@ -1,5 +1,6 @@
 .vscode/
 .claude/
+.piTools/
 natives.txt
 !.github/
 !.github/**
