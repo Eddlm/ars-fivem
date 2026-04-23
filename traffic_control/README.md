@@ -1,26 +1,34 @@
-# Traffic Control
+# traffic_control
 
-This one is simple, it lets you control traffic levels globally.
+## Runtime
 
+- `shared_script`: `shared/Config.lua`
+- `client_script`: `client/traffic_task.lua`
+- `server_scripts`:
+  - `server/UpdateNotifier.lua`
+  - `server/server.lua`
 
-# Default or Set
+## Network Events
 
-The `tControlDefault <X.X|nil>` convar allows you to establish a default, and change that default live with `setr`. `nil` means the **no default control** of traffic. It will not apply multipliers or anything, it will be like traffic control is off.
+- Client/Server request event:
+  - `traffic_control:requestDensity`
+  - Usage: `TriggerServerEvent('traffic_control:requestDensity', value, reason, requestKey)`
+- Server -> client apply event:
+  - `traffic_control:setMode`
 
-# TriggerServerEvent
+## Used Convars
 
-Other scripts can use `TriggerServerEvent('traffic_control:requestDensity', value, reason, requestKey)` to have Traffic Control set its target to your requested multiplier, until you set it again with `nil` as value, which implies you want to lift control. 
+- `ars_skip_uptodate_print`
+  - Read via: `GetConvarBool`
+  - Effective default: `false`
+  - Example: `setr ars_skip_uptodate_print true`
 
-Two things: 
-- The `requestKey`  is the identifier to add, update or remove your request. I'd use `GetCurrentResourceName()`.
-- Traffic control honors **the lowest traffic** of all requests.
+- `tControlDefault`
+  - Read via: `GetConvar`
+  - Effective default: no default (`tonumber('')` -> `nil`)
+  - Example: `setr tControlDefault 0.5`
 
-### Example calls:
-- `TriggerServerEvent('traffic_control:requestDensity', 0.1, 'Race needs low traffic', GetCurrentResourceName())`
-- `TriggerServerEvent('traffic_control:requestDensity', nil, 'Finished race', GetCurrentResourceName())`
-
-
-## Convars
-
-- `setr tControlDefault <X.X|nil>` - setr tControlDefault 0.5
-- `setr tControlPrintRequests <true|false>` - setr tControlPrintRequests true
+- `tControlPrintRequests`
+  - Read via: `GetConvarBool`
+  - Effective default: `false`
+  - Example: `setr tControlPrintRequests true`

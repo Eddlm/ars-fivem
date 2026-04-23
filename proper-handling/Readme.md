@@ -1,37 +1,35 @@
 # proper-handling
 
-`proper-handling` is a data-only FiveM resource that loads handling overrides from the `data` folder.
+## Runtime
 
-## Runtime behavior
+- `files` manifest entry: `Active/**/*.meta`
+- `data_file` registration: `HANDLING_FILE` -> `Active/**/handling_*.meta`
+- `server_script`: `server/UpdateNotifier.lua`
 
-- The manifest packages `data/**/*.meta`, but only `data/**/handling_*.meta` is registered as `HANDLING_FILE`.
-- In this checkout, that means the active runtime files are:
-  - `data/handling_basegame.meta`
-  - `data/handling_john_doe.meta`
-  - `data/handling_mods.meta`
-- The resource has no client scripts, server scripts, commands, events, exports, or convars.
+## Active handling files (current checkout)
 
-## Important folder detail
+- `Active/handling_basegame.meta`
+- `Active/handling_john_doe.meta`
+- `Active/handling_mods.meta`
 
-Several root-level `.meta` files exist in this folder, including `handling.meta`, `handling_empty.meta`, `handling_smukk.meta`, `handling_stig.meta`, `handling_tidemo.meta`, and `_handling_*.meta` files.
+## Inactive by manifest pattern
 
-Those files are not loaded by the current `fxmanifest.lua`, because the manifest only targets `data/**/handling_*.meta`.
+The following are not loaded by the current `fxmanifest.lua` pattern:
 
-If one of those root-level files should become active, the manifest needs to be changed explicitly.
-
-## What this resource is for
-
-- Overriding handling data through packaged `.meta` files
-- Keeping active runtime data separated from older experiments and reference files
-
-## Notes
-
-- This resource depends only on normal FiveM/GTA handling-meta support.
-- The runtime behavior is strictly "load handling data from `data/handling_*.meta`".
+- `Inactive/handling.meta`
+- `Inactive/handling_empty.meta`
+- `Inactive/handling_smukk.meta`
+- `Inactive/handling_smukoffroad.meta`
+- `Inactive/handling_stig.meta`
+- `Inactive/handling_tidemo.meta`
+- `Inactive/_handling_b_NEW.meta`
+- `Inactive/_handling_c_extra.meta`
+- `Inactive/_handling_z_chums.meta`
+- `Inactive/_handling_z_san_andreas_drift.meta`
 
 ## Used Convars
 
 - `ars_skip_uptodate_print`
-  - Read via: `GetConvar`
-  - Effective default: `'0'`
-  - Example: `setr ars_skip_uptodate_print 1`
+  - Read via: `GetConvarBool`
+  - Effective default: `false`
+  - Example: `setr ars_skip_uptodate_print true`

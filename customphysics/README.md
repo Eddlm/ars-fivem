@@ -1,47 +1,42 @@
-# Custom Physics
+# customphysics
 
-Most of this resource uses live power adjustments to enhance the experience or deal with native problems. One by one:
+## Runtime
 
-# The Powerslides
-
-If you knew InverseTorque, this is it, reworked.
-
-It tries to keep power up while you slide to allow powerslides to happen. The numbers can be tweaked, but the default is a balance and not over the top.
-
-# The Offroading speed
-
-GTA tries very hard to limit your speed off the road. This system attempts to undo that effect by giving the car just enough power to keep accelerating to last gear while offroad. Mainly any surface that has drag defined in materials.dat.
-
-# The Speed Glitches
-
-We deal with speed glitches like Kerb-boosting or suspension boosting in a very simple way, we simply compare the intended acceleration (wheels deliver power in Gs) with the true physical acceleration the vehicle is experienced. Wheel's acceleration is pretty reliable, glitches show as spikes compared against it.
-
-This extra acceleration comes from the wheels, who are deliverling way more power than they intend. We can notice that disparity and adjust their power so they stop instantly.
-
-
-For context, a disparity of 2Gs is a sudden extra acceleration of ~48mph PER SECOND. 
-
-# The Wheelies
-Another rework of old... work. While you're doing a burnout, hold the handbrake, lift the brake. When you launch (lifting the handbrake), you'll do a wheelie. Muscles only! If you want.
-
-# The Rollovers
-If you knew Hollywood Rollovers... yeah.
-
-Its a bit more complex, but the general rules are having at least one wheel of the ground, hitting something or rotating quite fast in any of the three axis.
-
-This is the most WIP, subject to changes to the rules.
+- `shared_script`: `shared/Config.lua`
+- `client_scripts`:
+  - `client/util.lua`
+  - `client/wheelies.lua`
+  - `client/rollovers.lua`
+  - `client/power.lua`
+  - `client/client.lua`
+- `server_script`: `server/UpdateNotifier.lua`
 
 ## Used Convars
 
 - `ars_skip_uptodate_print`
-  - Read via: `GetConvar`
-  - Effective default: `'0'`
-  - Example: `setr ars_skip_uptodate_print 1`
+  - Read via: `GetConvarBool`
+  - Effective default: `false`
+  - Example: `setr ars_skip_uptodate_print true`
 
 - `cPhysicsPrintLevel`
   - Read via: `GetConvarInt`
   - Effective default: `0`
-  - Example: `setr cPhysicsPrintLevel 1`
+  - Example: `setr cPhysicsPrintLevel 2`
+
+- `cp_offroad_boost_enabled`
+  - Read via: `GetConvarBool`
+  - Effective default: `true`
+  - Example: `setr cp_offroad_boost_enabled true`
+
+- `cp_offroad_max_multiplier`
+  - Read via: `GetConvar`
+  - Effective default: `5.0`
+  - Example: `setr cp_offroad_max_multiplier 5.0`
+
+- `cp_rollovers_enabled`
+  - Read via: `GetConvarBool`
+  - Effective default: `true`
+  - Example: `setr cp_rollovers_enabled true`
 
 - `cp_rollover_start_speed`
   - Read via: `GetConvar`
@@ -72,3 +67,8 @@ This is the most WIP, subject to changes to the rules.
   - Read via: `GetConvarBool`
   - Effective default: `true`
   - Example: `setr cp_wheelies_muscle_only true`
+
+- `cp_wheelies_native_disabled`
+  - Read via: `GetConvarBool`
+  - Effective default: `true`
+  - Example: `setr cp_wheelies_native_disabled true`

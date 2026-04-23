@@ -1,16 +1,46 @@
-# Racing System
+# racingsystem
 
-It allows you to create checkpoint races and race them. Its barebones right now, but it works well.
+## Runtime
 
-## Editing Races
+- Dependencies:
+  - `ScaleformUI_Assets`
+  - `ScaleformUI_Lua`
+- `ui_page`: `ui/index.html`
+- `shared_scripts`:
+  - `shared/Config.lua`
+  - `shared/shared.lua`
+- `client_scripts`: see `fxmanifest.lua`
+- `server_scripts`: see `fxmanifest.lua`
+- Packaged JSON:
+  - `race_index.json`
+  - `CustomRaces/*.json`
+  - `OnlineRaces/*.json`
 
-This is important, you can edit the checkpoints of races too. Not having this power has been the bane of my existence for years, using other scripts (and older mine). Just edit the race thru the Editor and save.
+## Commands
 
-## Online Races
-The editor has a prommpt to try and import a GTAO Job. It will save all relevant info in a json and that's now local, yours forever. Dual checkpoints are supported.
+- `+racemenu`
+  - Opens race control menu.
+  - Default key mapping: `F7`.
 
-# Late Joins
-Experimental feature where it allows people to join mid-race, they just join behind the last racer.
+- `-racemenu`
+  - Release command for key mapping.
 
-# PI Limit
-Not working yet, it will impede joins from cars over this PI.
+- `/spec`
+  - Toggles spectator mode.
+
+## Used Convars
+
+- `ars_skip_uptodate_print`
+  - Read via: `GetConvarBool`
+  - Effective default: `false`
+  - Example: `setr ars_skip_uptodate_print true`
+
+- `rSystemPrintLevel`
+  - Read via: `GetConvarInt`
+  - Effective default: `0`
+  - Example: `setr rSystemPrintLevel 2`
+
+## Notes on host settings in menu
+
+- `Maximum PI` is currently preview-only in UI (not enforced).
+- `Late Join %` is sent in race invoke payload and used server-side (`lateJoinProgressLimitPercent`).

@@ -1,11 +1,5 @@
 local saveDirectory = "savedvehicles"
-local ownerIdentifierPrefixes = (((VehicleManager or {}).Config or {}).save or {}).ownerIdentifierPrefixes or {
-    "license:",
-    "license2:",
-    "fivem:",
-    "steam:",
-    "discord:",
-}
+local licenseIdentifierPrefix = "license:"
 local function logVm(action, sourceId, message)
     return
 end
@@ -54,15 +48,23 @@ local function sanitizeFilePart(value, fallback)
     return text
 end
 
+local function notifyMissingLicenseIdentifier(playerSource)
+    if not playerSource or playerSource <= 0 then
+        return
+    end
+
+    TriggerClientEvent("chat:addMessage", playerSource, {
+        color = { 255, 165, 0 },
+        args = { "vehiclemanager", "Could not find your license identifier (license:)." },
+    })
+end
+
 local function getPlayerOwnerIdentifier(playerSource)
     local identifiers = GetPlayerIdentifiers(playerSource)
     for i = 1, #identifiers do
         local identifier = identifiers[i]
-        for prefixIndex = 1, #ownerIdentifierPrefixes do
-            local prefix = ownerIdentifierPrefixes[prefixIndex]
-            if string.sub(identifier, 1, #prefix) == prefix then
-                return identifier
-            end
+        if string.sub(identifier, 1, #licenseIdentifierPrefix) == licenseIdentifierPrefix then
+            return identifier
         end
     end
     return nil
@@ -239,6 +241,7 @@ RegisterNetEvent("vehiclemanager:saveVehicle", function(vehicleData)
 
     local ownerKey, ownerIdentifier = getOwnerDirectory(src)
     if not ownerKey or not ownerIdentifier then
+        notifyMissingLicenseIdentifier(src)
         logVm("saveVehicle.reject", src, "missing_owner_identifier")
         return
     end
@@ -280,6 +283,7 @@ RegisterNetEvent("vehiclemanager:requestSavedVehicleIndex", function()
     local src = source
     local ownerKey = getOwnerDirectory(src)
     if not ownerKey then
+        notifyMissingLicenseIdentifier(src)
         TriggerClientEvent("vehiclemanager:receiveSavedVehicleIndex", src, {})
         return
     end
@@ -296,6 +300,7 @@ RegisterNetEvent("vehiclemanager:requestSavedVehiclePayload", function(fileName)
 
     local ownerKey, ownerIdentifier = getOwnerDirectory(src)
     if not ownerKey or not ownerIdentifier then
+        notifyMissingLicenseIdentifier(src)
         TriggerClientEvent("vehiclemanager:receiveSavedVehiclePayload", src, nil)
         return
     end
@@ -338,6 +343,7 @@ RegisterNetEvent("vehiclemanager:forgetSavedVehicle", function(fileName)
 
     local ownerKey = getOwnerDirectory(src)
     if not ownerKey then
+        notifyMissingLicenseIdentifier(src)
         return
     end
 
@@ -358,6 +364,7 @@ RegisterNetEvent("vehiclemanager:updateSavedVehicleSnapshot", function(saveId, v
 
     local ownerKey, ownerIdentifier = getOwnerDirectory(src)
     if not ownerKey or not ownerIdentifier then
+        notifyMissingLicenseIdentifier(src)
         logVm("updateSavedVehicleSnapshot.reject", src, "missing_owner_identifier")
         return
     end
@@ -433,7 +440,7 @@ RegisterCommand("vm_save_inspect", function(src, args)
     end
     local ownerKey = getOwnerDirectory(src)
     if not ownerKey then
-        TriggerClientEvent("chat:addMessage", src, { args = { "^1vehiclemanager", "Could not resolve owner identifier." } })
+        notifyMissingLicenseIdentifier(src)
         return
     end
     local fileName = buildSaveFileNameFromId(ownerKey, saveId)
@@ -461,7 +468,7 @@ RegisterCommand("vm_save_delete", function(src, args)
     end
     local ownerKey = getOwnerDirectory(src)
     if not ownerKey then
-        TriggerClientEvent("chat:addMessage", src, { args = { "^1vehiclemanager", "Could not resolve owner identifier." } })
+        notifyMissingLicenseIdentifier(src)
         return
     end
     local fileName = buildSaveFileNameFromId(ownerKey, saveId)
