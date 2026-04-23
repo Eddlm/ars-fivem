@@ -15,6 +15,9 @@ shared_script 'Config.lua'
 
 client_scripts {
     '@ScaleformUI_Lua/ScaleformUI.lua',
+    'client/customization.lua',
+    'client/modmenus.lua',
+    'client/persistence.lua',
     'client/vehiclemanager.lua'
 }
 
