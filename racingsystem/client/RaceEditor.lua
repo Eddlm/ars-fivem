@@ -11,6 +11,10 @@ local editorState = {
     finishLineCheckpointIndex = nil,
     defaultCheckpointRadius = 8.0,
     mouseGrabActive = false,
+    blockMouseGrabUntil = 0,
+    -- Help text stabilization
+    lastHelpAction = "Create checkpoint",
+    helpActionStableSince = 0,
 }
 RacingSystem.Client.editorState = editorState
 
@@ -404,7 +408,13 @@ end
 local function beginEditorSession(raceName, checkpoints)
     local spectator = ((RacingSystem or {}).Client or {}).Spectator
     if type(spectator) == 'table' and type(spectator.enableForEditor) == 'function' then
-        spectator.enableForEditor()
+        local ok = spectator.enableForEditor()
+        if not ok then
+            if RacingSystem.Client.Util and type(RacingSystem.Client.Util.NotifyPlayer) == 'function' then
+                RacingSystem.Client.Util.NotifyPlayer('~r~Failed to enable spectator mode.')
+            end
+            return
+        end
     end
 
     editorState.active = true
@@ -412,6 +422,7 @@ local function beginEditorSession(raceName, checkpoints)
     editorState.selectedName = editorState.name
     editorState.checkpoints = cloneCheckpoints(checkpoints)
     editorState.mouseGrabActive = false
+    editorState.blockMouseGrabUntil = GetGameTimer() + 500
     normalizeCheckpointIndexes()
     if #editorState.checkpoints > 0 then
         editorState.finishLineCheckpointIndex = #editorState.checkpoints
@@ -439,14 +450,25 @@ local function endEditorSession()
     editorState.grabbedCheckpointIndex = nil
     editorState.finishLineCheckpointIndex = nil
     editorState.mouseGrabActive = false
+    editorState.blockMouseGrabUntil = 0
+    editorState.lastHelpAction = "Create checkpoint"
+    editorState.helpActionStableSince = 0
     editorTargetState.hit = nil
     editorTargetState.camera = nil
     setEditorCursorHidden(false)
+    releaseEditorHelpScaleform()
 end
 RacingSystem.Client.endEditorSession = endEditorSession
 
 local function addCheckpointAtPlayer()
     if not isEditorActive() then
+        return
+    end
+    local spectator = ((RacingSystem or {}).Client or {}).Spectator
+    if type(spectator) ~= 'table' or type(spectator.isActive) ~= 'function' or not spectator.isActive() then
+        if RacingSystem.Client.Util and type(RacingSystem.Client.Util.NotifyPlayer) == 'function' then
+            RacingSystem.Client.Util.NotifyPlayer('~r~You must be in spectator mode to place checkpoints.')
+        end
         return
     end
     local coords = getEditorTargetCoords()
@@ -692,6 +714,58 @@ local function getPreviewCheckpointMarker(checkpoint)
     }
 end
 
+local function drawEditorHelp()
+    local menuVisible = (type(RacingSystem.Menu.isRaceMenuVisible) == 'function' and RacingSystem.Menu.isRaceMenuVisible())
+    if menuVisible then
+        return
+    end
+
+    -- Calculate current action based on context
+    local currentAction = "Create checkpoint"
+    if editorState.grabbedCheckpointIndex then
+        currentAction = "Release / Delete checkpoint"
+    else
+        local closestIndex, closestDistance = getClosestCheckpointIndex()
+        if closestIndex and closestDistance then
+            local closestCheckpoint = editorState.checkpoints[closestIndex]
+            local grabThreshold = math.max(6.0, tonumber(closestCheckpoint and closestCheckpoint.radius) or 8.0)
+            if closestDistance <= grabThreshold then
+                currentAction = "Grab checkpoint"
+            end
+        end
+    end
+
+    -- Stabilize: only update displayed text after action has been stable for 200ms
+    local now = GetGameTimer()
+    local displayAction = editorState.lastHelpAction
+
+    if currentAction ~= editorState.lastHelpAction then
+        -- Action changed - start tracking stability
+        if editorState.helpActionStableSince == 0 then
+            -- First change, start timer
+            editorState.helpActionStableSince = now
+        elseif now - editorState.helpActionStableSince >= 200 then
+            -- Action has been stable for 200ms, update display
+            editorState.lastHelpAction = currentAction
+            displayAction = currentAction
+            editorState.helpActionStableSince = 0
+        end
+        -- Otherwise, keep showing previous action until stable
+    else
+        -- Same action as displayed, reset timer
+        editorState.helpActionStableSince = 0
+    end
+
+    -- Display help text using THREESTRINGS for multi-line support
+    BeginTextCommandDisplayHelp("THREESTRINGS")
+    AddTextComponentSubstringPlayerName("~INPUT_ATTACK~ | " .. displayAction.."\n~INPUT_WEAPON_WHEEL_NEXT~/~INPUT_WEAPON_WHEEL_PREV~")
+    EndTextCommandDisplayHelp(0, false, false, -1)
+end
+
+local function releaseEditorHelpScaleform()
+    -- No scaleform to release for help text
+end
+
 local function drawCheckpointIndexLabel(checkpointIndex, x, y, z, distanceMeters)
     local distance = math.max(0.0, tonumber(distanceMeters) or 0.0)
     local fadeDistance = math.max(20.0, tonumber(RacingSystem.Config.checkpointDrawDistanceMeters) or 250.0)
@@ -805,15 +879,22 @@ CreateThread(function()
                 end
 
                 local mouseGrabJustPressed = wasEditorControlJustPressed(EDITOR_MOUSE_GRAB_CONTROL_ID)
-                if mouseGrabJustPressed then
-                    local closestForMouseGrab, closestDistanceForMouseGrab = getClosestCheckpointIndex()
+                if mouseGrabJustPressed and GetGameTimer() >= (tonumber(editorState.blockMouseGrabUntil) or 0) then
+                    local spectatorCheck = ((RacingSystem or {}).Client or {}).Spectator
+                    if type(spectatorCheck) ~= 'table' or type(spectatorCheck.isActive) ~= 'function' or not spectatorCheck.isActive() then
+                        if RacingSystem.Client.Util and type(RacingSystem.Client.Util.NotifyPlayer) == 'function' then
+                            RacingSystem.Client.Util.NotifyPlayer('~r~Activate spectator mode first.')
+                        end
+                    else
+                        local closestForMouseGrab, closestDistanceForMouseGrab = getClosestCheckpointIndex()
                     local closestCheckpoint = closestForMouseGrab and editorState.checkpoints[closestForMouseGrab] or nil
                     local grabThreshold = math.max(6.0, tonumber(closestCheckpoint and closestCheckpoint.radius) or 8.0)
                     if closestForMouseGrab and tonumber(closestDistanceForMouseGrab) and closestDistanceForMouseGrab <= grabThreshold then
                         editorState.grabbedCheckpointIndex = closestForMouseGrab
                         editorState.mouseGrabActive = true
                     else
-                        addCheckpointAtPlayer()
+                            addCheckpointAtPlayer()
+                        end
                     end
                 end
                 if editorState.mouseGrabActive and wasEditorControlJustReleased(EDITOR_MOUSE_GRAB_CONTROL_ID) then
@@ -909,6 +990,7 @@ CreateThread(function()
                     end
                 end
             end
+            drawEditorHelp()
             Wait(0)
         end
     end

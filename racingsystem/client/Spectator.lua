@@ -309,6 +309,18 @@ local function disableSpectatorCombatControls()
     DisableControlAction(2, 37, true)
 end
 
+local function disableVehicleControls()
+    local veh = GetVehiclePedIsIn(PlayerPedId(), false)
+    if veh == 0 then return end
+
+    DisableControlAction(0, 71, true)  -- vehicle accelerate
+    DisableControlAction(0, 72, true)  -- vehicle brake
+    DisableControlAction(0, 59, true)  -- vehicle steer left/right
+    DisableControlAction(0, 76, true)  -- vehicle handbrake
+    DisableControlAction(0, 63, true)  -- vehicle turn left
+    DisableControlAction(0, 64, true)  -- vehicle turn right
+end
+
 local function stopSpectatorMode()
     local camera = spectatorRuntime.camera
     local ped = PlayerPedId()
@@ -328,6 +340,10 @@ local function stopSpectatorMode()
     ClearFocus()
 
     FreezeEntityPosition(ped, false)
+    local veh = GetVehiclePedIsIn(ped, false)
+    if veh ~= 0 then
+        FreezeEntityPosition(veh, false)
+    end
     if RacingSystem.Client.Util and type(RacingSystem.Client.Util.NotifyPlayer) == 'function' then
         RacingSystem.Client.Util.NotifyPlayer('Spectator mode disabled.')
     end
@@ -357,6 +373,10 @@ local function startSpectatorMode()
     SetCamRot(camera.handle, camera.pitch, 0.0, camera.yaw, 2)
 
     FreezeEntityPosition(ped, true)
+    local veh = GetVehiclePedIsIn(ped, false)
+    if veh ~= 0 then
+        FreezeEntityPosition(veh, true)
+    end
     SetCamActive(camera.handle, true)
     RenderScriptCams(true, true, 350, true, true)
     updateGameFocusFromCamera()
@@ -402,6 +422,7 @@ CreateThread(function()
             local ped = PlayerPedId()
             FreezeEntityPosition(ped, true)
             disableSpectatorCombatControls()
+            disableVehicleControls()
             updateCameraMovement(GetFrameTime())
             updateCameraAimRotation(GetFrameTime())
             updateGameFocusFromCamera()

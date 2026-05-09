@@ -274,6 +274,14 @@ end
 
 local function applyVehicleTeleport(vehicle, ped, destinationX, destinationY, destinationZ, heading, headingOffset, teleportType, checkpointSpeedMps, getFadeInRemainingMs, waitWithinFadeInDeadline)
     local targetZ = destinationZ
+    -- Request collision streaming for long-distance teleports to prevent crashes
+    RequestCollisionAtCoord(destinationX, destinationY, destinationZ)
+    -- Wait for collision to stream in (prevents crash when teleporting to unloaded areas)
+    local collisionWaitFrames = 0
+    while not HasCollisionLoadedAroundEntity(vehicle) and collisionWaitFrames < 50 do
+        Wait(10)
+        collisionWaitFrames = collisionWaitFrames + 1
+    end
     SetEntityCoordsNoOffset(vehicle, destinationX, destinationY, targetZ, false, false, false)
     SetEntityHeading(vehicle, heading)
     SetEntityVelocity(vehicle, 0.0, 0.0, 0.0)
@@ -306,6 +314,13 @@ local function applyVehicleTeleport(vehicle, ped, destinationX, destinationY, de
 end
 
 local function applyPedTeleport(ped, destinationX, destinationY, destinationZ, heading, headingOffset)
+    -- Request collision streaming for long-distance teleports to prevent crashes
+    RequestCollisionAtCoord(destinationX, destinationY, destinationZ)
+    local collisionWaitFrames = 0
+    while not HasCollisionLoadedAroundEntity(ped) and collisionWaitFrames < 50 do
+        Wait(10)
+        collisionWaitFrames = collisionWaitFrames + 1
+    end
     SetEntityCoordsNoOffset(ped, destinationX, destinationY, destinationZ, false, false, false)
     SetEntityHeading(ped, normalizeHeading(heading - headingOffset))
     SetEntityVelocity(ped, 0.0, 0.0, 0.0)
