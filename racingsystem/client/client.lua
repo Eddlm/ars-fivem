@@ -877,8 +877,6 @@ local function updateStartLineBlip(startCheckpoint)
 end
 RacingSystem.Client.updateStartLineBlip = updateStartLineBlip
 local function showJoinHintNotifications()
-    RacingSystem.Client.Util.NotifyPlayer('Gather near the blue chevron and start the Countdown from the ~b~Race~s~ menu.')
-    RacingSystem.Client.Util.NotifyPlayer('I assure you this jank is ~y~temporary~w~.')
 end
 RacingSystem.Client.showJoinHintNotifications = showJoinHintNotifications
 local function getCheckpointPassArmKey(instanceId, checkpointIndex, lapNumber)
@@ -1047,6 +1045,7 @@ local function applyEntrantStateBagField(source, key, value)
         entrant.currentCheckpoint = tonumber(value) or 1
     elseif key == 'rs:finishedAt' then
         entrant.finishedAt = tonumber(value) or nil
+        print('[DEBUG] applyEntrantStateBagField: set entrant.finishedAt=' .. tostring(entrant.finishedAt) .. ' for source=' .. tostring(source))
     end
 end
 
@@ -1180,6 +1179,7 @@ AddStateBagChangeHandler('rs:currentCheckpoint', nil, function(bagName, key, val
 end)
 AddStateBagChangeHandler('rs:finishedAt', nil, function(bagName, key, value, _, _)
     local source = parsePlayerSourceFromStateBagName(bagName)
+    print('[DEBUG] rs:finishedAt HANDLER: bagName=' .. tostring(bagName) .. ' source=' .. tostring(source) .. ' value=' .. tostring(value))
     if not source then return end
     applyEntrantStateBagField(source, key, value)
 end)
@@ -1488,7 +1488,7 @@ RegisterNetEvent('racingsystem:race:lapCompleted', function(payload)
             if RacingSystem.Client.InRace.finishCueShownByInstanceId[instanceId] then return end
             RacingSystem.Client.InRace.finishCueShownByInstanceId[instanceId] = true
         end
-        RacingSystem.Client.Util.ShowWarningSubtitle(('FINISHED  %s'):format(finishOrdinal), 6000, '~g~')
+        -- FINISHED subtitle removed (using FINISH shard instead)
     else
         local lapTimeMs = tonumber(payload.lapTimeMs)
         if lapTimeMs then
@@ -1498,7 +1498,7 @@ RegisterNetEvent('racingsystem:race:lapCompleted', function(payload)
         local lapNumber = math.max(1, math.floor(tonumber(payload.lapNumber) or 1))
         local totalLaps = math.max(1, math.floor(tonumber(payload.totalLaps) or tonumber(instance and instance.laps) or 1))
         if totalLaps > 1 and lapNumber == totalLaps - 1 then
-            RacingSystem.Client.Util.ShowWarningSubtitle('FINAL LAP', 2500, '~o~')
+            -- FINAL LAP subtitle removed
         else
             RacingSystem.Client.Util.ShowRaceEventVisual(('~b~LAP %d COMPLETED'):format(lapNumber), '', 3000)
         end

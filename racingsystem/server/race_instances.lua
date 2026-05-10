@@ -505,6 +505,10 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
             entrant.currentCheckpoint = totalCheckpoints + 1
             entrant.finishedAt = now
             entrant.totalTimeMs = currentTotalTimeMs and math.max(0, currentTotalTimeMs) or nil
+            print('[DEBUG] PLAYER FINISHED: entrant=' .. tostring(entrantServerId) .. ' finishedAt=' .. tostring(now) .. ' position=' .. tostring(entrant.position))
+            -- Broadcast standings immediately so position is synced to client
+            RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
+            print('[DEBUG] BROADCAST STANDINGS: instance=' .. tostring(instance.id))
         else
             entrant.currentLap = currentLap + 1
             if instance.pointToPoint == true then
@@ -587,6 +591,21 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
         if transitionOk then
             instance.finishedAt = now
             instance.startAt = nil
+
+            -- Notify all entrants that the race is complete
+            for _, finishedEntrant in ipairs(instance.entrants or {}) do
+                local entrantSource = tonumber(finishedEntrant.source) or 0
+                if entrantSource > 0 then
+                    RacingSystem.Server.Logging.notifyPlayer(entrantSource, 'Race finished - '..tostring(instance.name or 'unknown'), false)
+                end
+            end
+
+            -- Auto-kill the instance
+            local killedInstance = RacingSystem.Server.Instances.killRaceInstanceById(instance.id)
+            if killedInstance then
+                RacingSystem.Server.Snapshot.broadcastInstanceStandings(killedInstance)
+                RacingSystem.Server.Snapshot.broadcastInstanceList()
+            end
         else
             if RacingSystem.Server.Logging.shouldLogLifecycleAnomaly('autoFinishRace', source, instance.id) then
                 RacingSystem.Server.Logging.logLifecycleEvent('autoFinishRace', instance, entrant, source, instance.state, RacingSystem.States.finished, 'failed_transition')

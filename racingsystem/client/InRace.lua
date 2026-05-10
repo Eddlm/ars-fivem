@@ -299,8 +299,13 @@ local function getEffectiveEntrantProgress(instance, entrant)
         local predictedLap = math.max(1, tonumber(predicted.currentLap) or currentLap)
         local predictedFinished = predicted.finished == true
 
-        if finishedAt or (predictedFinished and predictedCheckpoint == nil) then
+        if finishedAt then
             clearPredictedRaceProgress(instanceId)
+        elseif predictedFinished then
+            -- Client-side finish detection: player crossed final checkpoint on last lap
+            finishedAt = GetGameTimer()
+            currentCheckpoint = predictedCheckpoint or totalCheckpoints + 1
+            print('[DEBUG] CLIENT FINISH DETECTED: finishedAt=' .. tostring(finishedAt))
         elseif predictedCheckpoint and (predictedLap > currentLap or (predictedLap == currentLap and predictedCheckpoint > currentCheckpoint)) then
             currentCheckpoint = predictedCheckpoint
             currentLap = predictedLap
@@ -503,29 +508,52 @@ CreateThread(function()
             end
 
             if entrant then
+                print('[DEBUG] TICK: instanceState=' .. tostring(joinedInstance.state) .. ' finishedAt=' .. tostring(entrantProgress.finishedAt) .. ' entrant.finishedAt=' .. tostring(entrant and entrant.finishedAt))
                 if joinedInstance.state == RacingSystem.States.staging and tonumber(joinedInstance.id) then
-                    RacingSystem.Client.Util.ShowWarningSubtitle('READY', 1000, '~b~')
                     if pedVehicle ~= 0 and GetPedInVehicleSeat(pedVehicle, -1) == ped then
                         SetVehicleHandbrake(pedVehicle, true)
                     end
                 elseif joinedInstance.state == RacingSystem.States.running then
-                    RacingSystem.Client.Util.ClearCountdownVisual()
-                    local joinedInstanceId2 = tonumber(joinedInstance.id)
-                    if joinedInstanceId2 and not raceStartCueShownByInstanceId[joinedInstanceId2] then
-                        raceStartCueShownByInstanceId[joinedInstanceId2] = true
-                        RacingSystem.Client.Util.ShowWarningSubtitle('GO', 1400, '~g~')
-                    end
-                    if raceTimingState.raceStartedAt == nil then
-                        raceTimingState.raceStartedAt = GetGameTimer()
-                    end
-                    if raceTimingState.lapStartedAt == nil then
-                        raceTimingState.lapStartedAt = raceTimingState.raceStartedAt
+                    -- Check if player finished while instance still running
+                    print('[DEBUG] RUNNING STATE CHECK: finishedAt=' .. tostring(entrantProgress.finishedAt) .. ' entrant.finishedAt=' .. tostring(entrant and entrant.finishedAt))
+                    if tonumber(entrantProgress.finishedAt) then
+                        -- Player finished, show FINISH if not already shown
+                        local joinedInstanceId3 = tonumber(joinedInstance.id)
+                        print('[DEBUG] FINISH CHECK: instanceId=' .. tostring(joinedInstanceId3) .. ' finishedAt=' .. tostring(entrantProgress.finishedAt) .. ' position=' .. tostring(entrant and entrant.position))
+                        if joinedInstanceId3 and not finishCueShownByInstanceId[joinedInstanceId3] then
+                            finishCueShownByInstanceId[joinedInstanceId3] = true
+                            local finishPos = tonumber(entrant and entrant.position) or 0
+                            local posText = finishPos > 0 and ('%dº'):format(finishPos) or ''
+                            print('[DEBUG] SHOWING FINISH SHARD: pos=' .. tostring(finishPos) .. ' text=' .. tostring(posText))
+                            ScaleformUI.Scaleforms.BigMessageInstance:ShowSimpleShard('FINISHED', posText, 2000, false)
+                        end
+                    else
+                        -- Player still racing, show GO if not shown
+                        RacingSystem.Client.Util.ClearCountdownVisual()
+                        local joinedInstanceId2 = tonumber(joinedInstance.id)
+                        if joinedInstanceId2 and not raceStartCueShownByInstanceId[joinedInstanceId2] then
+                            raceStartCueShownByInstanceId[joinedInstanceId2] = true
+                            ScaleformUI.Scaleforms.BigMessageInstance:ShowSimpleShard('GO', '', 2000, false)
+                        end
+                        if raceTimingState.raceStartedAt == nil then
+                            raceTimingState.raceStartedAt = GetGameTimer()
+                        end
+                        if raceTimingState.lapStartedAt == nil then
+                            raceTimingState.lapStartedAt = raceTimingState.raceStartedAt
+                        end
                     end
                     if pedVehicle ~= 0 and GetPedInVehicleSeat(pedVehicle, -1) == ped then
                         SetVehicleHandbrake(pedVehicle, false)
                     end
                 elseif joinedInstance.state == RacingSystem.States.finished and tonumber(entrantProgress.finishedAt) then
                     RacingSystem.Client.Util.ClearCountdownVisual()
+                    local joinedInstanceId4 = tonumber(joinedInstance.id)
+                    if joinedInstanceId4 and not finishCueShownByInstanceId[joinedInstanceId4] then
+                        finishCueShownByInstanceId[joinedInstanceId4] = true
+                        local finishPos = tonumber(entrant and entrant.position) or 0
+                        local posText = finishPos > 0 and ('%dº'):format(finishPos) or ''
+                        ScaleformUI.Scaleforms.BigMessageInstance:ShowSimpleShard('FINISHED', posText, 2000, false)
+                    end
                     if pedVehicle ~= 0 and GetPedInVehicleSeat(pedVehicle, -1) == ped then
                         SetVehicleHandbrake(pedVehicle, false)
                     end
@@ -878,9 +906,9 @@ CreateThread(function()
                                     local velocity = GetEntityVelocity(pedVehicle)
                                     SetEntityVelocity(
                                         pedVehicle,
-                                        (tonumber(velocity.x) or 0.0) * 0.9,
-                                        (tonumber(velocity.y) or 0.0) * 0.9,
-                                        (tonumber(velocity.z) or 0.0) * 0.9
+                                        (tonumber(velocity.x) or 0.0) * 0.75,
+                                        (tonumber(velocity.y) or 0.0) * 0.75,
+                                        (tonumber(velocity.z) or 0.0) * 0.75
                                     )
                                 end
                             elseif applyPowerPenalty then

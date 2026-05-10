@@ -44,10 +44,7 @@ function RacingSystem.Client.Util.ShowWarningSubtitle(message, durationMs, color
 end
 
 function RacingSystem.Client.Util.UpdateCountdownVisual(_, remainingMs)
-    local seconds = math.floor((tonumber(remainingMs) or 0) / 1000)
-    if seconds >= 0 then
-        RacingSystem.Client.Util.ShowWarningSubtitle(('Race starts in %s'):format(tostring(seconds)), 1000, '~b~')
-    end
+    -- Countdown subtitle removed (using GO shard instead)
 end
 
 function RacingSystem.Client.Util.ClearCountdownVisual()

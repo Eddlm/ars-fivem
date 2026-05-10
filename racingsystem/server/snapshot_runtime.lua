@@ -419,6 +419,7 @@ local function broadcastInstanceStandings(instance)
         if entrantSource > 0 then
             local player = Player(entrantSource)
             if player and player.state then
+                print('[DEBUG] SYNCING STATE: player=' .. entrantSource .. ' finishedAt=' .. tostring(entrant.finishedAt) .. ' position=' .. tostring(entrant.position))
                 player.state['rs:position'] = tonumber(entrant.position) or nil
                 player.state['rs:currentLap'] = tonumber(entrant.currentLap) or 1
                 player.state['rs:currentCheckpoint'] = tonumber(entrant.currentCheckpoint) or 1
