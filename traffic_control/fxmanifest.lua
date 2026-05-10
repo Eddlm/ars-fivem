@@ -3,7 +3,7 @@ game 'gta5'
 
 author 'Eddlm'
 description 'Forces ambient traffic and population density to configured values.'
-version '0.0.0'
+version '0.0.4'
 
 shared_script 'shared/Config.lua'
 

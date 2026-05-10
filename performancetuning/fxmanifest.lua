@@ -3,7 +3,7 @@ game 'gta5'
 
 author 'Eddlm'
 description 'Live vehicle handling read/write helpers for player vehicles'
-version '0.0.0'
+version '0.0.4'
 
 dependency 'ScaleformUI_Assets'
 dependency 'ScaleformUI_Lua'

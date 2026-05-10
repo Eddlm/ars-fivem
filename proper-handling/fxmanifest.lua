@@ -4,7 +4,7 @@ game 'gta5'
 author 'Eddlm'
 name 'Proper Handling Physics'
 description 'Overhauls all the handlings so they are a mix of V and IV.'
-version '0.0.0'
+version '0.0.4'
 
 files {
     'Active/**/*.meta',

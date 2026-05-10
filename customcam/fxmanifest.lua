@@ -5,7 +5,7 @@ lua54 'yes'
 author 'Eddlm'
 name 'customcam'
 description 'Custom drone-style follow camera for FiveM.'
-version '0.0.0'
+version '0.0.4'
 
 shared_script 'Config.lua'
 client_script 'client/client.lua'
