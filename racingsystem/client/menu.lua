@@ -401,6 +401,8 @@ newRaceMenuItem.Activated = function(menu)
     logMenuVerbose(('New Race: got raceName=%s'):format(tostring(raceName)))
     if raceName then
         logMenuVerbose(('Creating new race: %s'):format(raceName))
+        -- Close editor menu immediately once name is accepted so freecam starts without menu overlay.
+        MenuHandler:CloseAndClearHistory()
         TriggerServerEvent('racingsystem:editor:load', raceName)
     else
         logMenuVerbose('New Race: raceName was nil, not firing event')

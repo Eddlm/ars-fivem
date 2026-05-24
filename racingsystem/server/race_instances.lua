@@ -592,15 +592,25 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
             instance.finishedAt = now
             instance.startAt = nil
 
-            -- Notify all entrants that the race is complete
+            -- Notify all entrants that the race is complete and clear race membership state.
             for _, finishedEntrant in ipairs(instance.entrants or {}) do
                 local entrantSource = tonumber(finishedEntrant.source) or 0
                 if entrantSource > 0 then
                     RacingSystem.Server.Logging.notifyPlayer(entrantSource, 'Race finished - '..tostring(instance.name or 'unknown'), false)
+
+                    local player = Player(entrantSource)
+                    if player and player.state then
+                        player.state['rs:instanceId'] = nil
+                        player.state['rs:entrantId'] = nil
+                        player.state['rs:position'] = nil
+                        player.state['rs:currentLap'] = nil
+                        player.state['rs:currentCheckpoint'] = nil
+                        player.state['rs:finishedAt'] = nil
+                    end
                 end
             end
 
-            -- Auto-kill the instance
+            -- Auto-kill the instance once everyone is done.
             local killedInstance = RacingSystem.Server.Instances.killRaceInstanceById(instance.id)
             if killedInstance then
                 RacingSystem.Server.Snapshot.broadcastInstanceStandings(killedInstance)

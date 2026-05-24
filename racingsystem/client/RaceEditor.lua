@@ -417,12 +417,19 @@ local function beginEditorSession(raceName, checkpoints)
         end
     end
 
+    -- Always reset mutable editor session state before loading incoming race data.
     editorState.active = true
     editorState.name = raceName or 'Untitled Race'
     editorState.selectedName = editorState.name
-    editorState.checkpoints = cloneCheckpoints(checkpoints)
+    editorState.grabbedCheckpointIndex = nil
+    editorState.finishLineCheckpointIndex = nil
     editorState.mouseGrabActive = false
     editorState.blockMouseGrabUntil = GetGameTimer() + 500
+    editorState.lastHelpAction = 'Create checkpoint'
+    editorState.helpActionStableSince = 0
+
+    local incomingCheckpoints = type(checkpoints) == 'table' and checkpoints or {}
+    editorState.checkpoints = cloneCheckpoints(incomingCheckpoints)
     normalizeCheckpointIndexes()
     if #editorState.checkpoints > 0 then
         editorState.finishLineCheckpointIndex = #editorState.checkpoints
@@ -809,7 +816,8 @@ RegisterNetEvent('racingsystem:editor:saved', function(payload)
     local race = data.race or {}
     editorState.name = race.name or editorState.name
     editorState.selectedName = editorState.name
-    editorState.checkpoints = cloneCheckpoints(race.checkpoints or editorState.checkpoints)
+    local savedCheckpoints = type(race.checkpoints) == 'table' and race.checkpoints or {}
+    editorState.checkpoints = cloneCheckpoints(savedCheckpoints)
     normalizeCheckpointIndexes()
     if #editorState.checkpoints > 0 then
         editorState.finishLineCheckpointIndex = #editorState.checkpoints

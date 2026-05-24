@@ -33,6 +33,23 @@ local MARKER_TAXONOMY = ClientAdvancedConfig.markerTaxonomy or {
     startLineBlipSprite = 38,
 }
 local CLIENT_EXTRA_PRINT_LEVEL = math.floor(tonumber(ClientAdvancedConfig.extraPrintLevel) or 0)
+
+local function showStartupVersionNotice()
+    local resourceName = GetCurrentResourceName()
+    local version = tostring(GetResourceMetadata(resourceName, 'version', 0) or 'unknown')
+    local latestChange = tostring(GetResourceMetadata(resourceName, 'latest_change', 0) or '')
+    latestChange = (latestChange:match('^%s*(.-)%s*$') or '')
+
+    local message
+    if latestChange ~= '' then
+        message = ('RacingSystem v%s started. Latest change: %s'):format(version, latestChange)
+    else
+        message = ('RacingSystem v%s started.'):format(version)
+    end
+
+    RacingSystem.Client.Util.NotifyPlayer(message)
+end
+
 local function getRaceRuntimeState()
     return RacingSystem.Client.InRace.raceRuntimeState
 end
@@ -1832,9 +1849,13 @@ end)
 AddEventHandler('onClientResourceStart', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
     closeGTAORaceUrlPrompt(true)
-    
+
     SetTimeout(250, function()
         closeGTAORaceUrlPrompt(true)
+    end)
+
+    SetTimeout(1200, function()
+        showStartupVersionNotice()
     end)
 end)
 RacingSystem.Client.drawIdleStartChevron = drawIdleStartChevron

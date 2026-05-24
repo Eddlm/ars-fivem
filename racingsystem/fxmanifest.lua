@@ -4,6 +4,7 @@ game 'gta5'
 author 'Eddlm'
 description 'Client-server Lua system for a racing system resource'
 version '0.0.4'
+latest_change 'Auto-close race instance and clear racer state when all entrants finish.'
 
 lua54 'yes'
 
