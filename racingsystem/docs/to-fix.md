@@ -132,3 +132,61 @@ Automated verification:
 - Full production/test `luac -p`, `node --check`, JSON syntax/finite-value, literal network producer/consumer, empty-function/branch, dead-local, documentation-link, manifest-path, and config-use/documentation checks passed.
 
 **Closure result:** No additional concrete static issue remains. The only unchecked items are R1–R5, which require a product-policy decision or a real FiveM/OneSync/ScaleformUI/filesystem/network runtime. Those risks are minimal/theoretical from static evidence and are intentionally not marked passed.
+
+## Audit Pass 4 — Fresh Model Review
+
+A different model re-audited the entire resource from scratch. Previous passes were thorough on correctness; this pass focuses on code organization, dead parameters, misleading control flow, and unnecessary allocation pressure.
+
+### Medium
+
+- [ ] **P4-M1 — `logging_access.lua` is a grab-bag of non-logging concerns.** The file exports `setRaceInstanceState`, `setRaceStateBag`, `clearRaceStateBagByInstanceId`, `isLifecycleTransitionAllowed`, `buildEntrantId`, `hasAdminAccess`, `notifyPlayer`, and `resolveReadablePlayerName`. These are lifecycle state management, entrant identity, authorization, and player notification — not logging. The module name is misleading and mixed concerns make the codebase harder to navigate. Functions work correctly; this is a maintainability issue, not a bug.
+
+- [x] **P4-M2 — `racingsystem:editor:load` fails entirely when catalog re-registration of an already-registered race fails.** When opening an existing race in the editor, the handler calls `registerKnownRaceDefinition` which calls `saveRaceIndex()`. If the index save fails (e.g., disk full), the handler returns an error and the editor does not open — even though the race data was loaded successfully from disk. The re-registration only updates `updatedAt`; the previous definition is correctly restored in memory on failure. The handler should log the registration failure and still return the loaded race data.
+
+**Fix:** The handler now checks whether the definition was already registered before calling `registerKnownRaceDefinition`. If it was and re-registration fails, the error is logged and the editor still opens with the loaded race data. If it was a new registration that fails, the editor load still fails (since the race can't be saved without a catalog entry).
+
+### Low
+
+- [x] **P4-L1 — `getFuturePreviewMarkerHeight` ignores the distance callers compute.** The function takes no parameters and always returns `3.0`, but every call site computes a 3D distance and passes it. The distance computation is wasted CPU and the function signature is misleading. Either remove the distance computation at call sites or make the function use it.
+
+**Fix:** Removed the unused distance arguments from all three call sites and the now-dead `previewCoords`/`previewDistanceMeters` locals in the preview loop.
+
+- [ ] **P4-L2 — `getClientExtraPrintLevel` never returns 1, making client level-1 logging dead code.** The server-side equivalent supports three levels (0=none, 1=important, 2=verbose), but the client collapses levels 0 and 1 together. The `logClientVerbose` function is the only consumer and it gates on `== 2`. There is no level-1 path.
+
+- [ ] **P4-L3 — `racingsystem:race:invoke` handler has confusing variable shadowing.** A `do` block at the top of the handler creates locals (`raceName`, `payloadTable`, etc.) that shadow the outer handler variables. The outer `raceName` is used in the error message; the inner one is used for verbose logging. Works correctly but is confusing to read.
+
+- [x] **P4-L4 — `InRace.lua` allocates a new `finishCueShownByInstanceId` table every ~1s when not in a race.** The main loop does `finishCueShownByInstanceId = {}` and reassigns the module field. This is redundant with the in-place clearing done in leave/restart handlers and creates unnecessary GC pressure. Clear the existing table in-place instead.
+
+**Fix:** Replaced the table recreation + module-field reassignment with an in-place `for k in pairs(...) do ...[k] = nil end` clear. The module field already points to the same table, so no reassignment is needed.
+
+- [ ] **P4-L5 — `leaveCurrentRaceInstance` returns a potentially destroyed instance.** When the last entrant leaves, the instance is removed from `raceInstancesById`. The `racingsystem:race:leave` handler then calls `broadcastInstanceStandings(instance)` on the now-orphaned table. Harmless (entrants list is empty) but semantically misleading.
+
+### Pass 4 Baseline
+
+Before any Pass 4 fixes:
+- `lua .piTools/test_instance_list_payload.lua` — 130/130 assertions.
+- `lua .piTools/test_joined_sync.lua` — 24/24 assertions.
+- `lua .piTools/test_event_handlers.lua` — 23/23 assertions.
+- `lua .piTools/test_repository_robustness.lua` — 37/37 assertions.
+- `python .piTools/audit_lua_globals.py` — clean.
+- Full closure checks (syntax, network events, dead code, config, docs, manifest) — all passed.
+
+### Pass 4 Verification Record
+
+Fixed the three automatable findings (P4-M2, P4-L1, P4-L4). The remaining items are code-organization or cosmetic:
+
+- **P4-M1** (`logging_access.lua` mixed concerns) — invasive refactor, deferred.
+- **P4-L2** (`getClientExtraPrintLevel` no level 1) — intentional design, client doesn't need level-1 logging.
+- **P4-L3** (`racingsystem:race:invoke` variable shadowing) — cosmetic, works correctly.
+- **P4-L5** (`leaveCurrentRaceInstance` returns destroyed instance) — harmless, entrants list is empty.
+
+Automated verification after fixes:
+
+- `lua .piTools/test_instance_list_payload.lua` — 130/130 assertions.
+- `lua .piTools/test_joined_sync.lua` — 24/24 assertions.
+- `lua .piTools/test_event_handlers.lua` — 23/23 assertions.
+- `lua .piTools/test_repository_robustness.lua` — 37/37 assertions.
+- `python .piTools/audit_lua_globals.py` — 22 compiled production Lua files, no suspicious globals.
+- Full production/test `luac -p`, `node --check`, JSON, network-event, dead-code, config-use, documentation-link, and manifest-path checks passed.
+
+**Pass 4 result:** Three concrete improvements (editor-load resilience, dead-computation removal, GC pressure reduction). The four deferred items are cosmetic or organizational. R1–R5 remain the only runtime-dependent items.

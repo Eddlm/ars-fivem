@@ -381,8 +381,9 @@ CreateThread(function()
             raceRuntimeState.penaltyPreviewText = nil
             raceRuntimeState.penaltyPreviewShownAt = 0
             localEntrantIdentity.entrantId = nil
-            finishCueShownByInstanceId = {}
-            RacingSystem.Client.InRace.finishCueShownByInstanceId = finishCueShownByInstanceId
+            for k in pairs(finishCueShownByInstanceId) do
+                finishCueShownByInstanceId[k] = nil
+            end
 
             raceRuntimeState.pendingCheckpointPass = nil
             raceRuntimeState.previousPosition = nil
@@ -526,7 +527,7 @@ CreateThread(function()
             else
                 local checkpointCandidates = {}
                 local primaryCoords = vector3(targetCheckpoint.x or 0.0, targetCheckpoint.y or 0.0, targetCheckpoint.z or 0.0)
-                local primaryMarkerHeight = RacingSystem.Client.getFuturePreviewMarkerHeight(#(origin - primaryCoords))
+                local primaryMarkerHeight = RacingSystem.Client.getFuturePreviewMarkerHeight()
                 local secondaryCoords = nil
                 local secondaryMarkerHeight = nil
                 checkpointCandidates[#checkpointCandidates + 1] = {
@@ -538,7 +539,7 @@ CreateThread(function()
 
                 if type(secondaryTargetCheckpoint) == 'table' then
                     secondaryCoords = vector3(secondaryTargetCheckpoint.x or 0.0, secondaryTargetCheckpoint.y or 0.0, secondaryTargetCheckpoint.z or 0.0)
-                    secondaryMarkerHeight = RacingSystem.Client.getFuturePreviewMarkerHeight(#(origin - secondaryCoords))
+                    secondaryMarkerHeight = RacingSystem.Client.getFuturePreviewMarkerHeight()
                     checkpointCandidates[#checkpointCandidates + 1] = {
                         routeVariant = 'secondary',
                         checkpoint = secondaryTargetCheckpoint,
@@ -632,18 +633,12 @@ CreateThread(function()
                             local previewCheckpoint = previewVariantEntry and previewVariantEntry.primary or checkpoints[previewIndex]
 
                             if type(previewCheckpoint) == 'table' then
-                                local previewCoords = vector3(
-                                    tonumber(previewCheckpoint.x) or 0.0,
-                                    tonumber(previewCheckpoint.y) or 0.0,
-                                    tonumber(previewCheckpoint.z) or 0.0
-                                )
                                 local previewPrevIndex = previewIndex - 1
                                 if previewPrevIndex < 1 then previewPrevIndex = totalCheckpoints end
                                 local previewPrevPrimaryCheckpoint = RacingSystem.Client.getCheckpointForVariant(joinedInstance, previewPrevIndex, 'primary')
                                     or checkpoints[previewPrevIndex]
                                 local previewNextPrimaryCheckpoint = RacingSystem.Client.getNextCheckpointForVariant(joinedInstance, totalCheckpoints, previewIndex, 'primary')
-                                local previewDistanceMeters = #(origin - previewCoords)
-                                local previewMarkerHeight = RacingSystem.Client.getFuturePreviewMarkerHeight(previewDistanceMeters)
+                                local previewMarkerHeight = RacingSystem.Client.getFuturePreviewMarkerHeight()
                                 RacingSystem.Client.drawCheckpointTarget(
                                     previewCheckpoint,
                                     previewPrevPrimaryCheckpoint,

@@ -141,20 +141,31 @@ RegisterNetEvent('racingsystem:editor:load', function(raceName)
         RacingSystem.Server.Logging.logVerbose(('[requestEditorRace] Created new race "%s"'):format(raceName))
     else
         if definition.name then
+            local normalizedName = RacingSystem.NormalizeRaceName(definition.name)
+            local alreadyRegistered = normalizedName and RacingSystem.Server.State.knownRaceDefinitionsByName[normalizedName] ~= nil
             local registeredDefinition, registerError = RacingSystem.Server.Catalog.registerKnownRaceDefinition(
                 definition.name,
                 definition.sourceType or 'custom',
                 definition.raceId or definition.ugcId or definition.fileName
             )
             if not registeredDefinition then
-                TriggerClientEvent('racingsystem:editor:loaded', src, {
-                    ok = false,
-                    error = registerError or 'Could not update the race catalog.',
-                    data = { requestedName = RacingSystem.Trim(raceName), race = nil },
-                })
-                return
+                if alreadyRegistered then
+                    RacingSystem.Server.Logging.logLevelOne(('[requestEditorRace] Catalog re-registration failed for "%s": %s'):format(
+                        tostring(definition.name),
+                        tostring(registerError or 'unknown error')
+                    ))
+                else
+                    TriggerClientEvent('racingsystem:editor:loaded', src, {
+                        ok = false,
+                        error = registerError or 'Could not update the race catalog.',
+                        data = { requestedName = RacingSystem.Trim(raceName), race = nil },
+                    })
+                    return
+                end
             end
-            RacingSystem.Server.Snapshot.broadcastDefinitions()
+            if registeredDefinition then
+                RacingSystem.Server.Snapshot.broadcastDefinitions()
+            end
         end
     end
 
