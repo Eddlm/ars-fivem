@@ -190,3 +190,51 @@ Automated verification after fixes:
 - Full production/test `luac -p`, `node --check`, JSON, network-event, dead-code, config-use, documentation-link, and manifest-path checks passed.
 
 **Pass 4 result:** Three concrete improvements (editor-load resilience, dead-computation removal, GC pressure reduction). The four deferred items are cosmetic or organizational. R1–R5 remain the only runtime-dependent items.
+
+## Audit Pass 5 — Race Lifecycle Flow Audit
+
+Deep trace of the full race lifecycle: host invokes → others join → countdown start → staging → running → checkpoint/lap progression → finish → cleanup. Focus on client-server state consistency, menu state machine, ScaleformUI cues, and edge cases.
+
+### Medium
+
+- [x] **P5-M1 — `racingsystem:race:start` client handler blocks `finished` state but server allows it.** The client handler checked `joinedInstance.state ~= RacingSystem.States.idle` and returned early for non-idle states. But the server handler also accepts `RacingSystem.States.finished` (it resets progress and transitions to staging).
+
+**Fix:** Updated the client handler to also allow `finished` state: `if joinedInstance.state ~= RacingSystem.States.idle and joinedInstance.state ~= RacingSystem.States.finished then return end`.
+
+- [x] **P5-M2 — Start Countdown button flickers re-enabled after click due to premature menu refresh.** The menu's `startCountdownMenuItem.Activated` set `countdownAcceptedByInstanceId[id] = true`, triggered the start event, then immediately called `refreshRaceMenuFromCurrentState()`. At that point the server hadn't processed the event yet, so the state was still `idle`. The refresh saw idle state and cleared `countdownAcceptedByInstanceId[id]`, re-enabling the button.
+
+**Fix:** Removed the immediate `refreshRaceMenuFromCurrentState()` call. The state bag change handler already calls `applyRaceMenuStageFromCurrentState()` and `refreshRaceMenuFromCurrentState()` when the server transitions to `staging`, so the menu updates correctly without the premature refresh.
+
+### Low
+
+- [ ] **P5-L1 — `racingsystem:race:leave` client handler clears local state and traffic control before server confirmation.** The handler resets `localEntrantIdentity.entrantId`, pending checkpoint state, timing, blips, leaderboard, and traffic density, then sends `TriggerServerEvent('racingsystem:race:leave')`. If the server rejects the leave (e.g., state bag out of sync), the client is left in an inconsistent state: local state cleared but still in the race according to the server.
+
+- [x] **P5-L2 — `racingsystem:race:start` client handler has a redundant staging guard.** The check `if joinedInstance.state == RacingSystem.States.staging then return end` was redundant because the next line `if joinedInstance.state ~= RacingSystem.States.idle then return end` already caught `staging`.
+
+**Fix:** Removed the redundant staging check as part of the P5-M1 fix (consolidated into a single state check).
+
+- [ ] **P5-L3 — `racingsystem:race:leave` client handler closes menu before server confirmation.** `MenuHandler:CloseAndClearHistory()` is called after sending the server event. If the server rejects the leave, the menu is already gone and the player has no UI to retry.
+
+- [ ] **P5-L4 — `racingsystem:race:restart` client handler doesn't validate state.** Unlike the start handler, the restart handler only checks for a joined instance and non-empty entrants. It doesn't check that the state is `idle`, `staging`, `countdown`, or `finished`. The server validates, so this is safe, but inconsistent with the start handler's approach.
+
+- [ ] **P5-L5 — `racingsystem:race:start` client handler has owner-fallback logic that duplicates server authorization.** When `ownerSource` is nil/0, the handler falls back to checking if the local player is the first entrant. The server already validates ownership. This client-side guard is a harmless optimization but adds complexity.
+
+### Pass 5 Verification Record
+
+Fixed the three automatable findings (P5-M1, P5-M2, P5-L2). The remaining items are edge-case or cosmetic:
+
+- **P5-L1** (leave clears state before server confirmation) — edge case, requires state-bag desync to trigger.
+- **P5-L3** (leave closes menu before server confirmation) — minor UX, menu can be reopened.
+- **P5-L4** (restart handler doesn't validate state) — server validates, client guard is optional.
+- **P5-L5** (start handler owner-fallback logic) — harmless optimization.
+
+Automated verification after fixes:
+
+- `lua .piTools/test_instance_list_payload.lua` — 130/130 assertions.
+- `lua .piTools/test_joined_sync.lua` — 24/24 assertions.
+- `lua .piTools/test_event_handlers.lua` — 23/23 assertions.
+- `lua .piTools/test_repository_robustness.lua` — 37/37 assertions.
+- `python .piTools/audit_lua_globals.py` — 22 compiled production Lua files, no suspicious globals.
+- Full production/test `luac -p`, `node --check`, JSON, network-event, dead-code, config-use, documentation-link, and manifest-path checks passed.
+
+**Pass 5 result:** Two lifecycle consistency fixes (client-server state guard alignment, menu flicker elimination) and one dead-code removal. The four deferred items are edge-case or cosmetic. R1–R5 remain the only runtime-dependent items.

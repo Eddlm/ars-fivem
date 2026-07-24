@@ -112,7 +112,6 @@ startCountdownMenuItem.Activated = function(menu)
         setIntendedGreyState(startCountdownMenuItem, true)
     end
     TriggerEvent('racingsystem:race:start')
-    RacingSystem.Menu.refreshRaceMenuFromCurrentState()
 end
 local restartRaceMenuItem = UIMenuItem.New(
     'Restart Race',

@@ -1414,8 +1414,7 @@ end)
 AddEventHandler('racingsystem:race:start', function()
     local joinedInstance = getJoinedRaceInstance()
     if not joinedInstance then return end
-    if joinedInstance.state == RacingSystem.States.staging then return end
-    if joinedInstance.state ~= RacingSystem.States.idle then return end
+    if joinedInstance.state ~= RacingSystem.States.idle and joinedInstance.state ~= RacingSystem.States.finished then return end
     local entrant = getLocalEntrant(joinedInstance)
     if not entrant then return end
     local ownerSource = tonumber(joinedInstance.owner)
