@@ -613,16 +613,28 @@ end
 RacingSystem.Client.updateStartLineBlip = updateStartLineBlip
 
 local checkpointBlipsByInstanceId = {}
+local activeCheckpointBlipsInstanceId = nil
 
 local function clearCheckpointBlips(instanceId)
-    local blips = checkpointBlipsByInstanceId[tonumber(instanceId) or -1]
-    if type(blips) ~= 'table' then return end
+    local numericId = tonumber(instanceId) or activeCheckpointBlipsInstanceId
+    if not numericId then return end
+    local blips = checkpointBlipsByInstanceId[numericId]
+    if type(blips) ~= 'table' then
+        checkpointBlipsByInstanceId[numericId] = nil
+        if numericId == activeCheckpointBlipsInstanceId then
+            activeCheckpointBlipsInstanceId = nil
+        end
+        return
+    end
     for _, blip in ipairs(blips) do
         if blip and DoesBlipExist(blip) then
             RemoveBlip(blip)
         end
     end
-    checkpointBlipsByInstanceId[tonumber(instanceId) or -1] = nil
+    checkpointBlipsByInstanceId[numericId] = nil
+    if numericId == activeCheckpointBlipsInstanceId then
+        activeCheckpointBlipsInstanceId = nil
+    end
 end
 RacingSystem.Client.clearCheckpointBlips = clearCheckpointBlips
 
@@ -649,6 +661,7 @@ local function updateCheckpointBlips(instance, currentCheckpoint, totalLaps, cur
         clearCheckpointBlips(instanceId)
         blips = {}
         checkpointBlipsByInstanceId[instanceId] = blips
+        activeCheckpointBlipsInstanceId = instanceId
         for i = 1, totalCheckpoints do
             local cp = checkpoints[i]
             if type(cp) == 'table' then
@@ -659,7 +672,7 @@ local function updateCheckpointBlips(instance, currentCheckpoint, totalLaps, cur
                 blips[i] = blip
                 SetBlipDisplay(blip, 4)
                 SetBlipScale(blip, 0.65)
-                SetBlipAsShortRange(blip, false)
+                SetBlipAsShortRange(blip, true)
                 BeginTextCommandSetBlipName('STRING')
                 AddTextComponentSubstringPlayerName(('CP %s'):format(tostring(i)))
                 EndTextCommandSetBlipName(blip)
@@ -668,9 +681,14 @@ local function updateCheckpointBlips(instance, currentCheckpoint, totalLaps, cur
             end
         end
     end
+    local nextIndex = targetIndex + 1
+    if nextIndex > totalCheckpoints then nextIndex = 1 end
+    if isPointToPoint and targetIndex >= totalCheckpoints then nextIndex = targetIndex end
     for i = 1, totalCheckpoints do
         local blip = blips[i]
         if blip and DoesBlipExist(blip) then
+            local isCurrentOrNext = (i == targetIndex or i == nextIndex)
+            SetBlipAsShortRange(blip, not isCurrentOrNext)
             local isFinishCp = isPointToPoint and i == totalCheckpoints
             if i < targetIndex then
                 SetBlipSprite(blip, 1)
