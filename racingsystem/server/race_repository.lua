@@ -311,16 +311,11 @@ end
 local function deleteRaceDefinition(request)
     local requestedName = nil
     local requestedLookupName = nil
-    local requestedSourceType = nil
     local requestedRaceId = nil
 
     if type(request) == 'table' then
         requestedName = RacingSystem.Trim(request.name or request.lookupName or '')
         requestedLookupName = RacingSystem.NormalizeRaceName(request.lookupName or request.name)
-        local normalizedSourceType = tostring(request.sourceType or ''):lower()
-        if normalizedSourceType == 'custom' or normalizedSourceType == 'online' then
-            requestedSourceType = normalizedSourceType
-        end
         requestedRaceId = RacingSystem.Server.Parsing.sanitizeUGCId(request.raceId)
     else
         requestedName = RacingSystem.Trim(request or '')
@@ -357,14 +352,13 @@ local function deleteRaceDefinition(request)
         return nil, 'Cannot delete a race while its instance is active.'
     end
 
-    local sourceType = tostring(definition.sourceType or requestedSourceType or 'custom')
+    local sourceType = tostring(definition.sourceType or '')
     if sourceType ~= 'custom' and sourceType ~= 'online' then
-        sourceType = requestedSourceType or 'custom'
+        return nil, 'The catalog definition has an invalid source type.'
     end
 
     local displayName = RacingSystem.Trim(definition.name or requestedName or definitionLookupName)
-    local definitionRaceId = RacingSystem.Server.Parsing.sanitizeUGCId(definition.raceId)
-    local resolvedRaceId = requestedRaceId or definitionRaceId
+    local resolvedRaceId = RacingSystem.Server.Parsing.sanitizeUGCId(definition.raceId)
 
     local customRace = nil
     local onlineRace = nil
@@ -426,7 +420,7 @@ local function deleteRaceDefinition(request)
     }, nil
 end
 
-local function createNewRaceDefinition(ownerSource, raceName)
+local function createNewRaceDraft(ownerSource, raceName)
     local sanitizedName = RacingSystem.Trim(raceName)
     if sanitizedName == '' then
         return nil, 'Race name is required.'
@@ -436,25 +430,6 @@ local function createNewRaceDefinition(ownerSource, raceName)
     if not fileName then
         return nil, 'Race name could not be converted into a valid mission filename.'
     end
-
-    local filePath = RacingSystem.Server.Parsing.buildCustomRaceFilePath(fileName)
-
-    local missionJson, encodeError = RacingSystem.Server.Parsing.buildMissionJsonFromCheckpoints({}, nil, sanitizedName)
-    if not missionJson then
-        return nil, encodeError or 'Could not encode the new race mission.'
-    end
-    local saveOk = SaveResourceFile(RacingSystem.Server.State.resourceName, filePath, missionJson, -1)
-    if not saveOk then
-        RacingSystem.Server.Logging.logError(("The server could not create new race '%s'."):format(filePath))
-        return nil, ('Could not create %s.'):format(filePath)
-    end
-
-    local registeredDefinition, registerError = RacingSystem.Server.Catalog.registerKnownRaceDefinition(sanitizedName, 'custom')
-    if not registeredDefinition then
-        removeResourceFile(filePath)
-        return nil, registerError or 'Could not save the new race catalog entry.'
-    end
-    RacingSystem.Server.Snapshot.broadcastDefinitions()
 
     return {
         id = nil,
@@ -528,7 +503,7 @@ RacingSystem.Server.Repository.loadCustomRace = loadCustomRace
 RacingSystem.Server.Repository.loadBundledOnlineRace = loadBundledOnlineRace
 RacingSystem.Server.Repository.saveBundledUGCById = saveBundledUGCById
 RacingSystem.Server.Repository.deleteRaceDefinition = deleteRaceDefinition
-RacingSystem.Server.Repository.createNewRaceDefinition = createNewRaceDefinition
+RacingSystem.Server.Repository.createNewRaceDraft = createNewRaceDraft
 RacingSystem.Server.Repository.saveRaceDefinition = saveRaceDefinition
 
 

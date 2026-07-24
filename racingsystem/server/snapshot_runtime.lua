@@ -2,11 +2,17 @@ RacingSystem = RacingSystem or {}
 RacingSystem.Server = RacingSystem.Server or {}
 RacingSystem.Server.Snapshot = RacingSystem.Server.Snapshot or {}
 
+local MAX_INSTANCE_PROP_COUNT = 1000
+local MAX_INSTANCE_MODEL_HIDE_COUNT = 500
+
 local function cloneOnlineRaceProps(props)
     local cloned = {}
 
-    for index, prop in ipairs(type(props) == 'table' and props or {}) do
-        cloned[index] = {
+    for _, prop in ipairs(type(props) == 'table' and props or {}) do
+        if #cloned >= MAX_INSTANCE_PROP_COUNT then
+            break
+        end
+        cloned[#cloned + 1] = {
             model = tonumber(prop.model) or 0,
             x = tonumber(prop.x) or 0.0,
             y = tonumber(prop.y) or 0.0,
@@ -27,8 +33,11 @@ end
 local function cloneOnlineRaceModelHides(modelHides)
     local cloned = {}
 
-    for index, modelHide in ipairs(type(modelHides) == 'table' and modelHides or {}) do
-        cloned[index] = {
+    for _, modelHide in ipairs(type(modelHides) == 'table' and modelHides or {}) do
+        if #cloned >= MAX_INSTANCE_MODEL_HIDE_COUNT then
+            break
+        end
+        cloned[#cloned + 1] = {
             model = tonumber(modelHide.model) or 0,
             x = tonumber(modelHide.x) or 0.0,
             y = tonumber(modelHide.y) or 0.0,

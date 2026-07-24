@@ -58,7 +58,7 @@ Flat state bags own hot replicated state:
 | `rs:isAdmin` | ACE-derived admin status. |
 | `GlobalState['rs:raceState:<instanceId>']` | Instance lifecycle state. |
 
-Accepted checkpoint mutations publish standings immediately. Join, leave, disconnect, restart, finish, kill, and resource cleanup update or clear the corresponding flat keys.
+Accepted checkpoint mutations publish standings immediately. Lap and total times are derived from server-owned start timestamps; checkpoint events do not accept client timing values. Join, leave, disconnect, restart, finish, kill, and resource cleanup update or clear the corresponding flat keys.
 
 ## Race Lifecycle
 
@@ -104,7 +104,7 @@ The server resolves the definition from its repository, rejects duplicate/invali
 
 ## ACE-Based Administration
 
-`Config.adminAce` defaults to `racingsystem.admin`. The server rechecks ACE authorization for destructive actions regardless of client menu state. Admin status is also replicated through `rs:isAdmin`, while target-specific catalog payloads include viewer permissions for catalog controls.
+`Config.adminAce` defaults to `racingsystem.admin`. The server rechecks ACE authorization for definition deletion and race termination regardless of client menu state. When `raceOwnerCanKillOwnedRace` is enabled, the server additionally permits only the matching instance owner to terminate that instance. Admin status is replicated through `rs:isAdmin`, while target-specific catalog payloads include viewer permissions for catalog controls.
 
 ## See Also
 

@@ -9,7 +9,7 @@ Racing System is a full-featured **client-server racing framework** built on Sca
 | **Race Editor**     | In-game checkpoint editor with pitch controls, checkpoint sizing, and race saving.                     |
 | **Race Invocation** | Host a race from saved or GTA Online race definitions with lap count, traffic, and late-join settings. |
 | **Race Runtime**    | Checkpoint detection, progress tracking, lap counting, and leaderboard during a race.                  |
-| **Spectator Mode**  | Free-fly camera that follows race entrants. Toggle with `/spec`.                                       |
+| **Spectator Mode**  | Free-fly camera used directly or by the race editor. Toggle with `/spec`.                               |
 | **Teleport**        | Teleport to race start locations or checkpoints.                                                       |
 | **Late Join**       | Allow players to join an in-progress race up to a configurable progress percentage.                    |
 | **Traffic Control** | Request traffic density during races (none/low/high/full) via the traffic_control resource.            |
@@ -34,8 +34,7 @@ Racing System is a full-featured **client-server racing framework** built on Sca
 
 | Convar                    | Type | Default | Example                             | Description                                         |
 | ------------------------- | ---- | ------- | ----------------------------------- | --------------------------------------------------- |
-| `ars_skip_uptodate_print` | bool | `false` | `setr ars_skip_uptodate_print true` | Suppress update notifier's "Up to date" message.    |
-| `rSystemPrintLevel`       | int  | `0`     | `setr rSystemPrintLevel 2`          | Print verbosity. `0` = normal, `2` = verbose debug. |
+| `ars_skip_uptodate_print` | bool | `false` | `setr ars_skip_uptodate_print true` | Suppress update notifier's "Up to date" message. |
 
 ## Runtime Synchronization
 

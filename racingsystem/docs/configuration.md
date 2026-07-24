@@ -4,8 +4,7 @@
 
 | Convar                    | Type | Default | Example                             | Description                                         |
 | ------------------------- | ---- | ------- | ----------------------------------- | --------------------------------------------------- |
-| `ars_skip_uptodate_print` | bool | `false` | `setr ars_skip_uptodate_print true` | Suppress update notifier's "Up to date" message.    |
-| `rSystemPrintLevel`       | int  | `0`     | `setr rSystemPrintLevel 2`          | Print verbosity. `0` = normal, `2` = verbose debug. |
+| `ars_skip_uptodate_print` | bool | `false` | `setr ars_skip_uptodate_print true` | Suppress update notifier's "Up to date" message. |
 
 ---
 
@@ -51,14 +50,13 @@
 | `checkpointPassReleaseThreshold`            | number | `0.75`               | ratio | How far through the arm zone a player must be to count as a pass. |
 | `checkpointRecoveryPassMaxMph`              | number | `5.0`                | mph   | Max speed for a retroactive checkpoint pass (recovery).           |
 | `checkpointRecoveryForwardVelocityRatioMax` | number | `0.66`               | ratio | Max forward velocity ratio for recovery passes.                   |
-| `checkpointSoftPowerPenaltyMultiplier`      | number | `0.05`               | —     | Engine power multiplier during soft penalty.                      |
+| `checkpointSoftPowerPenaltyMultiplier`      | number | `-20.0`              | %     | FiveM engine-power adjustment during soft penalty (`0` normal, negative reduces power). |
 | `leaderboardClientTiebreakEnabled`          | bool   | `false`              | —     | Whether the client breaks leaderboard ties.                       |
 | `checkpointRuntimeZOffsetMeters`            | number | `-2.0`               | m     | Z offset applied to checkpoint markers during a race.             |
 | `maxFuturePreviewCheckpoints`               | number | `3`                  | count | How many upcoming checkpoints to preview as blips.                |
 | `markerTaxonomy.routeChevronTypeId`         | number | `20`                 | —     | Marker type for chevron route markers.                            |
 | `markerTaxonomy.startLineIdleTypeId`        | number | `4`                  | —     | Marker type for idle start lines.                                 |
 | `markerTaxonomy.startLineIdleColor`         | table  | `{255,255,255,0}`    | RGBA  | Colour of idle start line markers.                                |
-| `markerTaxonomy.futureCheckpointBlipSprite` | number | `1`                  | —     | Blip sprite for future checkpoint previews.                       |
 | `markerTaxonomy.startLineBlipSprite`        | number | `38`                 | —     | Blip sprite for start lines.                                      |
 | `extraPrintLevel`                           | number | `0`                  | —     | Client-side extra debug print level.                              |
 
@@ -67,6 +65,7 @@
 | Field                                  | Type   | Default | Unit | Description                                                         |
 | -------------------------------------- | ------ | ------- | ---- | ------------------------------------------------------------------- |
 | `ugcFetchRetryCooldownMs`              | number | `700`   | ms   | Cooldown between UGC fetch retries for GTA Online races.            |
+| `ugcFetchTotalTimeoutMs`               | number | `30000` | ms   | Total deadline across all GTA Online URL candidates.                |
 | `gtaoCheckpointRadiusScale`            | number | `1.0`   | ×    | Scale factor applied to GTA Online race checkpoint radii on import. |
 | `pointToPointAutodetectDistanceMeters` | number | `500.0` | m    | If start-to-finish distance exceeds this, auto-set laps to 1.       |
 | `extraPrintLevel`                      | number | `0`     | —    | Server-side extra debug print level.                                |

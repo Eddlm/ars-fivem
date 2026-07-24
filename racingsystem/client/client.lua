@@ -17,7 +17,6 @@ local activeInstanceAssets = {
     modelHides = {},
 }
 RacingSystem.Client.activeInstanceAssets = activeInstanceAssets
-local MILES_PER_HOUR_TO_METERS_PER_SECOND = 0.44704
 local CHECKPOINT_RUNTIME_Z_OFFSET_METERS = tonumber(ClientAdvancedConfig.checkpointRuntimeZOffsetMeters) or -2.0
 local MAX_FUTURE_PREVIEW_CHECKPOINTS = math.max(1, math.floor(tonumber(ClientAdvancedConfig.maxFuturePreviewCheckpoints) or 3))
 local MARKER_TAXONOMY = ClientAdvancedConfig.markerTaxonomy or {
@@ -25,7 +24,6 @@ local MARKER_TAXONOMY = ClientAdvancedConfig.markerTaxonomy or {
     routeChevronTypeId = 20,
     startLineIdleTypeId = 4,
     startLineIdleColor = { r = 255, g = 255, b = 255, a = 0 },
-    futureCheckpointBlipSprite = 1,
     startLineBlipSprite = 38,
 }
 local CLIENT_EXTRA_PRINT_LEVEL = math.floor(tonumber(ClientAdvancedConfig.extraPrintLevel) or 0)
@@ -555,18 +553,6 @@ local function drawIdleStartChevron(checkpoint)
     )
 end
 
-local function clearFutureCheckpointBlips()
-    local blipsByIndex = type(getRaceRuntimeState().futureCheckpointBlips) == 'table' and getRaceRuntimeState().futureCheckpointBlips or {}
-    for _, blip in pairs(blipsByIndex) do
-        if blip and DoesBlipExist(blip) then
-            RemoveBlip(blip)
-        end
-    end
-    getRaceRuntimeState().futureCheckpointBlips = {}
-    getRaceRuntimeState().futureBlipCheckpointIndex = nil
-    getRaceRuntimeState().futureBlipInstanceId = nil
-end
-RacingSystem.Client.clearFutureCheckpointBlips = clearFutureCheckpointBlips
 local function clearStartLineBlip()
     local blip = getRaceRuntimeState().startLineBlip
     if blip and DoesBlipExist(blip) then
@@ -1218,7 +1204,13 @@ RegisterNetEvent('racingsystem:race:lapCompleted', function(payload)
             if RacingSystem.Client.InRace.finishCueShownByInstanceId[instanceId] then return end
             RacingSystem.Client.InRace.finishCueShownByInstanceId[instanceId] = true
         end
-        -- FINISHED subtitle removed (using FINISH shard instead)
+        local finishPosition = math.max(1, math.floor(tonumber(payload.position) or tonumber(localEntrant and localEntrant.position) or 1))
+        ScaleformUI.Scaleforms.BigMessageInstance:ShowSimpleShard(
+            'FINISHED',
+            ('%dº'):format(finishPosition),
+            2000,
+            false
+        )
     else
         local lapTimeMs = tonumber(payload.lapTimeMs)
         if lapTimeMs then
@@ -1228,7 +1220,7 @@ RegisterNetEvent('racingsystem:race:lapCompleted', function(payload)
         local lapNumber = math.max(1, math.floor(tonumber(payload.lapNumber) or 1))
         local totalLaps = math.max(1, math.floor(tonumber(payload.totalLaps) or tonumber(instance and instance.laps) or 1))
         if totalLaps > 1 and lapNumber == totalLaps - 1 then
-            -- FINAL LAP subtitle removed
+            RacingSystem.Client.Util.ShowRaceEventVisual('~y~FINAL LAP', '', 3000)
         else
             RacingSystem.Client.Util.ShowRaceEventVisual(('~b~LAP %d COMPLETED'):format(lapNumber), '', 3000)
         end
@@ -1464,7 +1456,6 @@ AddEventHandler('racingsystem:race:leave', function()
     do local t = RacingSystem.Client.InRace.finishCueShownByInstanceId; for k in pairs(t) do t[k] = nil end end
     RacingSystem.Client.InRace.clearPredictedRaceProgress()
     RacingSystem.Client.InRace.resetLocalRaceTiming()
-    clearFutureCheckpointBlips()
     clearStartLineBlip()
     RacingSystem.Client.Util.ClearRaceLeaderboardVisual()
     currentTrafficDensity = nil
@@ -1541,7 +1532,6 @@ AddEventHandler('onClientResourceStop', function(resourceName)
     currentTrafficDensity = nil
     TriggerServerEvent('traffic_control:requestDensity', nil, 'racingsystem_clear', RACE_TRAFFIC_REQUEST_KEY)
     RacingSystem.Client.InRace.clearPowerPenaltyVehicleOverride()
-    clearFutureCheckpointBlips()
     clearStartLineBlip()
     RacingSystem.Client.Util.ClearRaceLeaderboardVisual()
     unloadActiveInstanceAssets()

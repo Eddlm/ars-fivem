@@ -378,31 +378,31 @@ local function restartRaceInstanceForSource(source)
     return instance, nil
 end
 
-local function broadcastLapCompleted(instance, entrant, lapNumber, lapTimeMs, totalTimeMs, finished, bestLapTimeMs, bestLapDeltaMs)
+local function sendLapCompleted(instance, entrant, lapNumber, lapTimeMs, totalTimeMs, finished, bestLapTimeMs, bestLapDeltaMs)
     if type(instance) ~= 'table' or type(entrant) ~= 'table' then
         return
     end
 
-    local totalLaps = math.max(1, tonumber(instance.laps) or 1)
-
-    for _, otherEntrant in ipairs(instance.entrants or {}) do
-        local entrantSource = tonumber(otherEntrant.source) or 0
-        if entrantSource > 0 then
-            TriggerClientEvent('racingsystem:race:lapCompleted', entrantSource, {
-                instanceId = instance.id,
-                entrantId = tostring(entrant.entrantId or ''),
-                playerSource = tonumber(entrant.source) or 0,
-                playerName = tostring(entrant.name or ('Player %s'):format(tostring(entrant.source or '?'))),
-                lapNumber = tonumber(lapNumber) or 1,
-                totalLaps = totalLaps,
-                lapTimeMs = tonumber(lapTimeMs) or 0,
-                totalTimeMs = tonumber(totalTimeMs) or 0,
-                bestLapTimeMs = tonumber(bestLapTimeMs) or 0,
-                bestLapDeltaMs = tonumber(bestLapDeltaMs) or 0,
-                finished = finished == true,
-            })
-        end
+    local entrantSource = tonumber(entrant.source) or 0
+    if entrantSource <= 0 then
+        return
     end
+
+    RacingSystem.Server.Snapshot.buildOrderedEntrants(instance)
+    TriggerClientEvent('racingsystem:race:lapCompleted', entrantSource, {
+        instanceId = instance.id,
+        entrantId = tostring(entrant.entrantId or ''),
+        playerSource = entrantSource,
+        playerName = tostring(entrant.name or ('Player %s'):format(tostring(entrant.source or '?'))),
+        position = tonumber(entrant.position) or 1,
+        lapNumber = tonumber(lapNumber) or 1,
+        totalLaps = math.max(1, tonumber(instance.laps) or 1),
+        lapTimeMs = tonumber(lapTimeMs) or 0,
+        totalTimeMs = tonumber(totalTimeMs) or 0,
+        bestLapTimeMs = tonumber(bestLapTimeMs) or 0,
+        bestLapDeltaMs = tonumber(bestLapDeltaMs) or 0,
+        finished = finished == true,
+    })
 end
 
 local function getLapIncrementUnlockCheckpoint(totalCheckpoints)
@@ -515,7 +515,7 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex)
                 instance.bestLapTimeMs = currentLapTimeMs
             end
 
-            broadcastLapCompleted(
+            sendLapCompleted(
                 instance,
                 entrant,
                 currentLap,
@@ -617,7 +617,6 @@ RacingSystem.Server.Instances.joinResolvedInstance = joinResolvedInstance
 RacingSystem.Server.Instances.joinRaceInstanceById = joinRaceInstanceById
 RacingSystem.Server.Instances.leaveCurrentRaceInstance = leaveCurrentRaceInstance
 RacingSystem.Server.Instances.restartRaceInstanceForSource = restartRaceInstanceForSource
-RacingSystem.Server.Instances.broadcastLapCompleted = broadcastLapCompleted
 RacingSystem.Server.Instances.handleCheckpointPassed = handleCheckpointPassed
 
 

@@ -11,8 +11,8 @@
   - `shared/shared.lua`
 - `client_scripts`: see `fxmanifest.lua`
 - `server_scripts`: see `fxmanifest.lua`
-- Packaged JSON:
-  - `race_index.json`
+- Server-owned data (not included in the client file pack):
+  - generated `race_index.json`
   - `CustomRaces/*.json`
   - `OnlineRaces/*.json`
 
@@ -34,11 +34,6 @@
   - Read via: `GetConvarBool`
   - Effective default: `false`
   - Example: `setr ars_skip_uptodate_print true`
-
-- `rSystemPrintLevel`
-  - Read via: `GetConvarInt`
-  - Effective default: `0`
-  - Example: `setr rSystemPrintLevel 2`
 
 ## Notes on host settings in menu
 

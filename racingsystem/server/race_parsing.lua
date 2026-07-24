@@ -3,6 +3,8 @@ RacingSystem.Server = RacingSystem.Server or {}
 RacingSystem.Server.Parsing = RacingSystem.Server.Parsing or {}
 
 local MAX_CHECKPOINT_COUNT = 1000
+local MAX_PROP_COUNT = 1000
+local MAX_MODEL_HIDE_COUNT = 500
 local MAX_HORIZONTAL_COORDINATE = 10000.0
 local MAX_VERTICAL_COORDINATE = 5000.0
 
@@ -411,9 +413,10 @@ local function buildUGCJsonUrlCandidates(ugcId)
     return candidates
 end
 
-local function fetchUGCJsonContent(url)
+local function fetchUGCJsonContent(url, timeoutMs)
     local urlContent = nil
-    local httpRequestTimer = GetGameTimer() + 10000
+    local requestTimeoutMs = math.max(1, math.floor(tonumber(timeoutMs) or 10000))
+    local httpRequestTimer = GetGameTimer() + requestTimeoutMs
 
     local httpRequestOk, err = pcall(function()
         PerformHttpRequest(url, function(errorCode, resultData)
@@ -443,23 +446,34 @@ end
 local function fetchUGCJsonContentById(ugcId)
     local urls = buildUGCJsonUrlCandidates(ugcId)
     local lastError = nil
+    local totalTimeoutMs = math.max(1000, tonumber((RacingSystem.Server.State.config or {}).ugcFetchTotalTimeoutMs) or 30000)
+    local deadline = GetGameTimer() + totalTimeoutMs
 
     for _, url in ipairs(urls) do
         local now = GetGameTimer()
-        local waitMs = math.max(0, math.floor((tonumber(RacingSystem.Server.State.nextAllowedUGCFetchAt) or 0) - now))
-        if waitMs > 0 then
-            Wait(waitMs)
+        local remainingMs = deadline - now
+        if remainingMs <= 0 then
+            break
         end
 
+        local waitMs = math.max(0, math.floor((tonumber(RacingSystem.Server.State.nextAllowedUGCFetchAt) or 0) - now))
+        if waitMs > 0 then
+            Wait(math.min(waitMs, remainingMs))
+        end
+
+        remainingMs = deadline - GetGameTimer()
+        if remainingMs <= 0 then
+            break
+        end
         RacingSystem.Server.State.nextAllowedUGCFetchAt = GetGameTimer() + (tonumber((RacingSystem.Server.State.config or {}).ugcFetchRetryCooldownMs) or 700)
-        local content, fetchError = fetchUGCJsonContent(url)
+        local content, fetchError = fetchUGCJsonContent(url, math.min(10000, remainingMs))
         if content then
             return content, nil
         end
         lastError = fetchError or lastError
     end
 
-    return nil, lastError or ('No mission JSON variant was found for UGC id "%s".'):format(tostring(ugcId))
+    return nil, lastError or ('UGC lookup timed out or no mission JSON variant was found for id "%s".'):format(tostring(ugcId))
 end
 
 local function buildOnlineRacePropsFromMission(objectData)
@@ -468,7 +482,8 @@ local function buildOnlineRacePropsFromMission(objectData)
         return props
     end
 
-    local totalObjects = tonumber(objectData.no) or 0
+    local declaredObjectCount = isFiniteNumber(objectData.no) and tonumber(objectData.no) or 0
+    local totalObjects = math.max(0, math.min(MAX_PROP_COUNT, math.floor(declaredObjectCount)))
     local modelArr = objectData.model or {}
     local locationArr = objectData.loc or {}
     local rotationArr = objectData.vRot or {}
@@ -508,7 +523,8 @@ local function buildOnlineRaceModelHidesFromMission(hideObjectData)
         return modelHides
     end
 
-    local totalHides = tonumber(hideObjectData.no) or 0
+    local declaredHideCount = isFiniteNumber(hideObjectData.no) and tonumber(hideObjectData.no) or 0
+    local totalHides = math.max(0, math.min(MAX_MODEL_HIDE_COUNT, math.floor(declaredHideCount)))
     local modelArr = hideObjectData.mn or {}
     local positionArr = hideObjectData.pos or {}
 

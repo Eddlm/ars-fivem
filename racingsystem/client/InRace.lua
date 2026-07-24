@@ -12,11 +12,7 @@ local raceRuntimeState = {
     checkpointPassArm = nil,
     lastPassedCheckpoint = nil,
     startLineCheckpoint = nil,
-    joinHintInstanceId = nil,
     startLineBlip = nil,
-    futureCheckpointBlips = {},
-    futureBlipCheckpointIndex = nil,
-    futureBlipInstanceId = nil,
     chevronEdgeCache = nil,
     penaltyPreviewText = nil,
     penaltyPreviewShownAt = 0,
@@ -65,7 +61,10 @@ local function ensureConstants()
     CHECKPOINT_PASS_RELEASE_THRESHOLD = tonumber(cfg.checkpointPassReleaseThreshold) or 0.75
     CHECKPOINT_RECOVERY_PASS_MAX_MPH = tonumber(cfg.checkpointRecoveryPassMaxMph) or 5.0
     CHECKPOINT_RECOVERY_FORWARD_VELOCITY_RATIO_MAX = tonumber(cfg.checkpointRecoveryForwardVelocityRatioMax) or 0.66
-    CHECKPOINT_SOFT_POWER_PENALTY_MULTIPLIER = tonumber(cfg.checkpointSoftPowerPenaltyMultiplier) or 0.05
+    CHECKPOINT_SOFT_POWER_PENALTY_MULTIPLIER = math.max(
+        -100.0,
+        math.min(0.0, tonumber(cfg.checkpointSoftPowerPenaltyMultiplier) or -20.0)
+    )
     LEADERBOARD_CLIENT_TIEBREAK_ENABLED = cfg.leaderboardClientTiebreakEnabled == true
 end
 
@@ -390,11 +389,9 @@ CreateThread(function()
             raceRuntimeState.checkpointPassArm = nil
             raceRuntimeState.lastPassedCheckpoint = nil
             raceRuntimeState.startLineCheckpoint = nil
-            raceRuntimeState.joinHintInstanceId = nil
             RacingSystem.Client.clearCheckpointChevronEdgeCache()
             raceRuntimeState.accelerationPenaltyUntil = 0
             clearPowerPenaltyVehicleOverride()
-            RacingSystem.Client.clearFutureCheckpointBlips()
             RacingSystem.Client.clearStartLineBlip()
             resetLocalRaceTiming()
             RacingSystem.Client.Util.ClearRaceLeaderboardVisual()
@@ -407,20 +404,6 @@ CreateThread(function()
             Wait(1000)
         else
             local joinedInstanceId = tonumber(joinedInstance.id)
-            if joinedInstanceId and raceRuntimeState.joinHintInstanceId ~= joinedInstanceId then
-                raceRuntimeState.joinHintInstanceId = joinedInstanceId
-                local joinCheckpoints = type(joinedInstance.checkpoints) == 'table' and joinedInstance.checkpoints or {}
-                local joinCheckpointCount = #joinCheckpoints
-                if joinCheckpointCount > 0 then
-                    local joinEntrant = RacingSystem.Client.getLocalEntrant(joinedInstance)
-                    local joinTargetIndex = tonumber(joinEntrant and joinEntrant.currentCheckpoint) or 1
-                    RacingSystem.Client.clearFutureCheckpointBlips()
-                    raceRuntimeState.futureBlipCheckpointIndex = joinTargetIndex
-                    raceRuntimeState.futureBlipInstanceId = joinedInstanceId
-                else
-                    RacingSystem.Client.clearFutureCheckpointBlips()
-                end
-            end
 
             RacingSystem.Client.Util.UpdateRaceLeaderboardVisual(nil, RacingSystem.Client.buildLiveLeaderboardRows(joinedInstance))
             ensureLocalRaceTiming(joinedInstanceId)
@@ -451,17 +434,6 @@ CreateThread(function()
 
             clearPendingCheckpointIfAdvanced(entrant)
             targetIndex = tonumber(entrantProgress.currentCheckpoint) or targetIndex
-            local routeTargetIndex = tonumber(entrant and entrant.currentCheckpoint) or targetIndex
-            if totalCheckpoints > 0 then
-                local routeInstanceId = tonumber(joinedInstance.id)
-                if raceRuntimeState.futureBlipInstanceId ~= routeInstanceId
-                    or raceRuntimeState.futureBlipCheckpointIndex ~= routeTargetIndex then
-                    RacingSystem.Client.clearFutureCheckpointBlips()
-                    raceRuntimeState.futureBlipCheckpointIndex = routeTargetIndex
-                    raceRuntimeState.futureBlipInstanceId = routeInstanceId
-                end
-            end
-
             for _, otherEntrant in ipairs(type(joinedInstance.entrants) == 'table' and joinedInstance.entrants or {}) do
                 local otherSource = tonumber(otherEntrant.source) or 0
                 if otherSource > 0 and otherSource ~= GetPlayerServerId(PlayerId()) then
@@ -549,7 +521,6 @@ CreateThread(function()
             if not targetCheckpoint or totalCheckpoints == 0 then
                 raceRuntimeState.checkpointPassArm = nil
                 raceRuntimeState.previousPosition = origin
-                RacingSystem.Client.clearFutureCheckpointBlips()
                 RacingSystem.Client.clearStartLineBlip()
                 Wait(1000)
             else
@@ -852,6 +823,7 @@ CreateThread(function()
                                 RacingSystem.Client.runSmartCheckpointTeleport(passedCheckpoint)
                             elseif applyThrottlePenalty then
                                 if pedVehicle ~= 0 and DoesEntityExist(pedVehicle) then
+                                    raceRuntimeState.accelerationPenaltyUntil = GetGameTimer() + throttlePenaltyMs
                                     local velocity = GetEntityVelocity(pedVehicle)
                                     SetEntityVelocity(
                                         pedVehicle,
@@ -874,6 +846,13 @@ CreateThread(function()
                 end
 
                 raceRuntimeState.previousPosition = origin
+                local accelerationPenaltyUntil = tonumber(raceRuntimeState.accelerationPenaltyUntil) or 0
+                if accelerationPenaltyUntil > GetGameTimer() then
+                    DisableControlAction(0, 71, true)
+                elseif accelerationPenaltyUntil ~= 0 then
+                    raceRuntimeState.accelerationPenaltyUntil = 0
+                end
+
                 local powerPenaltyUntil = tonumber(raceRuntimeState.powerPenaltyUntil) or 0
                 if powerPenaltyUntil > GetGameTimer() then
                     local penaltyVehicle = raceRuntimeState.powerPenaltyVehicle

@@ -2,6 +2,7 @@ RacingSystem = RacingSystem or {}
 RacingSystem.Client = RacingSystem.Client or {}
 
 local isTeleportInProgress = false
+local pendingTeleportPayload = nil
 local MAX_LOOP_ITERATIONS = 5
 local SAFE_SPOT_SAMPLE_COUNT = 5
 local FADE_POLL_ATTEMPTS = 5
@@ -327,7 +328,20 @@ local function runSmartJoinTeleport(payload)
     if type(payload) ~= 'table' then
         return
     end
+
+    local payloadInstanceId = tonumber(payload.instanceId)
+    if payloadInstanceId and payloadInstanceId > 0 then
+        local joinedInstanceId = type(LocalPlayer) == 'table'
+            and type(LocalPlayer.state) == 'table'
+            and tonumber(LocalPlayer.state['rs:instanceId'])
+            or nil
+        if joinedInstanceId ~= payloadInstanceId then
+            return
+        end
+    end
+
     if isTeleportInProgress then
+        pendingTeleportPayload = payload
         return
     end
 
@@ -407,6 +421,13 @@ local function runSmartJoinTeleport(payload)
         print(('[racingsystem:teleport] Teleport failed: %s'):format(tostring(teleportError or 'unknown error')))
     end
     isTeleportInProgress = false
+    local queuedPayload = pendingTeleportPayload
+    pendingTeleportPayload = nil
+    if queuedPayload then
+        Citizen.CreateThread(function()
+            runSmartJoinTeleport(queuedPayload)
+        end)
+    end
 end
 
 local function buildCheckpointTeleportPayload(checkpoint)
@@ -417,6 +438,7 @@ local function buildCheckpointTeleportPayload(checkpoint)
     local joinedInstance = type(RacingSystem.Client.getJoinedRaceInstance) == 'function' and RacingSystem.Client.getJoinedRaceInstance() or nil
     local checkpointIndex = math.max(1, math.floor(tonumber(checkpoint.index) or 1))
     local payload = {
+        instanceId = tonumber(joinedInstance and joinedInstance.id),
         checkpointIndex = checkpointIndex,
         x = tonumber(checkpoint.x) or 0.0,
         y = tonumber(checkpoint.y) or 0.0,

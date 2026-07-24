@@ -180,6 +180,11 @@ local singleLastPlace = Snapshot.getLastPlaceEntrant(singleEntrantInstance)
 expect('server one-entrant last place exists', singleLastPlace ~= nil)
 expectEqual('server one-entrant last place source', singleLastPlace and singleLastPlace.source, 1)
 
+local oversizedAssets = {}
+for index = 1, 1005 do oversizedAssets[index] = { model = index } end
+expectEqual('server instance props capped', #Snapshot.cloneOnlineRaceProps(oversizedAssets), 1000)
+expectEqual('server instance model hides capped', #Snapshot.cloneOnlineRaceModelHides(oversizedAssets), 500)
+
 -- Empty-instance cleanup is idempotent even if a stale caller retries it.
 local emptyInstance = {
     id = 77,

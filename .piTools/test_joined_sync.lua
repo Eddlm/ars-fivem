@@ -20,13 +20,18 @@ end
 
 local standingsCalls = 0
 local standingsSnapshots = {}
+local lapEvents = {}
 local gameTimer = 1000
 
 GetGameTimer = function()
     gameTimer = gameTimer + 100
     return gameTimer
 end
-TriggerClientEvent = function() end
+TriggerClientEvent = function(name, target, payload)
+    if name == 'racingsystem:race:lapCompleted' then
+        lapEvents[#lapEvents + 1] = { target = target, payload = payload }
+    end
+end
 
 RacingSystem = {
     States = {
@@ -64,6 +69,10 @@ RacingSystem = {
             end,
             getRaceStartCheckpoint = function()
                 return 1
+            end,
+            buildOrderedEntrants = function(instance)
+                for index, entrant in ipairs(instance.entrants or {}) do entrant.position = index end
+                return instance.entrants or {}
             end,
             broadcastInstanceStandings = function(instance)
                 standingsCalls = standingsCalls + 1
@@ -162,6 +171,7 @@ instance.entrants[1].lapIncrementUnlocked = true
 RacingSystem.Server.State.raceInstancesById[instance.id] = instance
 standingsCalls = 0
 standingsSnapshots = {}
+lapEvents = {}
 result, resultError = handleCheckpointPassed(11, instance.id, 3, {
     lapTimeMs = 5000,
     totalTimeMs = 5000,
@@ -175,6 +185,9 @@ expectEqual('other entrant prevents aggregate finish', instance.state, RacingSys
 expectEqual('server owns lap timing', instance.entrants[1].lapTimes[1], instance.entrants[1].finishedAt - 700)
 expectEqual('server owns total timing', instance.entrants[1].totalTimeMs, instance.entrants[1].finishedAt - 500)
 expect('client timing payload ignored', instance.entrants[1].lapTimes[1] ~= 5000)
+expectEqual('lap completion sent once', #lapEvents, 1)
+expectEqual('lap completion sent to owner', lapEvents[1] and lapEvents[1].target, 11)
+expectEqual('lap completion carries server time', lapEvents[1] and lapEvents[1].payload.lapTimeMs, instance.entrants[1].lapTimes[1])
 
 -- Point-to-point routes are normalized to one lap regardless of client input.
 RacingSystem.Server.Repository.loadCustomRace = function()

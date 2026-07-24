@@ -125,7 +125,7 @@ RegisterNetEvent('racingsystem:editor:load', function(raceName)
     end
 
     if not definition then
-        definition = RacingSystem.Server.Repository.createNewRaceDefinition(src, raceName)
+        definition = RacingSystem.Server.Repository.createNewRaceDraft(src, raceName)
         if not definition then
             RacingSystem.Server.Logging.logError(('[requestEditorRace] Failed to create new race "%s"'):format(raceName))
             TriggerClientEvent('racingsystem:editor:loaded', src, {

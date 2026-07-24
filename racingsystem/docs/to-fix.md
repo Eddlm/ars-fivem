@@ -58,7 +58,43 @@ Runtime-dependent items R1–R5 remain open and are not implied by these checks.
 
 ## Audit Pass 2 — Fresh Review
 
-Pending completion of Pass 1.
+A fresh post-commit review found the following additional issues:
+
+### High
+
+- [x] **P2-H1 — Bind deletion exclusively to the resolved server catalog identity.** A table request can name definition A but supply race ID B; deletion currently prefers the request race ID after resolving A and can remove the wrong online file.
+- [x] **P2-H2 — Keep new editor races ephemeral until the first valid save.** Creating a new race currently persists and catalogs a zero-checkpoint mission that cannot be parsed or hosted if the editor exits before saving.
+- [x] **P2-H3 — Reject stale teleport payloads and queue the latest overlapping teleport.** A delayed old-instance teleport can move a racer after transfer, while any teleport arriving during another teleport is silently dropped.
+- [x] **P2-H4 — Correct the soft engine-power penalty.** FiveM uses `0.0` as normal and positive values as boosts; the configured `0.05` is a tiny boost rather than a penalty.
+- [x] **P2-H5 — Ensure the lap-completion event cannot suppress the finish shard.** The handler marks the finish cue as shown without displaying it, causing the state-driven renderer to skip the visual.
+
+### Medium
+
+- [x] **P2-M1 — Surface editor load/save/delete errors to the player.** Client handlers silently return on structured server failures.
+- [x] **P2-M2 — Put one total deadline around UGC URL candidates.** Individual 10-second timeouts across all language/title candidates can keep one import alive for several minutes.
+- [x] **P2-M3 — Remove the remaining future-blip/join-hint state machine.** Blip production was removed, but state, invalidation, config, and clear calls remain.
+- [x] **P2-M4 — Apply the calculated throttle-penalty duration.** The code computes 1–5 seconds but only applies one instantaneous velocity reduction; the existing duration state is otherwise unused.
+- [x] **P2-M5 — Bound imported prop and model-hide counts before synchronized delivery/client spawning.** Mission-declared counts are currently unbounded.
+- [x] **P2-M6 — Send lap completion only to its owning entrant.** The server sends the same event to every entrant, while every non-owner client immediately discards it.
+
+### Low
+
+- [x] **P2-L1 — Remove the remaining unused conversion constant and correct update-notifier version wording.**
+- [x] **P2-L2 — Remove documentation for the nonexistent `rSystemPrintLevel` convar and correct packaged-data/spectator descriptions.**
+
+### Pass 2 Verification Record
+
+Implemented every automatable Pass 2 finding.
+
+Automated verification:
+
+- `lua .piTools/test_instance_list_payload.lua` — 130/130 assertions.
+- `lua .piTools/test_joined_sync.lua` — 24/24 assertions, including single-recipient authoritative lap completion.
+- `lua .piTools/test_event_handlers.lua` — 23/23 assertions.
+- `lua .piTools/test_repository_robustness.lua` — 37/37 assertions, including total UGC deadline, ephemeral drafts, and mismatched deletion identity.
+- Full production/test Lua syntax, NUI JavaScript syntax, JSON-data, network-event closure, config-use, dead-local, and obsolete-symbol checks passed.
+
+FiveM-native teleport queuing/stale rejection, finish/final-lap visuals, timed throttle/power penalties, and editor error presentation remain runtime acceptance items under R4.
 
 ## Audit Pass 3 — Closure Review
 

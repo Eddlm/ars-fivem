@@ -48,6 +48,14 @@ RacingSystem.Server.State.config.ugcFetchRetryCooldownMs = math.max(
             or tonumber(advancedServerConfig.ugcFetchRetryCooldownMs) or 700
     )
 )
+RacingSystem.Server.State.config.ugcFetchTotalTimeoutMs = math.max(
+    1000,
+    normalizeInt(
+        RacingSystem.Server.State.config.ugcFetchTotalTimeoutMs ~= nil and RacingSystem.Server.State.config.ugcFetchTotalTimeoutMs
+            or tonumber(advancedServerConfig.ugcFetchTotalTimeoutMs) or 30000,
+        1000
+    )
+)
 RacingSystem.Server.State.config.gtaoCheckpointRadiusScale = tonumber(
     RacingSystem.Server.State.config.gtaoCheckpointRadiusScale ~= nil and RacingSystem.Server.State.config.gtaoCheckpointRadiusScale
         or tonumber(advancedServerConfig.gtaoCheckpointRadiusScale) or 1.0

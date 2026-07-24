@@ -154,6 +154,7 @@ saveShouldFail = false
 expect('catalog registration failure reported', failedDefinition == nil and type(failedDefinitionError) == 'string')
 expect('catalog registration rollback restores memory', RacingSystem.Server.State.knownRaceDefinitionsByName['not durable'] == nil)
 
+local productionFetchUGCById = RacingSystem.Server.Parsing.fetchUGCJsonContentById
 RacingSystem.Server.Parsing.fetchUGCJsonContentById = function(ugcId)
     expectEqual('UGC validation uses exported fetch helper', ugcId, 'ugc123')
     return 'ONLINE', nil
@@ -161,6 +162,32 @@ end
 local imported, importError = RacingSystem.Server.Repository.saveBundledUGCById('ugc123')
 expect('UGC import succeeds through exported helper', imported ~= nil, tostring(importError))
 expectEqual('UGC import checkpoint count', imported and imported.checkpointCount, 1)
+
+local originalGetGameTimer = GetGameTimer
+local originalWait = Wait
+local originalPerformHttpRequest = PerformHttpRequest
+local fetchTimer = 1000
+local fetchCalls = 0
+GetGameTimer = function() return fetchTimer end
+Wait = function(ms) fetchTimer = fetchTimer + (tonumber(ms) or 0) end
+PerformHttpRequest = function(_, callback)
+    fetchCalls = fetchCalls + 1
+    callback(404, '', {})
+end
+RacingSystem.Server.State.config.ugcFetchTotalTimeoutMs = 1000
+RacingSystem.Server.State.config.ugcFetchRetryCooldownMs = 700
+RacingSystem.Server.State.nextAllowedUGCFetchAt = 0
+local timedOutContent = productionFetchUGCById('timeout-id')
+expect('UGC total deadline returns no content', timedOutContent == nil)
+expect('UGC total deadline bounds candidate attempts', fetchCalls <= 2, tostring(fetchCalls))
+GetGameTimer = originalGetGameTimer
+Wait = originalWait
+PerformHttpRequest = originalPerformHttpRequest
+
+local draft = RacingSystem.Server.Repository.createNewRaceDraft(12, 'Unsaved Draft')
+expect('new editor draft created in memory', draft ~= nil)
+expect('new editor draft not written to disk', files['CustomRaces/unsaveddraft.json'] == nil)
+expect('new editor draft not added to catalog', RacingSystem.Server.State.knownRaceDefinitionsByName['unsaved draft'] == nil)
 
 RacingSystem.Server.State.knownRaceDefinitionsByName['safe race'] = {
     lookupName = 'safe race', name = 'Safe Race', sourceType = 'custom',
@@ -180,6 +207,29 @@ local failedDelete, failedDeleteError = RacingSystem.Server.Repository.deleteRac
 os.remove = originalRemove
 expect('filesystem delete failure reported', failedDelete == nil and type(failedDeleteError) == 'string')
 expect('filesystem delete failure restores catalog', RacingSystem.Server.State.knownRaceDefinitionsByName['safe race'] ~= nil)
+
+files['OnlineRaces/a.json'] = 'ONLINE'
+files['OnlineRaces/b.json'] = 'ONLINE'
+RacingSystem.Server.State.knownRaceDefinitionsByName['online a'] = {
+    lookupName = 'online a', name = 'Online A', sourceType = 'online', raceId = 'a',
+}
+RacingSystem.Server.State.knownRaceDefinitionsByName['online b'] = {
+    lookupName = 'online b', name = 'Online B', sourceType = 'online', raceId = 'b',
+}
+local removedAbsolutePath = nil
+os.remove = function(path)
+    removedAbsolutePath = path
+    return true
+end
+local mismatchedDelete, mismatchedDeleteError = RacingSystem.Server.Repository.deleteRaceDefinition({
+    lookupName = 'online a',
+    sourceType = 'online',
+    raceId = 'b',
+})
+os.remove = originalRemove
+expect('mismatched delete request succeeds against resolved identity', mismatchedDelete ~= nil, tostring(mismatchedDeleteError))
+expect('mismatched delete removes definition-owned file', type(removedAbsolutePath) == 'string' and removedAbsolutePath:match('a%.json$') ~= nil, tostring(removedAbsolutePath))
+expect('mismatched delete preserves unrelated definition', RacingSystem.Server.State.knownRaceDefinitionsByName['online b'] ~= nil)
 
 local total = passed + failed
 io.write(('\n%d / %d assertions passed'):format(passed, total))

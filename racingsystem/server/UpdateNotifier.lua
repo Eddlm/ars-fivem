@@ -186,7 +186,7 @@ local function performUpdateCheck()
     end
 
     if isRemoteVersionNewer(localVersion, remoteVersion) then
-        print(('Checking for updates.... %s > %s available on https://github.com/Eddlm/ars-fivem/releases'):format(localVersion, remoteVersion))
+        print(('Checking for updates.... %s -> %s available on https://github.com/Eddlm/ars-fivem/releases'):format(localVersion, remoteVersion))
     elseif not GetConvarBool('ars_skip_uptodate_print', false) then
         print(('Checking for updates.... Up to date (%s)'):format(localVersion))
     end

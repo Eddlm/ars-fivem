@@ -793,8 +793,16 @@ local function drawCheckpointIndexLabel(checkpointIndex, x, y, z, distanceMeters
     ClearDrawOrigin()
 end
 
+local function notifyEditorRequestError(payload, fallbackMessage)
+    local message = type(payload) == 'table' and type(payload.error) == 'string'
+        and payload.error
+        or fallbackMessage
+    RacingSystem.Client.Util.ShowWarningSubtitle(message, 3000, '~o~')
+end
+
 RegisterNetEvent('racingsystem:editor:loaded', function(payload)
     if type(payload) ~= 'table' or payload.ok ~= true then
+        notifyEditorRequestError(payload, 'Could not load that race in the editor.')
         return
     end
     local data = type(payload.data) == 'table' and payload.data or {}
@@ -809,6 +817,7 @@ end)
 
 RegisterNetEvent('racingsystem:editor:saved', function(payload)
     if type(payload) ~= 'table' or payload.ok ~= true then
+        notifyEditorRequestError(payload, 'Could not save that race.')
         return
     end
     local data = type(payload.data) == 'table' and payload.data or {}
@@ -832,6 +841,7 @@ end)
 RegisterNetEvent('racingsystem:def:deleted', function(payload)
     RacingSystem.Menu.deleteConfirmRaceName = nil
     if type(payload) ~= 'table' or payload.ok ~= true then
+        notifyEditorRequestError(payload, 'Could not delete that race.')
         RacingSystem.Menu.refreshEditorMenu(RacingSystem.Menu.buildMenuState())
         return
     end
