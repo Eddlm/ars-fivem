@@ -29,14 +29,12 @@ local function notifyPayloadDisabled()
 end
 
 local function loadAvailableRaceDefinitions()
-    local resourceName = GetCurrentResourceName()
-    local rawIndex = LoadResourceFile(resourceName, 'race_index.json')
-    if type(rawIndex) ~= 'string' or rawIndex == '' then
-        return {}
-    end
-    local decoded = json.decode(rawIndex)
-    local definitions = type(decoded) == 'table' and type(decoded.definitions) == 'table' and decoded.definitions or {}
-    return definitions
+    return RacingSystem.Client.getRaceDefinitions()
+end
+
+local function canDeleteRaceDefinitions()
+    local viewer = RacingSystem.Client.getCatalogViewer()
+    return type(viewer) == 'table' and viewer.canDeleteRaceDefinitions == true
 end
 
 local function setItemDescriptionRaw(item, text)
@@ -228,8 +226,7 @@ local function refreshActiveRaceList()
         raceLabels[1] = '~c~No active races~s~'
     end
 
-    activeRaceListItem.Items = raceLabels
-    activeRaceListItem:Index(selectedIndex)
+    activeRaceListItem:ChangeList(raceLabels, selectedIndex)
     logMenuVerbose(('Active Races refreshed: found %d instance(s)'):format(#instances))
 end
 
@@ -297,46 +294,61 @@ importGTAOUrlItem.Activated = function(menu)
     TriggerEvent('racingsystem:openGTAORaceUrlPrompt')
     MenuHandler:CloseAndClearHistory()
 end
-hostItem.Activated = function(menu)
-    logMenuVerbose('Host submenu activated')
+local hostDefinitions = {}
+
+local function getDefinitionSelectionKey(definition)
+    if type(definition) ~= 'table' then
+        return nil
+    end
+    return ('%s:%s:%s'):format(
+        tostring(definition.sourceType or ''),
+        tostring(definition.lookupName or ''),
+        tostring(definition.raceId or '')
+    )
+end
+
+local function refreshHostDefinitions()
+    local previousIndex = tonumber(raceListItem:Index()) or 1
+    local previousKey = getDefinitionSelectionKey(hostDefinitions[previousIndex])
     local definitions = loadAvailableRaceDefinitions()
-    logMenuVerbose(('Found %d definitions'):format(#definitions))
     local raceLabels = {}
-    for i, definition in ipairs(definitions) do
-        local sourceType = tostring(definition.sourceType or 'saved')
-        local label = ('[%s] %s'):format(sourceType, tostring(definition.name or 'Unknown'))
-        raceLabels[#raceLabels + 1] = label
-        logMenuVerbose(('  [%d] %s (lookup: %s)'):format(i, label, tostring(definition.lookupName or 'nil')))
-    end
-    if #raceLabels == 0 then
-        raceLabels[1] = 'No saved races'
-        logMenuVerbose('No races available from local definitions')
-    end
-    raceListItem.Items = raceLabels
     local selectedIndex = 1
-    if #definitions > 0 and RacingSystem.Menu.pendingSelectRaceName and RacingSystem.Menu.pendingSelectRaceName ~= '' then
-        local pendingNormalized = RacingSystem.NormalizeRaceName(RacingSystem.Menu.pendingSelectRaceName)
-        for i, definition in ipairs(definitions) do
-            local normalizedName = RacingSystem.NormalizeRaceName(definition.name)
-            local normalizedLookupName = RacingSystem.NormalizeRaceName(definition.lookupName)
-            local normalizedRaceId = RacingSystem.NormalizeRaceName(definition.raceId)
-            if pendingNormalized == normalizedName
-                or pendingNormalized == normalizedLookupName
-                or pendingNormalized == normalizedRaceId then
-                selectedIndex = i
-                break
-            end
+    local pendingNormalized = RacingSystem.NormalizeRaceName(RacingSystem.Menu.pendingSelectRaceName)
+
+    for index, definition in ipairs(definitions) do
+        raceLabels[index] = ('[%s] %s'):format(
+            tostring(definition.sourceType or ''),
+            tostring(definition.name or '')
+        )
+        if getDefinitionSelectionKey(definition) == previousKey then
+            selectedIndex = index
+        end
+        if pendingNormalized
+            and (pendingNormalized == RacingSystem.NormalizeRaceName(definition.name)
+                or pendingNormalized == RacingSystem.NormalizeRaceName(definition.lookupName)
+                or pendingNormalized == RacingSystem.NormalizeRaceName(definition.raceId)) then
+            selectedIndex = index
         end
     end
-    raceListItem:Index(selectedIndex)
+
+    if #raceLabels == 0 then
+        raceLabels[1] = 'No saved races'
+    end
+
+    hostDefinitions = definitions
+    raceListItem:ChangeList(raceLabels, selectedIndex)
     RacingSystem.Menu.pendingSelectRaceName = nil
+    logMenuVerbose(('Host definitions refreshed: found %d definition(s)'):format(#definitions))
+end
+
+hostItem.Activated = function(menu)
+    refreshHostDefinitions()
     menu:SwitchTo(hostSubmenu, 1, true)
 end
 acceptItem.Activated = function(menu)
-    local definitions = loadAvailableRaceDefinitions()
     local selectedIndex = tonumber(raceListItem:Index()) or 1
-    logMenuVerbose(('Accept activated: selectedIndex=%d, totalDefinitions=%d'):format(selectedIndex, #definitions))
-    local selectedDefinition = definitions[selectedIndex]
+    local selectedDefinition = hostDefinitions[selectedIndex]
+    logMenuVerbose(('Accept activated: selectedIndex=%d, totalDefinitions=%d'):format(selectedIndex, #hostDefinitions))
     if not selectedDefinition then
         logMenuVerbose('Selected definition is nil')
         RacingSystem.Client.Util.NotifyPlayer('No race selected.', true)
@@ -433,23 +445,27 @@ raceEditorMenu:AddItem(newRaceMenuItem)
 local editExistingSubmenu = UIMenu.New('Edit Existing', 'Select a race to edit.', MENU_X, 0, true)
 editExistingSubmenu:MenuAlignment(MenuAlignment.LEFT)
 editExistingSubmenu:SetBannerColor(SColor.LightBlue)
-local editExistingRaceItems = {}
+local editExistingDefinitionKeys = {}
 local function refreshEditExistingRaces()
+    local previousIndex = editExistingSubmenu:CurrentSelection()
+    local previousKey = editExistingDefinitionKeys[previousIndex]
     local definitions = loadAvailableRaceDefinitions()
-    editExistingSubmenu = UIMenu.New('Edit Existing', 'Select a race to edit.', MENU_X, 0, true)
-    editExistingSubmenu:MenuAlignment(MenuAlignment.LEFT)
-    editExistingSubmenu:SetBannerColor(SColor.LightBlue)
-    editExistingRaceItems = {}
+    local selectedIndex = 1
+
+    editExistingSubmenu:Clear()
+    editExistingDefinitionKeys = {}
     if #definitions == 0 then
         local noRacesItem = UIMenuItem.New('No Saved Races', 'No races available to edit.')
         noRacesItem:Enabled(false)
         editExistingSubmenu:AddItem(noRacesItem)
-        table.insert(editExistingRaceItems, noRacesItem)
         logMenuVerbose('No races available for editing')
     else
-        for i, definition in ipairs(definitions) do
-            local sourceType = tostring(definition.sourceType or 'saved')
-            local label = ('[%s] %s'):format(sourceType, tostring(definition.name or 'Unknown'))
+        for index, definition in ipairs(definitions) do
+            local definitionKey = getDefinitionSelectionKey(definition)
+            local label = ('[%s] %s'):format(
+                tostring(definition.sourceType or ''),
+                tostring(definition.name or '')
+            )
             local raceMenuItem = UIMenuItem.New(label, 'Open this race for editing.')
             raceMenuItem.Activated = function(itemMenu)
                 logMenuVerbose(('Loading race for editing: %s'):format(definition.name))
@@ -457,10 +473,13 @@ local function refreshEditExistingRaces()
                 itemMenu:GoBack()
             end
             editExistingSubmenu:AddItem(raceMenuItem)
-            table.insert(editExistingRaceItems, raceMenuItem)
-            logMenuVerbose(('Added race to Edit Existing: %s'):format(label))
+            editExistingDefinitionKeys[index] = definitionKey
+            if definitionKey == previousKey then
+                selectedIndex = index
+            end
         end
     end
+    editExistingSubmenu:CurrentSelection(selectedIndex)
 end
 
 local function findDefinitionByEditorRaceName(raceName)
@@ -737,6 +756,19 @@ raceEditorMenuItem.Activated = function(menu)
     logMenuVerbose('Race Editor submenu activated')
     menu:SwitchTo(raceEditorMenu, 1, true)
 end
+
+AddEventHandler('racingsystem:catalog:definitionsUpdated', function()
+    if hostSubmenu:Visible() then
+        refreshHostDefinitions()
+    end
+    if editExistingSubmenu:Visible() then
+        refreshEditExistingRaces()
+    end
+    if editorSessionActive then
+        deleteRaceMenuItem:Enabled(canDeleteRaceDefinitions())
+    end
+end)
+
 RacingSystem.Menu.raceMenuInitialized = true
 function RacingSystem.Menu.isRaceMenuVisible()
     return neutralMenu:Visible() or stagingMenu:Visible() or racingMenu:Visible()
@@ -829,7 +861,7 @@ function RacingSystem.Menu.beginEditorSessionUI()
     grabCheckpointCheckbox:Enabled(true)
     saveRaceMenuItem:Enabled(true)
     exitEditorMenuItem:Enabled(true)
-    deleteRaceMenuItem:Enabled(true)
+    deleteRaceMenuItem:Enabled(canDeleteRaceDefinitions())
     local isGrabbed = RacingSystem.Client.editorState and RacingSystem.Client.editorState.grabbedCheckpointIndex ~= nil
     grabCheckpointCheckbox:Checked(isGrabbed)
     syncCheckpointTypeListToClosest()

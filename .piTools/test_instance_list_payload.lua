@@ -298,6 +298,83 @@ receiveList({ revision = 3, instances = { activeInstance(30, 'staging', 0) } })
 expectEqual('client equal revision replaces', RacingSystem.Client.getInstanceList()[1].id, 30)
 expectEqual('client replacement update event', #localEvents, 2)
 
+-- Load the real client catalog cache module with the same event mocks.
+netHandlers = {}
+localEvents = {}
+RacingSystem = { Client = {} }
+dofile('racingsystem/client/catalog.lua')
+local receiveDefinitions = netHandlers['racingsystem:catalog:definitions']
+expect('client catalog handler registered', type(receiveDefinitions) == 'function')
+expectEqual('client catalog starts empty', #RacingSystem.Client.getRaceDefinitions(), 0)
+expect('client catalog viewer starts nil', RacingSystem.Client.getCatalogViewer() == nil)
+
+receiveDefinitions(nil)
+receiveDefinitions({ definitions = {} })
+expectEqual('client invalid catalog stays empty', #RacingSystem.Client.getRaceDefinitions(), 0)
+expectEqual('client invalid catalog no update event', #localEvents, 0)
+
+local catalogDefinitions = {
+    {
+        lookupName = 'a custom',
+        name = 'A Custom',
+        sourceType = 'custom',
+        updatedAt = 10,
+        isExample = true,
+    },
+    {
+        lookupName = 'z online',
+        name = 'Z Online',
+        sourceType = 'online',
+        raceId = 'online-id',
+        updatedAt = 20,
+        isExample = false,
+    },
+}
+local catalogViewer = {
+    source = 99,
+    isAdmin = true,
+    canDeleteRaceDefinitions = true,
+    canKillOwnedInstances = true,
+}
+receiveDefinitions({ definitions = catalogDefinitions, viewer = catalogViewer })
+local cachedDefinitions = RacingSystem.Client.getRaceDefinitions()
+local cachedViewer = RacingSystem.Client.getCatalogViewer()
+expectEqual('client catalog valid count', #cachedDefinitions, 2)
+expectEqual('client catalog online id', cachedDefinitions[2].raceId, 'online-id')
+expectKeys('client catalog definition contract', cachedDefinitions[2], {
+    'lookupName',
+    'name',
+    'sourceType',
+    'raceId',
+    'updatedAt',
+    'isExample',
+})
+expectEqual('client catalog viewer source', cachedViewer.source, 99)
+expectEqual('client catalog viewer permission', cachedViewer.canDeleteRaceDefinitions, true)
+expectEqual('client catalog update event count', #localEvents, 1)
+expectEqual('client catalog update event name', localEvents[1].name, 'racingsystem:catalog:definitionsUpdated')
+
+cachedDefinitions[1].name = 'mutated'
+cachedDefinitions[2] = nil
+cachedViewer.canDeleteRaceDefinitions = false
+expectEqual('client catalog getter protects summary', RacingSystem.Client.getRaceDefinitions()[1].name, 'A Custom')
+expectEqual('client catalog getter protects list', #RacingSystem.Client.getRaceDefinitions(), 2)
+expectEqual('client catalog getter protects viewer', RacingSystem.Client.getCatalogViewer().canDeleteRaceDefinitions, true)
+
+receiveDefinitions({
+    definitions = { catalogDefinitions[2] },
+    viewer = {
+        source = 12,
+        isAdmin = false,
+        canDeleteRaceDefinitions = false,
+        canKillOwnedInstances = true,
+    },
+})
+expectEqual('client catalog complete replacement count', #RacingSystem.Client.getRaceDefinitions(), 1)
+expectEqual('client catalog complete replacement identity', RacingSystem.Client.getRaceDefinitions()[1].lookupName, 'z online')
+expectEqual('client catalog replacement viewer', RacingSystem.Client.getCatalogViewer().source, 12)
+expectEqual('client catalog replacement update event', #localEvents, 2)
+
 local total = passed + failed
 io.write(('\n%d / %d assertions passed'):format(passed, total))
 if failed > 0 then

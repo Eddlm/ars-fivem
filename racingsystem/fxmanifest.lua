@@ -32,6 +32,7 @@ client_scripts {
     'client/util.lua',
     'client/Spectator.lua',
     'client/instance_list.lua',
+    'client/catalog.lua',
     'client/menu.lua',
     'client/client.lua',
     'client/Teleport.lua',

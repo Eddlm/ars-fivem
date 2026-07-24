@@ -409,23 +409,51 @@ Use two clients where noted.
 
 ## Phase 2 — Make the Race Catalog Server-Synchronized
 
-**Status:** Ready; Phase 1 runtime acceptance is deferred
+**Status:** Code complete; automated verification passed; in-game acceptance deferred
 
 ### Server work
 
-- [ ] Implement `sendDefinitions(target)`.
-- [ ] Implement `broadcastDefinitions()`.
-- [ ] Include the catalog and viewer permissions from `buildDefinitionsPayload(viewerSource)`.
-- [ ] Verify broadcasts occur after create, save, register, import, and delete operations that change the catalog.
-- [ ] Include definitions in `sendInitialState(target)`.
+- [x] Implement `sendDefinitions(target)`.
+- [x] Implement `broadcastDefinitions()`.
+- [x] Include the catalog and viewer permissions from `buildDefinitionsPayload(viewerSource)`.
+- [x] Verify broadcasts occur after create, save, register, import, and delete operations that change the catalog.
+- [x] Include definitions in `sendInitialState(target)`.
 
 ### Client work
 
-- [ ] Add one complete race-definition cache populated by `racingsystem:catalog:definitions`.
-- [ ] Replace the cache rather than merging it with packaged JSON.
-- [ ] Make Host and Edit Existing read the server-provided cache.
-- [ ] Remove runtime menu dependence on client-side `LoadResourceFile(..., 'race_index.json')`.
-- [ ] Refresh an open relevant menu when a catalog update arrives without corrupting its current selection.
+- [x] Add one complete race-definition cache populated by `racingsystem:catalog:definitions`.
+- [x] Replace the cache rather than merging it with packaged JSON.
+- [x] Make Host and Edit Existing read the server-provided cache.
+- [x] Remove runtime menu dependence on client-side `LoadResourceFile(..., 'race_index.json')`.
+- [x] Refresh an open relevant menu when a catalog update arrives without corrupting its current selection.
+
+### Automated verification
+
+- [x] Execute the production server catalog builder and delivery functions with mocked FiveM event APIs.
+- [x] Execute the production client catalog cache handler and immutable getters.
+- [x] Verify create, save, register, import, and delete mutation paths retain catalog broadcasts.
+- [x] Verify no client runtime path reads `race_index.json`.
+- [x] Lua syntax check all changed Lua files with `luac -p`.
+
+### Verification record — July 24, 2026
+
+Automated checks passed:
+
+- `lua .piTools/test_instance_list_payload.lua` — 88 assertions across the Phase 1 instance view and Phase 2 catalog view.
+- Catalog assertions cover canonical ordering, exact bounded fields, counts, sensitive-field exclusion, target-specific viewer permissions, per-player broadcasts, initial-state delivery, invalid client envelopes, complete cache replacement, and immutable getters.
+- Static checks confirm catalog broadcasts after create, save, explicit register, import, and delete; server-cache use by Host and Edit Existing; stable identity-based Host selection; open-menu refresh handlers; and catalog module load order.
+- `client/menu.lua` contains no runtime `race_index.json` read.
+- ScaleformUI source review confirmed that asynchronous list replacement uses `UIMenuListItem:ChangeList(...)` and mutable editor menus use `UIMenu:Clear()` plus `AddItem(...)`.
+
+Not tested in a FiveM runtime:
+
+- Actual catalog event delivery to multiple clients and target-specific ACE/admin permission results.
+- Real `SaveResourceFile`, `LoadResourceFile`, UGC import, and file deletion behavior during catalog mutations.
+- Live Host/Edit Existing redraw, selection preservation, empty-catalog presentation, and admin delete-control state in ScaleformUI.
+- End-to-end create, save, import, delete, host, and editor identity resolution against real custom and online race files.
+- Late-client and connected-player resource-restart catalog delivery.
+
+The unchecked acceptance items below remain required regression tests and are not implied by the automated checks.
 
 ### In-game acceptance gate
 
