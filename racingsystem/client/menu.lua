@@ -816,7 +816,7 @@ function RacingSystem.Menu.openRaceMenu()
     logMenuVerbose(('openRaceMenu: playerState=%s'):format(playerState))
     setVisibleStateMenu(playerState)
     if type(RacingSystem.Menu.refreshRaceMenuFromCurrentState) == 'function' then
-        RacingSystem.Menu.refreshRaceMenuFromCurrentState()
+        RacingSystem.Menu.refreshRaceMenuFromCurrentState(true)
     end
 end
 

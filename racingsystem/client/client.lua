@@ -847,11 +847,13 @@ local function applyRaceMenuStageFromCurrentState()
     RacingSystem.Menu.applyRaceStageMenu(getCurrentMenuPlayerState())
 end
 
-local function refreshRaceMenuFromCurrentState()
+local function refreshRaceMenuFromCurrentState(forceRefresh)
     if type(RacingSystem.Menu) ~= 'table'
         or type(RacingSystem.Menu.refreshRaceMenu) ~= 'function'
-        or type(RacingSystem.Menu.isRaceMenuVisible) ~= 'function'
-        or not RacingSystem.Menu.isRaceMenuVisible() then
+        or type(RacingSystem.Menu.isRaceMenuVisible) ~= 'function' then
+        return
+    end
+    if not forceRefresh and not RacingSystem.Menu.isRaceMenuVisible() then
         return
     end
     local refreshInstance = getJoinedRaceInstance()
