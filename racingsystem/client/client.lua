@@ -874,6 +874,9 @@ local function refreshRaceMenuFromCurrentState(forceRefresh)
     end
     if refreshInstanceId and refreshIsIdleState then
         RacingSystem.Menu.countdownAcceptedByInstanceId[refreshInstanceId] = nil
+        if type(RacingSystem.Menu.clearCountdownAccepted) == 'function' then
+            RacingSystem.Menu.clearCountdownAccepted(refreshInstanceId)
+        end
     end
     local refreshCountdownAccepted = refreshInstanceId and RacingSystem.Menu.countdownAcceptedByInstanceId[refreshInstanceId] == true
     local refreshIsAdmin = type(LocalPlayer) == 'table'
@@ -1527,6 +1530,9 @@ AddEventHandler('racingsystem:race:leave', function()
     RacingSystem.Client.InRace.resetLocalRaceTiming()
     clearStartLineBlip()
     RacingSystem.Client.clearCheckpointBlips(joinedInstance and joinedInstance.id)
+    if type(RacingSystem.Menu.clearCountdownAccepted) == 'function' then
+        RacingSystem.Menu.clearCountdownAccepted(joinedInstance and joinedInstance.id)
+    end
     RacingSystem.Client.Util.ClearRaceLeaderboardVisual()
     currentTrafficDensity = nil
     TriggerServerEvent('traffic_control:requestDensity', nil, 'racingsystem_clear', RACE_TRAFFIC_REQUEST_KEY)
