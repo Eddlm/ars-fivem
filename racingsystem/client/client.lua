@@ -273,32 +273,10 @@ local function computeCheckpointChevronEdge(checkpoint, prevCheckpoint, nextChec
     local currentY = tonumber(checkpoint.y) or 0.0
     local prevX = tonumber(prevCheckpoint and prevCheckpoint.x) or currentX
     local prevY = tonumber(prevCheckpoint and prevCheckpoint.y) or currentY
-    local nextX = tonumber(nextCheckpoint and nextCheckpoint.x) or currentX
-    local nextY = tonumber(nextCheckpoint and nextCheckpoint.y) or currentY
-    local lineX = nextX - prevX
-    local lineY = nextY - prevY
-    local lineLengthSquared = (lineX * lineX) + (lineY * lineY)
-    local radius = getCheckpointPassRadius(checkpoint, instance) * 0.2
-    if lineLengthSquared <= 0.001 then
-        return {
-            x = currentX + radius,
-            y = currentY,
-        }
-    end
-    local toCurrentX = currentX - prevX
-    local toCurrentY = currentY - prevY
-    local t = ((toCurrentX * lineX) + (toCurrentY * lineY)) / lineLengthSquared
-    t = math.max(0.0, math.min(1.0, t))
-    local closestX = prevX + (lineX * t)
-    local closestY = prevY + (lineY * t)
-    local dirX = closestX - currentX
-    local dirY = closestY - currentY
+    local dirX = currentX - prevX
+    local dirY = currentY - prevY
     local dirLength = math.sqrt((dirX * dirX) + (dirY * dirY))
-    if dirLength <= 0.001 then
-        dirX = nextX - currentX
-        dirY = nextY - currentY
-        dirLength = math.sqrt((dirX * dirX) + (dirY * dirY))
-    end
+    local radius = getCheckpointPassRadius(checkpoint, instance) * 0.4
     if dirLength <= 0.001 then
         return {
             x = currentX + radius,
@@ -633,6 +611,94 @@ local function updateStartLineBlip(startCheckpoint)
     end
 end
 RacingSystem.Client.updateStartLineBlip = updateStartLineBlip
+
+local checkpointBlipsByInstanceId = {}
+
+local function clearCheckpointBlips(instanceId)
+    local blips = checkpointBlipsByInstanceId[tonumber(instanceId) or -1]
+    if type(blips) ~= 'table' then return end
+    for _, blip in ipairs(blips) do
+        if blip and DoesBlipExist(blip) then
+            RemoveBlip(blip)
+        end
+    end
+    checkpointBlipsByInstanceId[tonumber(instanceId) or -1] = nil
+end
+RacingSystem.Client.clearCheckpointBlips = clearCheckpointBlips
+
+local function updateCheckpointBlips(instance, currentCheckpoint, totalLaps, currentLap)
+    if type(instance) ~= 'table' then
+        clearCheckpointBlips(instance and instance.id)
+        return
+    end
+    local instanceId = tonumber(instance.id)
+    if not instanceId then return end
+    local checkpoints = type(instance.checkpoints) == 'table' and instance.checkpoints or {}
+    local totalCheckpoints = #checkpoints
+    if totalCheckpoints <= 0 then
+        clearCheckpointBlips(instanceId)
+        return
+    end
+    local targetIndex = math.max(1, math.floor(tonumber(currentCheckpoint) or 1))
+    local lapNumber = math.max(1, math.floor(tonumber(currentLap) or 1))
+    local maxLaps = math.max(1, math.floor(tonumber(totalLaps) or 1))
+    local isFinalLap = lapNumber >= maxLaps
+    local isPointToPoint = instance.pointToPoint == true
+    local blips = checkpointBlipsByInstanceId[instanceId]
+    if type(blips) ~= 'table' or #blips ~= totalCheckpoints then
+        clearCheckpointBlips(instanceId)
+        blips = {}
+        checkpointBlipsByInstanceId[instanceId] = blips
+        for i = 1, totalCheckpoints do
+            local cp = checkpoints[i]
+            if type(cp) == 'table' then
+                local x = tonumber(cp.x) or 0.0
+                local y = tonumber(cp.y) or 0.0
+                local z = tonumber(cp.z) or 0.0
+                local blip = AddBlipForCoord(x, y, z)
+                blips[i] = blip
+                SetBlipDisplay(blip, 4)
+                SetBlipScale(blip, 0.65)
+                SetBlipAsShortRange(blip, false)
+                BeginTextCommandSetBlipName('STRING')
+                AddTextComponentSubstringPlayerName(('CP %s'):format(tostring(i)))
+                EndTextCommandSetBlipName(blip)
+            else
+                blips[i] = nil
+            end
+        end
+    end
+    for i = 1, totalCheckpoints do
+        local blip = blips[i]
+        if blip and DoesBlipExist(blip) then
+            local isFinishCp = isPointToPoint and i == totalCheckpoints
+            if i < targetIndex then
+                SetBlipSprite(blip, 1)
+                SetBlipColour(blip, 4)
+                SetBlipAlpha(blip, 120)
+            elseif i == targetIndex then
+                if isFinishCp and isFinalLap then
+                    SetBlipSprite(blip, 38)
+                    SetBlipColour(blip, 0)
+                else
+                    SetBlipSprite(blip, 1)
+                    SetBlipColour(blip, 0)
+                end
+                SetBlipAlpha(blip, 255)
+            else
+                if isFinishCp and isFinalLap then
+                    SetBlipSprite(blip, 38)
+                    SetBlipColour(blip, 0)
+                else
+                    SetBlipSprite(blip, 1)
+                    SetBlipColour(blip, 3)
+                end
+                SetBlipAlpha(blip, 180)
+            end
+        end
+    end
+end
+RacingSystem.Client.updateCheckpointBlips = updateCheckpointBlips
 local function normalizeEntrantId(value)
     if value == nil then
         return nil
@@ -1458,6 +1524,7 @@ AddEventHandler('racingsystem:race:leave', function()
     RacingSystem.Client.InRace.clearPredictedRaceProgress()
     RacingSystem.Client.InRace.resetLocalRaceTiming()
     clearStartLineBlip()
+    RacingSystem.Client.clearCheckpointBlips(joinedInstance and joinedInstance.id)
     RacingSystem.Client.Util.ClearRaceLeaderboardVisual()
     currentTrafficDensity = nil
     TriggerServerEvent('traffic_control:requestDensity', nil, 'racingsystem_clear', RACE_TRAFFIC_REQUEST_KEY)
@@ -1518,6 +1585,7 @@ RegisterNetEvent('racingsystem:race:restarted', function(payload)
         getRaceRuntimeState().pendingCheckpointPass = nil
         getRaceRuntimeState().checkpointPassArm = nil
         getRaceRuntimeState().lastPassedCheckpoint = nil
+        RacingSystem.Client.clearCheckpointBlips(instanceId)
     end
     applyRaceMenuStageFromCurrentState()
     refreshRaceMenuFromCurrentState()

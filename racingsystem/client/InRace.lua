@@ -394,6 +394,7 @@ CreateThread(function()
             raceRuntimeState.accelerationPenaltyUntil = 0
             clearPowerPenaltyVehicleOverride()
             RacingSystem.Client.clearStartLineBlip()
+            RacingSystem.Client.clearCheckpointBlips(joinedInstance and joinedInstance.id)
             resetLocalRaceTiming()
             RacingSystem.Client.Util.ClearRaceLeaderboardVisual()
             if RacingSystem.Client.activeInstanceAssets.instanceId then
@@ -432,6 +433,7 @@ CreateThread(function()
             local isPointToPoint = joinedInstance.pointToPoint == true
             local startLineCheckpoint = RacingSystem.Client.resolveStartLineCheckpoint(checkpoints, totalCheckpoints, nil, isPointToPoint)
             RacingSystem.Client.updateStartLineBlip(startLineCheckpoint)
+            RacingSystem.Client.updateCheckpointBlips(joinedInstance, entrantProgress.currentCheckpoint, joinedInstance.laps, entrantProgress.currentLap)
 
             clearPendingCheckpointIfAdvanced(entrant)
             targetIndex = tonumber(entrantProgress.currentCheckpoint) or targetIndex
