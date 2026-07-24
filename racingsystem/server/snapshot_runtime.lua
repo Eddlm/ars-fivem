@@ -406,7 +406,6 @@ local function broadcastInstanceStandings(instance)
         if entrantSource > 0 then
             local player = Player(entrantSource)
             if player and player.state then
-                print('[DEBUG] SYNCING STATE: player=' .. entrantSource .. ' finishedAt=' .. tostring(entrant.finishedAt) .. ' position=' .. tostring(entrant.position))
                 player.state['rs:position'] = tonumber(entrant.position) or nil
                 player.state['rs:currentLap'] = tonumber(entrant.currentLap) or 1
                 player.state['rs:currentCheckpoint'] = tonumber(entrant.currentCheckpoint) or 1
@@ -818,6 +817,11 @@ end
 
 local function cleanupInstanceAfterEntrantRemoval(instance, source, removedEntrant, reason)
     if type(instance) ~= 'table' then
+        return false
+    end
+
+    local instanceId = tonumber(instance.id)
+    if not instanceId or RacingSystem.Server.State.raceInstancesById[instanceId] ~= instance then
         return false
     end
 

@@ -1062,7 +1062,6 @@ local function applyEntrantStateBagField(source, key, value)
         entrant.currentCheckpoint = tonumber(value) or 1
     elseif key == 'rs:finishedAt' then
         entrant.finishedAt = tonumber(value) or nil
-        print('[DEBUG] applyEntrantStateBagField: set entrant.finishedAt=' .. tostring(entrant.finishedAt) .. ' for source=' .. tostring(source))
     end
 end
 
@@ -1197,7 +1196,6 @@ AddStateBagChangeHandler('rs:currentCheckpoint', nil, function(bagName, key, val
 end)
 AddStateBagChangeHandler('rs:finishedAt', nil, function(bagName, key, value, _, _)
     local source = parsePlayerSourceFromStateBagName(bagName)
-    print('[DEBUG] rs:finishedAt HANDLER: bagName=' .. tostring(bagName) .. ' source=' .. tostring(source) .. ' value=' .. tostring(value))
     if not source then return end
     applyEntrantStateBagField(source, key, value)
 end)

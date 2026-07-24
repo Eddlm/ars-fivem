@@ -313,7 +313,7 @@ RegisterNetEvent('racingsystem:race:invoke', function(payload, lapCount)
     local invokePayload = payload
     local raceName = type(payload) == 'table' and (payload.lookupName or payload.name) or payload
     local src = source
-    if GetConvarInt('rSystemPrintLevel', 0) == 2 then
+    do
         local payloadTable = type(payload) == 'table' and payload or {}
         local raceName = tostring(payloadTable.name or payloadTable.lookupName or payload or 'unknown race')
         local lookupName = tostring(payloadTable.lookupName or 'nil')
@@ -326,7 +326,7 @@ RegisterNetEvent('racingsystem:race:invoke', function(payload, lapCount)
         local lateJoinLabel = lateJoinLimit and ('%.0f%%'):format(lateJoinLimit) or 'nil'
         local lapsLabel = tostring(tonumber(lapCount) or 0)
         local playerName = GetPlayerName(src) or ('player %s'):format(tostring(src))
-        print(('[racingsystem] %s invoked %s with %s lap(s). lookup=%s sourceType=%s raceId=%s trafficMode=%s trafficDensity=%s lateJoin=%s'):format(
+        RacingSystem.Server.Logging.logVerbose(('[racingsystem] %s invoked %s with %s lap(s). lookup=%s sourceType=%s raceId=%s trafficMode=%s trafficDensity=%s lateJoin=%s'):format(
             playerName,
             raceName,
             lapsLabel,
@@ -390,6 +390,11 @@ RegisterNetEvent('racingsystem:race:start', function()
     local instance = stateInstanceId and RacingSystem.Server.State.raceInstancesById[stateInstanceId] or nil
 
     if not instance then
+        return
+    end
+
+    if tonumber(instance.owner) ~= numericSource then
+        RacingSystem.Server.Logging.notifyPlayer(src, 'Only the host can start this race.', true)
         return
     end
 
@@ -538,7 +543,16 @@ end)
 RegisterNetEvent('racingsystem:race:kill', function(instanceId)
     local src = source
     local numericInstanceId = tonumber(instanceId) or -1
-    print(("User %s requested kill instance %s"):format(
+    if not RacingSystem.Server.Logging.hasAdminAccess(src) then
+        RacingSystem.Server.Logging.logLevelOne(("%s tried to kill race instance %s without permission."):format(
+            RacingSystem.Server.Logging.resolvePlayerLogLabel(src),
+            tostring(numericInstanceId)
+        ))
+        RacingSystem.Server.Logging.notifyPlayer(src, 'You do not have permission to kill races.', true)
+        return
+    end
+
+    RacingSystem.Server.Logging.logVerbose(("User %s requested kill instance %s"):format(
         tostring(RacingSystem.Server.Logging.resolvePlayerLogLabel(src)),
         tostring(numericInstanceId)
     ))

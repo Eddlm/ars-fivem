@@ -304,8 +304,7 @@ local function getEffectiveEntrantProgress(instance, entrant)
         elseif predictedFinished then
             -- Client-side finish detection: player crossed final checkpoint on last lap
             finishedAt = GetGameTimer()
-            currentCheckpoint = predictedCheckpoint or totalCheckpoints + 1
-            print('[DEBUG] CLIENT FINISH DETECTED: finishedAt=' .. tostring(finishedAt))
+            currentCheckpoint = predictedCheckpoint
         elseif predictedCheckpoint and (predictedLap > currentLap or (predictedLap == currentLap and predictedCheckpoint > currentCheckpoint)) then
             currentCheckpoint = predictedCheckpoint
             currentLap = predictedLap
@@ -508,23 +507,19 @@ CreateThread(function()
             end
 
             if entrant then
-                print('[DEBUG] TICK: instanceState=' .. tostring(joinedInstance.state) .. ' finishedAt=' .. tostring(entrantProgress.finishedAt) .. ' entrant.finishedAt=' .. tostring(entrant and entrant.finishedAt))
                 if joinedInstance.state == RacingSystem.States.staging and tonumber(joinedInstance.id) then
                     if pedVehicle ~= 0 and GetPedInVehicleSeat(pedVehicle, -1) == ped then
                         SetVehicleHandbrake(pedVehicle, true)
                     end
                 elseif joinedInstance.state == RacingSystem.States.running then
                     -- Check if player finished while instance still running
-                    print('[DEBUG] RUNNING STATE CHECK: finishedAt=' .. tostring(entrantProgress.finishedAt) .. ' entrant.finishedAt=' .. tostring(entrant and entrant.finishedAt))
                     if tonumber(entrantProgress.finishedAt) then
                         -- Player finished, show FINISH if not already shown
                         local joinedInstanceId3 = tonumber(joinedInstance.id)
-                        print('[DEBUG] FINISH CHECK: instanceId=' .. tostring(joinedInstanceId3) .. ' finishedAt=' .. tostring(entrantProgress.finishedAt) .. ' position=' .. tostring(entrant and entrant.position))
                         if joinedInstanceId3 and not finishCueShownByInstanceId[joinedInstanceId3] then
                             finishCueShownByInstanceId[joinedInstanceId3] = true
                             local finishPos = tonumber(entrant and entrant.position) or 0
                             local posText = finishPos > 0 and ('%dº'):format(finishPos) or ''
-                            print('[DEBUG] SHOWING FINISH SHARD: pos=' .. tostring(finishPos) .. ' text=' .. tostring(posText))
                             ScaleformUI.Scaleforms.BigMessageInstance:ShowSimpleShard('FINISHED', posText, 2000, false)
                         end
                     else

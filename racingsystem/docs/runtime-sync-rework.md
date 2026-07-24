@@ -567,15 +567,35 @@ The following runtime checks remain deferred:
 
 ## Phase 5 — Reliability and Diagnostic Cleanup
 
-**Status:** Ready; Phase 4 runtime regression is deferred
+**Status:** Code complete; automated verification passed; runtime regression deferred
 
-- [ ] Remove unconditional `[DEBUG]` prints from finish and standings synchronization.
-- [ ] Route useful diagnostics through the existing configured logging levels.
-- [ ] Verify no undefined diagnostic variables remain.
-- [ ] Confirm empty instances are destroyed exactly once.
-- [ ] Confirm stale menu entries disappear after kill, all-finished cleanup, and host disconnect.
-- [ ] Confirm unauthorized and invalid joins fail server-side with a useful notification.
-- [ ] Confirm repeated state requests do not mutate server state.
+- [x] Remove unconditional `[DEBUG]` prints from finish and standings synchronization.
+- [x] Route useful diagnostics through the existing configured logging levels.
+- [x] Verify no undefined diagnostic variables remain in the removed diagnostic paths.
+- [x] Make empty-instance destruction idempotent and unit test repeated cleanup.
+- [x] Verify complete list replacement clears stale client menu data after kill/cleanup broadcasts.
+- [x] Verify invalid joins return a useful server reason and the network handler notifies the requester.
+- [x] Add server-side authorization for start and kill requests rather than relying on menu state.
+- [x] Confirm repeated state requests do not mutate server revision/state.
+
+### Verification record — July 24, 2026
+
+Automated checks passed:
+
+- `lua .piTools/test_instance_list_payload.lua` — 111 assertions, including idempotent empty cleanup, exactly-once reliability counter advancement, stale-list clearing, and repeated initial-state requests with unchanged revision.
+- `lua .piTools/test_joined_sync.lua` — 16 assertions, including useful invalid-join rejection and immediate accepted-progress synchronization.
+- Full-resource `luac -p` syntax sweep passed.
+- Runtime source contains no `[DEBUG]` markers; remaining `print(...)` calls are the configured logging functions, gated client verbose logger, integrity script output, and update notifier.
+- Static authorization checks confirm server-side host enforcement for start, ACE enforcement for kill, and explicit rejection notifications.
+
+Not tested in a FiveM runtime:
+
+- Actual unauthorized event attempts from a modified/malicious client and resulting notification/audit output.
+- Concurrent leave/disconnect/kill/all-finished cleanup races under the FiveM scheduler.
+- Stale-menu disappearance timing on real clients after host disconnect or automatic destruction.
+- Repeated state requests under network load and during simultaneous catalog/instance mutations.
+
+These runtime cases remain part of the deferred multiplayer regression gate.
 
 ## Manual Test Reporting Template
 

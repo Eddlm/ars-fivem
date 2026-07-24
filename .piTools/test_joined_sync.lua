@@ -93,6 +93,10 @@ RacingSystem = {
 dofile('racingsystem/server/race_instances.lua')
 local handleCheckpointPassed = RacingSystem.Server.Instances.handleCheckpointPassed
 
+local missingJoin, missingJoinError = RacingSystem.Server.Instances.joinRaceInstanceById(11, 999)
+expect('invalid join rejected', missingJoin == nil)
+expectEqual('invalid join useful reason', missingJoinError, 'That race instance does not exist.')
+
 local function buildInstance()
     return {
         id = 7,

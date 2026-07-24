@@ -103,10 +103,16 @@ RacingSystem = {
             },
             raceInstanceIdsByName = {},
             instanceListRevision = 0,
+            reliabilityCounters = {
+                emptyInstanceAutoDestroyed = 0,
+            },
             config = {},
         },
         Logging = {
             hasAdminAccess = function(source) return tonumber(source) == 99 end,
+            isLifecycleTransitionAllowed = function() return true end,
+            logLifecycleEvent = function() end,
+            clearRaceStateBagByInstanceId = function() end,
         },
         Catalog = {},
     },
@@ -161,6 +167,23 @@ RacingSystem.Server.State.raceInstancesById = {
 }
 payload = Snapshot.buildInstanceListPayload()
 expectEqual('server invalid states excluded', #payload.instances, 0)
+
+-- Empty-instance cleanup is idempotent even if a stale caller retries it.
+local emptyInstance = {
+    id = 77,
+    name = 'Empty Race',
+    state = RacingSystem.States.idle,
+    entrants = {},
+}
+RacingSystem.Server.State.raceInstancesById = { [77] = emptyInstance }
+RacingSystem.Server.State.raceInstanceIdsByName['empty race'] = 77
+RacingSystem.Server.State.reliabilityCounters.emptyInstanceAutoDestroyed = 0
+local firstCleanup = Snapshot.cleanupInstanceAfterEntrantRemoval(emptyInstance, 11, nil, 'test_cleanup')
+local secondCleanup = Snapshot.cleanupInstanceAfterEntrantRemoval(emptyInstance, 11, nil, 'test_cleanup_retry')
+expectEqual('server first empty cleanup succeeds', firstCleanup, true)
+expectEqual('server repeated empty cleanup ignored', secondCleanup, false)
+expect('server empty cleanup removes instance', RacingSystem.Server.State.raceInstancesById[77] == nil)
+expectEqual('server empty cleanup counter once', RacingSystem.Server.State.reliabilityCounters.emptyInstanceAutoDestroyed, 1)
 
 -- Targeted sends retain the current revision.
 RacingSystem.Server.State.raceInstancesById = {
@@ -243,6 +266,12 @@ expectEqual('server initial list event', clientEvents[2].name, 'racingsystem:ins
 expectEqual('server initial list target', clientEvents[2].target, 22)
 expectEqual('server initial revision', clientEvents[2].payload.revision, 8)
 expectEqual('server initial revision unchanged', RacingSystem.Server.State.instanceListRevision, 8)
+
+clientEvents = {}
+Snapshot.sendInitialState(22)
+Snapshot.sendInitialState(22)
+expectEqual('server repeated initial sends event count', #clientEvents, 4)
+expectEqual('server repeated initial sends revision unchanged', RacingSystem.Server.State.instanceListRevision, 8)
 
 -- Joined-racer details and assets are targeted, bounded deliveries.
 local joinedInstance = activeInstance(1, RacingSystem.States.idle, 1)
@@ -329,6 +358,8 @@ expectEqual('client stale revision ignored', RacingSystem.Client.getInstanceList
 receiveList({ revision = 3, instances = { activeInstance(30, 'staging', 0) } })
 expectEqual('client equal revision replaces', RacingSystem.Client.getInstanceList()[1].id, 30)
 expectEqual('client replacement update event', #localEvents, 2)
+receiveList({ revision = 4, instances = {} })
+expectEqual('client kill/cleanup replacement clears list', #RacingSystem.Client.getInstanceList(), 0)
 
 -- Load the real client catalog cache module with the same event mocks.
 netHandlers = {}
