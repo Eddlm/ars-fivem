@@ -560,7 +560,7 @@ end
 local function buildInstanceListPayload(viewerSource)
     local instances = {}
     for _, instance in pairs(RacingSystem.Server.State.raceInstancesById) do
-        local state = tostring(instance.state or '')
+        local state = tostring(instance.state or RacingSystem.States.idle)
         if state == RacingSystem.States.idle or state == RacingSystem.States.staging or state == RacingSystem.States.running then
             local summary = buildInstanceSummary(instance)
             if summary then
