@@ -350,7 +350,7 @@ local function runSmartJoinTeleport(payload)
             and type(LocalPlayer.state) == 'table'
             and tonumber(LocalPlayer.state['rs:instanceId'])
             or nil
-        if joinedInstanceId ~= payloadInstanceId then
+        if joinedInstanceId and joinedInstanceId ~= payloadInstanceId then
             return
         end
     end
