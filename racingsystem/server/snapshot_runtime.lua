@@ -560,9 +560,12 @@ end
 local function buildInstanceListPayload(viewerSource)
     local instances = {}
     for _, instance in pairs(RacingSystem.Server.State.raceInstancesById) do
-        local summary = buildInstanceSummary(instance)
-        if summary then
-            instances[#instances + 1] = summary
+        local state = tostring(instance.state or '')
+        if state == RacingSystem.States.idle or state == RacingSystem.States.staging or state == RacingSystem.States.running then
+            local summary = buildInstanceSummary(instance)
+            if summary then
+                instances[#instances + 1] = summary
+            end
         end
     end
 
@@ -571,6 +574,7 @@ local function buildInstanceListPayload(viewerSource)
     end)
 
     return {
+        revision = tonumber(RacingSystem.Server.State.instanceListRevision) or 0,
         instances = instances,
         instanceCount = #instances,
         viewer = buildViewerPayload(viewerSource),
@@ -640,12 +644,28 @@ local function broadcastDefinitions()
 end
 
 local function sendInstanceList(target)
-    local _ = target
-    return
+    local numericTarget = tonumber(target) or 0
+    if numericTarget <= 0 then
+        return
+    end
+
+    local payload = buildInstanceListPayload(numericTarget)
+    if type(payload) ~= 'table' then
+        return
+    end
+
+    TriggerClientEvent('racingsystem:instance:list', numericTarget, payload)
 end
 
 local function broadcastInstanceList()
-    return
+    RacingSystem.Server.State.instanceListRevision = (RacingSystem.Server.State.instanceListRevision or 0) + 1
+
+    local payload = buildInstanceListPayload(-1)
+    if type(payload) ~= 'table' then
+        return
+    end
+
+    TriggerClientEvent('racingsystem:instance:list', -1, payload)
 end
 
 local function sendInstanceDelta(target, instance)
@@ -664,8 +684,12 @@ local function sendInstanceStaticIfChanged(target, instance, force)
 end
 
 local function sendInitialState(target)
-    local _ = target
-    return
+    local numericTarget = tonumber(target) or 0
+    if numericTarget <= 0 then
+        return
+    end
+
+    sendInstanceList(numericTarget)
 end
 
 local function buildInstanceAssetPayload(instance)

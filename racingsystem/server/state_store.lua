@@ -84,6 +84,7 @@ RacingSystem.Server.State.lifecycleAnomalyLogByKey = normalizeTable(RacingSystem
 
 RacingSystem.Server.State.nextRaceInstanceId = math.max(1, normalizeInt(RacingSystem.Server.State.nextRaceInstanceId ~= nil and RacingSystem.Server.State.nextRaceInstanceId or 1, 1))
 RacingSystem.Server.State.nextEntrantIdToken = math.max(1, normalizeInt(RacingSystem.Server.State.nextEntrantIdToken ~= nil and RacingSystem.Server.State.nextEntrantIdToken or 1, 1))
+RacingSystem.Server.State.instanceListRevision = normalizeInt(RacingSystem.Server.State.instanceListRevision ~= nil and RacingSystem.Server.State.instanceListRevision or 0)
 RacingSystem.Server.State.nextSnapshotVersion = normalizeInt(RacingSystem.Server.State.nextSnapshotVersion ~= nil and RacingSystem.Server.State.nextSnapshotVersion or 0)
 RacingSystem.Server.State.nextAllowedUGCFetchAt = normalizeInt(RacingSystem.Server.State.nextAllowedUGCFetchAt ~= nil and RacingSystem.Server.State.nextAllowedUGCFetchAt or 0)
 
