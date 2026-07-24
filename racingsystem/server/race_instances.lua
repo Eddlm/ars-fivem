@@ -194,7 +194,6 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         modelHides = modelHides,
         entrants = {},
         entrantStateById = {},
-        standingsVersion = 0,
     }
 
     local numericOwnerSource = tonumber(ownerSource) or 0

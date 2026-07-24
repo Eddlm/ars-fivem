@@ -1,119 +1,114 @@
 # Server Architecture
 
-The racingsystem server is split into focused modules that handle race lifecycle, data persistence, and admin control.
+The racingsystem server is split into focused modules for lifecycle authority, persistence, synchronization, and access control.
 
 ## Module Overview
 
-| Module               | File                          | Lines | Purpose                                                         |
-| -------------------- | ----------------------------- | ----- | --------------------------------------------------------------- |
-| **Race Instances**   | `server/race_instances.lua`   | ~632  | Creating, starting, and managing race instances.                |
-| **Snapshot Runtime** | `server/snapshot_runtime.lua` | ~1041 | Per-entrant progress tracking, checkpoint counting, lap timing. |
-| **Race Parsing**     | `server/race_parsing.lua`     | ~688  | Validation and parsing of race JSON payloads.                   |
-| **Race Repository**  | `server/race_repository.lua`  | ~516  | File I/O for saving and loading race JSON.                      |
-| **Race Catalog**     | `server/race_catalog.lua`     | ~329  | In-memory index of all known races.                             |
-| **Event Handlers**   | `server/event_handlers.lua`   | ~645  | Network event handlers (client ↔ server).                       |
-| **Logging & Access** | `server/logging_access.lua`   | ~295  | Admin ACE checks, verbose/debug logging.                        |
-| **State Store**      | `server/state_store.lua`      | ~95   | Global state container for active race instances.               |
-| **Runtime Threads**  | `server/runtime_threads.lua`  | ~65   | Background server threads (timeouts, cleanup).                  |
-| **Server Entry**     | `server/server.lua`           | ~12   | Resource startup and initialisation.                            |
+| Module | File | Purpose |
+| --- | --- | --- |
+| **Race Instances** | `server/race_instances.lua` | Creates instances, manages entrants, validates checkpoint progress, and owns lifecycle mutations. |
+| **Synchronization Runtime** | `server/snapshot_runtime.lua` | Builds bounded public/catalog/joined-racer payloads and synchronizes flat entrant state bags. |
+| **Race Parsing** | `server/race_parsing.lua` | Validates and parses custom and GTA Online race JSON. |
+| **Race Repository** | `server/race_repository.lua` | Loads, saves, imports, and deletes race files. |
+| **Race Catalog** | `server/race_catalog.lua` | Maintains the server-authoritative definition index. |
+| **Event Handlers** | `server/event_handlers.lua` | Validates network requests and connects them to server-owned mutations. |
+| **Logging & Access** | `server/logging_access.lua` | Performs ACE checks, lifecycle state transitions, and configured logging. |
+| **State Store** | `server/state_store.lua` | Owns in-memory instances, catalog maps, revisions, and reliability counters. |
+| **Runtime Threads** | `server/runtime_threads.lua` | Advances staging instances to running when countdowns expire. |
+| **Server Entry** | `server/server.lua` | Initializes the server namespace. |
+
+## Authority and Synchronization Boundaries
+
+There is no universal race snapshot. Each state category has one owner and one replication path.
+
+### Public active-instance discovery
+
+`racingsystem:instance:list` is a complete replacement view containing only bounded summaries for `idle`, `staging`, and `running` instances. It has a server-owned monotonic revision and excludes checkpoints, assets, and entrant rows.
+
+The server broadcasts it after instance-list mutations and sends the current revision without advancing it for explicit/initial requests.
+
+### Race catalog
+
+`racingsystem:catalog:definitions` is a complete replacement view generated from the server catalog. Catalog broadcasts are sent once per player because viewer permissions are target-specific.
+
+The server emits it on initial state and after create, save, explicit register, import, and delete mutations. Clients do not read `race_index.json`, `CustomRaces`, or `OnlineRaces` as runtime data sources.
+
+### Joined-racer detail
+
+A player receives joined-instance detail only after the server accepts invoke or join:
+
+- `racingsystem:race:getRaceInfo` seeds identity, configuration, route data, runtime fields, and participant rows.
+- `racingsystem:race:instanceAssets` sends props and model hides.
+- Specialized targeted events retain lap, restart, teleport, notification, and checkpoint-result responsibilities.
+
+These payloads are not periodically resent. Client membership changes load joined assets and unload them on exit.
+
+### State bags
+
+Flat state bags own hot replicated state:
+
+| Key | Owner/content |
+| --- | --- |
+| `rs:instanceId` | Player's joined instance ID. |
+| `rs:entrantId` | Stable entrant identity. |
+| `rs:position` | Server-computed race position. |
+| `rs:currentLap` | Current lap. |
+| `rs:currentCheckpoint` | Next expected checkpoint. |
+| `rs:finishedAt` | Server finish timestamp. |
+| `rs:isAdmin` | ACE-derived admin status. |
+| `GlobalState['rs:raceState:<instanceId>']` | Instance lifecycle state. |
+
+Accepted checkpoint mutations publish standings immediately. Join, leave, disconnect, restart, finish, kill, and resource cleanup update or clear the corresponding flat keys.
 
 ## Race Lifecycle
 
-```
-  ┌───────────┐
-  │  Edit/     │
-  │  Select    │
-  └─────┬─────┘
-        │
-        ▼
-  ┌───────────┐    save     ┌──────────────┐
-  │  Invoke    │────────────►│ Repository   │
-  │  Race      │             │ (JSON files) │
-  └─────┬─────┘             └──────────────┘
-        │
-        ▼
-  ┌───────────┐    register ┌──────────────┐
-  │  Instance  │────────────►│ Catalog      │
-  │  Created   │             │ (in-memory)  │
-  └─────┬─────┘             └──────────────┘
-        │
-        ▼
-  ┌───────────┐
-  │  Countdown │  (5 s default)
-  └─────┬─────┘
-        │
-        ▼
-  ┌───────────┐     checkpoint     ┌───────────────┐
-  │  Racing    │───────────────────►│ Snapshot      │
-  │  Active    │◄──────────────────│ Runtime       │
-  └─────┬─────┘    progress sync   └───────────────┘
-        │
-        ▼
-  ┌───────────┐
-  │  Finish / │
-  │  DNF       │
-  └───────────┘
+```text
+catalog definition
+       |
+       v
+invoke request --server validates--> instance created (idle)
+       |                               |
+       |                               +--> invoking player joined
+       |                                    + targeted race info/assets
+       v
+countdown request --> staging --> running
+                               |
+                               +--> checkpoint mutations
+                                    + immediate entrant state-bag updates
+                               |
+                               v
+                         finish / leave / kill
+                               |
+                               +--> membership and runtime keys cleared
+                               +--> public instance list replaced
 ```
 
-## Key Concepts
+Each active instance is stored in `RacingSystem.Server.State.raceInstancesById` and contains its route/configuration, owner, entrants, lifecycle state, traffic density, and late-join cutoff.
 
-### Race Instances
+## Late Join
 
-A race instance is created when a player invokes a race. It contains:
+A running race can accept a late join only while its leader remains within `lateJoinProgressLimitPercent`. The server recalculates eligibility and never trusts the client's discovery list as join authorization. An accepted late join inherits last-place progress and receives the same targeted joined-racer initialization as an ordinary join.
 
-- The race definition (checkpoints, props).
-- The owner (player who started it).
-- Entrants (players who joined).
-- Runtime state (started, finished, lap counts).
-- Traffic density and late-join settings.
+## Invoking a Race
 
-Each instance is stored in `RacingSystem.Server.State.raceInstancesById`.
+The invoke handler accepts a definition identity and instance options:
 
-### Snapshot Runtime
+- `name` / `lookupName`
+- `sourceType` (`custom` or `online`)
+- `raceId` for GTA Online races
+- `trafficDensity`
+- `lateJoinProgressLimitPercent`
+- lap count as the second event argument
 
-Each entrant has a **snapshot** that tracks:
+The server resolves the definition from its repository, rejects duplicate/invalid instances, creates the instance, and auto-joins the invoking player.
 
-- Current checkpoint index.
-- Lap count.
-- Finish time.
-- Last checkpoint time.
-- Progress percentage (for late-join eligibility).
+## ACE-Based Administration
 
-Snapshots are reset when a race restarts and updated on each checkpoint pass.
-
-### Race Catalog
-
-The catalog is an in-memory index of all races (custom and online). It's loaded from `race_index.json` at startup and rebuilt as races are saved or deleted.
-
-### Late Join
-
-Players can join an in-progress race if:
-
-1. The race allows late joins.
-2. The race progress is below `lateJoinProgressLimitPercent` (default 50%).
-3. The race has not been finished by all entrants.
-
-### Invoking a Race
-
-The invoke flow accepts either:
-
-- A **string** race name (looked up in the catalog).
-- A **table** payload with full invoke options:
-  - `name` / `lookupName` — race display name and normalised name.
-  - `sourceType` — `"custom"` or `"online"`.
-  - `raceId` — Rockstar ID for online races.
-  - `trafficDensity` or `trafficMode` — traffic level (`none`, `low`, `high`, `full`, or explicit 0.0–1.0).
-  - `lateJoinProgressLimitPercent` — late join cutoff.
-
-### ACE-Based Admin
-
-The `Config.adminAce` value (`"racingsystem.admin"` by default) is checked against the player's ACE group. Admins can:
-
-- Force-delete races from the catalog.
-- View verbose logs when `debugLogging` is enabled.
-- Access admin-only menu options.
+`Config.adminAce` defaults to `racingsystem.admin`. The server rechecks ACE authorization for destructive actions regardless of client menu state. Admin status is also replicated through `rs:isAdmin`, while target-specific catalog payloads include viewer permissions for catalog controls.
 
 ## See Also
 
+- [Overview](overview.md)
 - [Configuration reference](configuration.md)
 - [Race Data Format](race-format.md)
+- [Runtime synchronization rework](runtime-sync-rework.md)

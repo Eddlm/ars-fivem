@@ -395,19 +395,6 @@ local function buildOrderedEntrants(instance)
     return ordered
 end
 
-local function buildInstanceStandingsPayload(instance)
-    if type(instance) ~= 'table' then
-        return nil
-    end
-
-    return {
-        instanceId = tonumber(instance.id) or -1,
-        standingsVersion = tonumber(instance.standingsVersion) or 0,
-        state = tostring(instance.state or RacingSystem.States.idle),
-        entrants = buildOrderedEntrants(instance),
-    }
-end
-
 local function broadcastInstanceStandings(instance)
     if type(instance) ~= 'table' then
         return
@@ -895,43 +882,6 @@ local function sendRaceInfoToTarget(target, instance)
     TriggerClientEvent('racingsystem:race:getRaceInfo', source, payload)
 end
 
-local function buildFullSnapshot(viewerSource)
-    local definitionsPayload = buildDefinitionsPayload(viewerSource)
-    local listPayload = buildInstanceListPayload()
-    local instances = {}
-    for _, instance in pairs(RacingSystem.Server.State.raceInstancesById) do
-        local snapshotInstance = buildRaceInstanceSnapshot(instance)
-        if snapshotInstance then
-            instances[#instances + 1] = snapshotInstance
-        end
-    end
-    table.sort(instances, function(a, b)
-        return (a.id or 0) < (b.id or 0)
-    end)
-
-    return {
-        snapshotVersion = tonumber(RacingSystem.Server.State.nextSnapshotVersion) or 0,
-        races = {},
-        definitions = definitionsPayload.definitions,
-        instances = instances,
-        count = definitionsPayload.count,
-        definitionCount = definitionsPayload.definitionCount,
-        customRaceCount = definitionsPayload.customRaceCount,
-        onlineRaceCount = definitionsPayload.onlineRaceCount,
-        instanceCount = #listPayload.instances,
-        viewer = definitionsPayload.viewer,
-    }
-end
-
-local function sendSnapshot(target)
-    local _ = target
-    return
-end
-
-local function broadcastSnapshot()
-    return
-end
-
 RacingSystem.Server.Snapshot.cloneOnlineRaceProps = cloneOnlineRaceProps
 RacingSystem.Server.Snapshot.cloneOnlineRaceModelHides = cloneOnlineRaceModelHides
 RacingSystem.Server.Snapshot.cloneNumberArray = cloneNumberArray
@@ -953,7 +903,6 @@ RacingSystem.Server.Snapshot.indexRaceInstanceName = indexRaceInstanceName
 RacingSystem.Server.Snapshot.removeRaceInstanceNameIndex = removeRaceInstanceNameIndex
 RacingSystem.Server.Snapshot.getEntrantSortScore = getEntrantSortScore
 RacingSystem.Server.Snapshot.buildOrderedEntrants = buildOrderedEntrants
-RacingSystem.Server.Snapshot.buildInstanceStandingsPayload = buildInstanceStandingsPayload
 RacingSystem.Server.Snapshot.broadcastInstanceStandings = broadcastInstanceStandings
 RacingSystem.Server.Snapshot.getLeaderProgress = getLeaderProgress
 RacingSystem.Server.Snapshot.getLastPlaceEntrant = getLastPlaceEntrant
@@ -971,9 +920,6 @@ RacingSystem.Server.Snapshot.buildInstanceStaticPayload = buildInstanceStaticPay
 RacingSystem.Server.Snapshot.sendInitialState = sendInitialState
 RacingSystem.Server.Snapshot.buildRaceInstanceSnapshot = buildRaceInstanceSnapshot
 RacingSystem.Server.Snapshot.sendRaceInfoToTarget = sendRaceInfoToTarget
-RacingSystem.Server.Snapshot.buildFullSnapshot = buildFullSnapshot
-RacingSystem.Server.Snapshot.sendSnapshot = sendSnapshot
-RacingSystem.Server.Snapshot.broadcastSnapshot = broadcastSnapshot
 RacingSystem.Server.Snapshot.buildInstanceAssetPayload = buildInstanceAssetPayload
 RacingSystem.Server.Snapshot.sendInstanceAssets = sendInstanceAssets
 RacingSystem.Server.Snapshot.sendTeleportToLastCheckpoint = sendTeleportToLastCheckpoint

@@ -66,15 +66,6 @@ RacingSystem.Server.State.config.extraPrintLevel = math.max(
         )
     )
 )
-RacingSystem.Server.State.config.snapshotFullCycleTargetMs = math.max(
-    250,
-    normalizeInt(RacingSystem.Server.State.config.snapshotFullCycleTargetMs ~= nil and RacingSystem.Server.State.config.snapshotFullCycleTargetMs or 4000, 250)
-)
-RacingSystem.Server.State.config.snapshotMinTickMs = math.max(
-    1,
-    normalizeInt(RacingSystem.Server.State.config.snapshotMinTickMs ~= nil and RacingSystem.Server.State.config.snapshotMinTickMs or 50, 1)
-)
-
 RacingSystem.Server.State.raceInstancesById = normalizeTable(RacingSystem.Server.State.raceInstancesById)
 RacingSystem.Server.State.raceInstanceIdsByName = normalizeTable(RacingSystem.Server.State.raceInstanceIdsByName)
 RacingSystem.Server.State.knownRaceDefinitionsByName = normalizeTable(RacingSystem.Server.State.knownRaceDefinitionsByName)
@@ -85,7 +76,6 @@ RacingSystem.Server.State.lifecycleAnomalyLogByKey = normalizeTable(RacingSystem
 RacingSystem.Server.State.nextRaceInstanceId = math.max(1, normalizeInt(RacingSystem.Server.State.nextRaceInstanceId ~= nil and RacingSystem.Server.State.nextRaceInstanceId or 1, 1))
 RacingSystem.Server.State.nextEntrantIdToken = math.max(1, normalizeInt(RacingSystem.Server.State.nextEntrantIdToken ~= nil and RacingSystem.Server.State.nextEntrantIdToken or 1, 1))
 RacingSystem.Server.State.instanceListRevision = normalizeInt(RacingSystem.Server.State.instanceListRevision ~= nil and RacingSystem.Server.State.instanceListRevision or 0)
-RacingSystem.Server.State.nextSnapshotVersion = normalizeInt(RacingSystem.Server.State.nextSnapshotVersion ~= nil and RacingSystem.Server.State.nextSnapshotVersion or 0)
 RacingSystem.Server.State.nextAllowedUGCFetchAt = normalizeInt(RacingSystem.Server.State.nextAllowedUGCFetchAt ~= nil and RacingSystem.Server.State.nextAllowedUGCFetchAt or 0)
 
 RacingSystem.Server.State.reliabilityCounters = normalizeTable(RacingSystem.Server.State.reliabilityCounters)

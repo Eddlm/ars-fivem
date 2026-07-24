@@ -2,7 +2,6 @@ RacingSystem = RacingSystem or {}
 RacingSystem.Client = RacingSystem.Client or {}
 RacingSystem.Menu = RacingSystem.Menu or {}
 RacingSystem.Client.Util = RacingSystem.Client.Util or {}
-RacingSystem.Client.PayloadSystemDisabled = true
 local raceInfoById = {}
 RacingSystem.Client.raceInfoById = raceInfoById
 local currentTrafficDensity = nil

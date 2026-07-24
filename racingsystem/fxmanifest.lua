@@ -22,9 +22,6 @@ files {
     'ui/index.html',
     'ui/app.js',
     'ui/style.css',
-    'race_index.json',
-    'CustomRaces/*.json',
-    'OnlineRaces/*.json',
 }
 
 client_scripts {

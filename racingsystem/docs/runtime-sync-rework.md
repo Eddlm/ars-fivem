@@ -526,25 +526,48 @@ The unchecked acceptance items below remain required regression tests and are no
 
 ## Phase 4 — Remove the Abandoned Snapshot Rewrite
 
-**Status:** Ready; Phase 3 runtime acceptance is deferred
+**Status:** Code complete; automated verification passed; runtime regression deferred
 
-- [ ] Remove `RacingSystem.Client.PayloadSystemDisabled` and its notification path.
-- [ ] Remove obsolete full-snapshot builders, version fields, counters, and no-op exports that have no owner in the chosen architecture.
-- [ ] Remove obsolete event names and dead client caches.
-- [ ] Remove no-op forwarding functions rather than retaining compatibility shims.
-- [ ] Update `docs/overview.md` and `docs/server-architecture.md` to describe the final synchronization model.
-- [ ] Update this document with the final Phase 3 decision.
+- [x] Remove `RacingSystem.Client.PayloadSystemDisabled` and its notification path.
+- [x] Remove obsolete full-snapshot builders, version fields, counters, and no-op exports that have no owner in the chosen architecture.
+- [x] Remove obsolete event names and dead client caches.
+- [x] Remove no-op forwarding functions rather than retaining compatibility shims.
+- [x] Update `docs/overview.md` and `docs/server-architecture.md` to describe the final synchronization model.
+- [x] Update this document with the final Phase 3 decision.
+- [x] Stop publishing server-owned catalog/race JSON files in the client resource pack.
 
-### Verification
+### Automated verification
 
-- [ ] Search for `PayloadSystemDisabled`, disabled-rewrite messages, snapshot stubs, and unregistered event names.
-- [ ] Run Lua syntax checks.
+- [x] Search runtime Lua for `PayloadSystemDisabled`, the disabled-rewrite notification, full-snapshot builders/senders, snapshot-version bookkeeping, delta/static stubs, and round-robin symbols.
+- [x] Confirm every literal server `TriggerClientEvent` name has a client handler.
+- [x] Confirm no client Lua file calls `LoadResourceFile` for server-owned race data.
+- [x] Run the Phase 1–3 production-backed unit suites.
+- [x] Run Lua syntax checks on all resource Lua files.
+
+### Verification record — July 24, 2026
+
+Automated checks passed:
+
+- Runtime searches find no disabled payload flag/message, full-snapshot builder/sender, snapshot version/timing bookkeeping, delta/static compatibility sender, or joined-racer round-robin.
+- Every literal server-to-client event currently emitted by the resource has a matching client `RegisterNetEvent` or `AddEventHandler` registration.
+- The client resource pack now contains only NUI files; `race_index.json`, `CustomRaces/*.json`, and `OnlineRaces/*.json` remain server-owned.
+- `docs/overview.md` and `docs/server-architecture.md` describe the bounded event/state-bag model and deferred runtime boundaries.
+
+Not tested in a FiveM runtime:
+
+- Resource restart with connected players, including clearing and rebuilding all `rs:*` player/global state bags.
+- Server access to race JSON files after removing them from the client `files` manifest list.
+- Full Phase 1–3 multiplayer acceptance gates after compatibility cleanup.
+- Network/resource behavior when clients with an older cached resource package connect to the updated server.
+
+The following runtime checks remain deferred:
+
 - [ ] Restart the resource with players connected and confirm state bags are cleared and rebuilt correctly.
 - [ ] Repeat the Phase 1–3 acceptance gates after cleanup.
 
 ## Phase 5 — Reliability and Diagnostic Cleanup
 
-**Status:** Blocked by Phase 4
+**Status:** Ready; Phase 4 runtime regression is deferred
 
 - [ ] Remove unconditional `[DEBUG]` prints from finish and standings synchronization.
 - [ ] Route useful diagnostics through the existing configured logging levels.

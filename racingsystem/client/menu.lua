@@ -1,7 +1,6 @@
 RacingSystem = RacingSystem or {}
 RacingSystem.Menu = RacingSystem.Menu or {}
 RacingSystem.Client = RacingSystem.Client or {}
-local PAYLOAD_SYSTEM_DISABLED = (RacingSystem.Client and RacingSystem.Client.PayloadSystemDisabled) == true
 RacingSystem.Client.editorState = RacingSystem.Client.editorState or {
     active = false,
     name = '',
@@ -20,12 +19,6 @@ end
 
 local function logMenuVerbose(message)
     local _ = message
-end
-
-local function notifyPayloadDisabled()
-    if RacingSystem.Client and RacingSystem.Client.Util and type(RacingSystem.Client.Util.NotifyPlayer) == 'function' then
-        RacingSystem.Client.Util.NotifyPlayer('Snapshot payload system disabled (rewrite pending).')
-    end
 end
 
 local function loadAvailableRaceDefinitions()
