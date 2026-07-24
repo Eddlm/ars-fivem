@@ -634,12 +634,22 @@ local function getInstanceStaticSignature(instance)
 end
 
 local function sendDefinitions(target)
-    local _ = target
-    return
+    local numericTarget = tonumber(target) or 0
+    if numericTarget <= 0 then
+        return
+    end
+
+    TriggerClientEvent(
+        'racingsystem:catalog:definitions',
+        numericTarget,
+        buildDefinitionsPayload(numericTarget)
+    )
 end
 
 local function broadcastDefinitions()
-    return
+    for _, playerSource in ipairs(GetPlayers()) do
+        sendDefinitions(playerSource)
+    end
 end
 
 local function sendInstanceList(target)
@@ -688,6 +698,7 @@ local function sendInitialState(target)
         return
     end
 
+    sendDefinitions(numericTarget)
     sendInstanceList(numericTarget)
 end
 

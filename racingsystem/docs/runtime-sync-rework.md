@@ -187,15 +187,44 @@ Delivery rules:
 - The client explicitly requests initial state after resource start and refreshes when Active Races is opened.
 - Existing lifecycle mutation sites remain responsible for requesting a list broadcast.
 
-### Frozen later catalog boundary
+### Frozen Phase 2 catalog contract
 
-Phase 2 will define the exact catalog field contract, but its ownership boundary is fixed now:
+The server sends a complete replacement catalog through `racingsystem:catalog:definitions`:
 
-- The server catalog is authoritative.
-- The server sends a complete replacement catalog view on initial state and catalog mutations.
+```lua
+{
+    definitions = {
+        {
+            lookupName = 'example race',
+            name = 'Example Race',
+            sourceType = 'custom',
+            raceId = nil,
+            updatedAt = 0,
+            isExample = false,
+        },
+    },
+    count = 1,
+    definitionCount = 1,
+    customRaceCount = 1,
+    onlineRaceCount = 0,
+    viewer = {
+        source = 12,
+        isAdmin = false,
+        canDeleteRaceDefinitions = false,
+        canKillOwnedInstances = true,
+    },
+}
+```
+
+Contract rules:
+
+- The server catalog is authoritative and `definitions` completely replaces the client catalog cache.
+- Entries contain definition identity and display metadata only; no checkpoints, mission metadata, props, model hides, or instance state.
+- Entries remain sorted by the catalog's canonical ordering: custom definitions first, online definitions second, then display name.
+- Viewer permissions are target-specific, so `broadcastDefinitions()` sends one tailored payload per connected player rather than one common `-1` payload.
+- The server sends the current catalog on initial state and after catalog mutations.
 - The client does not use generated `race_index.json` as a runtime menu source or fallback.
-- Catalog payloads contain definition summaries only, never complete checkpoint/mission data.
-- Catalog synchronization remains outside Phase 1.
+- Host and editor actions continue submitting definition identity to server-authoritative handlers.
 
 ### Current synchronization inventory
 

@@ -71,29 +71,41 @@ TriggerClientEvent = function(name, target, payload)
 end
 
 RacingSystem = {
-    States = {
-        idle = 'idle',
-        staging = 'staging',
-        running = 'running',
-        finished = 'finished',
-    },
     Config = {},
-    NormalizeRaceName = function(value) return value end,
     Server = {
         Snapshot = {},
         State = {
             raceInstancesById = {},
+            knownRaceDefinitionsByName = {
+                ['z online'] = {
+                    lookupName = 'z online',
+                    name = 'Z Online',
+                    sourceType = 'online',
+                    raceId = 'online-id',
+                    updatedAt = 20,
+                    isExample = false,
+                },
+                ['a custom'] = {
+                    lookupName = 'a custom',
+                    name = 'A Custom',
+                    sourceType = 'custom',
+                    updatedAt = 10,
+                    isExample = true,
+                },
+            },
             raceInstanceIdsByName = {},
             instanceListRevision = 0,
             config = {},
         },
         Logging = {
-            hasAdminAccess = function() return false end,
+            hasAdminAccess = function(source) return tonumber(source) == 99 end,
         },
         Catalog = {},
     },
 }
 
+dofile('racingsystem/shared/shared.lua')
+dofile('racingsystem/server/race_catalog.lua')
 dofile('racingsystem/server/snapshot_runtime.lua')
 local Snapshot = RacingSystem.Server.Snapshot
 
@@ -169,12 +181,59 @@ expectEqual('server broadcast target', clientEvents[1].target, -1)
 expectEqual('server broadcast revision state', RacingSystem.Server.State.instanceListRevision, 8)
 expectEqual('server broadcast revision payload', clientEvents[1].payload.revision, 8)
 
--- Initial state is a targeted read and does not advance the revision.
+-- Catalog payload is bounded, canonically sorted, and target-specific.
+local definitionsPayload = Snapshot.buildDefinitionsPayload(12)
+expectKeys('server catalog envelope', definitionsPayload, {
+    'definitions',
+    'count',
+    'definitionCount',
+    'customRaceCount',
+    'onlineRaceCount',
+    'viewer',
+})
+expectEqual('server catalog definition count', definitionsPayload.definitionCount, 2)
+expectEqual('server catalog custom count', definitionsPayload.customRaceCount, 1)
+expectEqual('server catalog online count', definitionsPayload.onlineRaceCount, 1)
+expectEqual('server catalog custom sorted first', definitionsPayload.definitions[1].name, 'A Custom')
+expectKeys('server catalog definition contract', definitionsPayload.definitions[1], {
+    'lookupName',
+    'name',
+    'sourceType',
+    'updatedAt',
+    'isExample',
+})
+expect('server catalog excludes checkpoints', definitionsPayload.definitions[1].checkpoints == nil)
+expect('server catalog excludes props', definitionsPayload.definitions[1].props == nil)
+expectEqual('server catalog viewer source', definitionsPayload.viewer.source, 12)
+expectEqual('server catalog viewer non-admin', definitionsPayload.viewer.isAdmin, false)
+expectEqual('server catalog viewer cannot delete', definitionsPayload.viewer.canDeleteRaceDefinitions, false)
+
+clientEvents = {}
+Snapshot.sendDefinitions(99)
+expectEqual('server targeted catalog count', #clientEvents, 1)
+expectEqual('server targeted catalog event', clientEvents[1].name, 'racingsystem:catalog:definitions')
+expectEqual('server targeted catalog target', clientEvents[1].target, 99)
+expectEqual('server targeted catalog admin', clientEvents[1].payload.viewer.isAdmin, true)
+expectEqual('server targeted catalog can delete', clientEvents[1].payload.viewer.canDeleteRaceDefinitions, true)
+
+GetPlayers = function() return { '12', '99' } end
+clientEvents = {}
+Snapshot.broadcastDefinitions()
+expectEqual('server catalog broadcast count', #clientEvents, 2)
+expectEqual('server catalog broadcast first target', clientEvents[1].target, 12)
+expectEqual('server catalog broadcast second target', clientEvents[2].target, 99)
+expectEqual('server catalog broadcast first permissions', clientEvents[1].payload.viewer.isAdmin, false)
+expectEqual('server catalog broadcast second permissions', clientEvents[2].payload.viewer.isAdmin, true)
+
+-- Initial state sends both bounded views without advancing list revision.
 clientEvents = {}
 Snapshot.sendInitialState(22)
-expectEqual('server initial event count', #clientEvents, 1)
-expectEqual('server initial target', clientEvents[1].target, 22)
-expectEqual('server initial revision', clientEvents[1].payload.revision, 8)
+expectEqual('server initial event count', #clientEvents, 2)
+expectEqual('server initial definitions event', clientEvents[1].name, 'racingsystem:catalog:definitions')
+expectEqual('server initial definitions target', clientEvents[1].target, 22)
+expectEqual('server initial list event', clientEvents[2].name, 'racingsystem:instance:list')
+expectEqual('server initial list target', clientEvents[2].target, 22)
+expectEqual('server initial revision', clientEvents[2].payload.revision, 8)
 expectEqual('server initial revision unchanged', RacingSystem.Server.State.instanceListRevision, 8)
 
 -- Load the real client cache module with event registration mocks.
