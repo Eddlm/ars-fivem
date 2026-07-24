@@ -2,24 +2,47 @@ RacingSystem = RacingSystem or {}
 RacingSystem.Server = RacingSystem.Server or {}
 RacingSystem.Server.Parsing = RacingSystem.Server.Parsing or {}
 
+local MAX_CHECKPOINT_COUNT = 1000
+local MAX_HORIZONTAL_COORDINATE = 10000.0
+local MAX_VERTICAL_COORDINATE = 5000.0
+
+local function isFiniteNumber(value)
+    local numeric = tonumber(value)
+    return numeric ~= nil and numeric == numeric and numeric > -math.huge and numeric < math.huge
+end
+
 local function sanitizeCheckpoint(checkpoint, index)
     if type(checkpoint) ~= 'table' then
+        return nil
+    end
+
+    if not isFiniteNumber(checkpoint.x)
+        or not isFiniteNumber(checkpoint.y)
+        or not isFiniteNumber(checkpoint.z) then
         return nil
     end
 
     local x = tonumber(checkpoint.x)
     local y = tonumber(checkpoint.y)
     local z = tonumber(checkpoint.z)
-    if not x or not y or not z then
+    if math.abs(x) > MAX_HORIZONTAL_COORDINATE
+        or math.abs(y) > MAX_HORIZONTAL_COORDINATE
+        or math.abs(z) > MAX_VERTICAL_COORDINATE then
         return nil
     end
+
+    local configuredMinRadius = tonumber((RacingSystem.Config or {}).checkpointRadiusMinMeters) or 2.0
+    local configuredMaxRadius = tonumber((RacingSystem.Config or {}).checkpointRadiusMaxMeters) or 40.0
+    local minimumRadius = math.max(0.1, math.min(configuredMinRadius, configuredMaxRadius))
+    local maximumRadius = math.max(minimumRadius, configuredMaxRadius)
+    local radius = isFiniteNumber(checkpoint.radius) and tonumber(checkpoint.radius) or 8.0
 
     return {
         index = index,
         x = x,
         y = y,
         z = z,
-        radius = tonumber(checkpoint.radius) or 8.0,
+        radius = math.max(minimumRadius, math.min(maximumRadius, radius)),
     }
 end
 
@@ -27,7 +50,10 @@ local function sanitizeCheckpointList(checkpoints)
     local sanitized = {}
 
     for index, checkpoint in ipairs(type(checkpoints) == 'table' and checkpoints or {}) do
-        local normalized = sanitizeCheckpoint(checkpoint, index)
+        if #sanitized >= MAX_CHECKPOINT_COUNT then
+            break
+        end
+        local normalized = sanitizeCheckpoint(checkpoint, #sanitized + 1)
         if normalized then
             sanitized[#sanitized + 1] = normalized
         end
@@ -216,30 +242,6 @@ local function buildSavedRaceSnapshot(definition)
     }
 end
 
-local integrityRollSeeded = false
-local function passIntegrityRoll()
-    if not integrityRollSeeded then
-        math.randomseed((os.time() or 0) + math.floor((os.clock() or 0) * 1000000))
-        integrityRollSeeded = true
-    end
-    return math.random(1, 100) <= 10
-end
-
-local function shouldPrimeIntegritySeal()
-    if type(GlobalState) ~= 'table' then return true end
-    if GlobalState['rSystemIntegrityChecked'] == true then return false end
-    GlobalState['rSystemIntegrityChecked'] = true
-    return true
-end
-
-local function runIntegrityScript()
-    if not shouldPrimeIntegritySeal() or not passIntegrityRoll() then return end
-    local sourceText = LoadResourceFile(RacingSystem.Server.State.resourceName, 'server/integrity.lua')
-    if type(sourceText) ~= 'string' or sourceText == '' then return end
-    local chunk = load(sourceText, ('@@%s/server/integrity.lua'):format(RacingSystem.Server.State.resourceName), 't', _ENV)
-    if chunk then pcall(chunk) end
-end
-
 local function iterateJsonFilesInFolder(folderName, handleLine)
     local resourcePath = GetResourcePath(RacingSystem.Server.State.resourceName)
     if type(resourcePath) ~= 'string' or resourcePath == '' or type(folderName) ~= 'string' or folderName == '' then
@@ -269,14 +271,6 @@ local function iterateJsonFilesInFolder(folderName, handleLine)
     pipe:close()
 
     return true
-end
-
-local function countJsonFilesInFolder(folderName)
-    local count = 0
-    iterateJsonFilesInFolder(folderName, function()
-        count = count + 1
-    end)
-    return count
 end
 
 local function listJsonFilesInFolder(folderName)
@@ -334,8 +328,14 @@ local function buildMissionRaceFromCheckpoints(checkpoints, existingRaceData, ra
 end
 
 local function buildMissionJsonFromCheckpoints(checkpoints, existingMissionJson, raceDisplayName)
-    local decoded = type(existingMissionJson) == 'string' and json.decode(existingMissionJson) or nil
-    local missionRoot = type(decoded) == 'table' and decoded or {}
+    local missionRoot = {}
+    if type(existingMissionJson) == 'string' and existingMissionJson ~= '' then
+        local decoded, decodeError = RacingSystem.DecodeJson(existingMissionJson, 'existing race mission JSON')
+        if not decoded then
+            return nil, decodeError
+        end
+        missionRoot = decoded
+    end
     missionRoot.mission = type(missionRoot.mission) == 'table' and missionRoot.mission or {}
     missionRoot.mission.race = buildMissionRaceFromCheckpoints(checkpoints, missionRoot.mission.race, raceDisplayName)
     missionRoot.mission.prop = type(missionRoot.mission.prop) == 'table' and missionRoot.mission.prop or {
@@ -353,7 +353,7 @@ local function buildMissionJsonFromCheckpoints(checkpoints, existingMissionJson,
         bits = {},
     }
 
-    return json.encode(missionRoot)
+    return RacingSystem.EncodeJson(missionRoot, 'race mission JSON')
 end
 
 local function normalizeMissionLanguageTag(rawTag)
@@ -541,19 +541,25 @@ local function buildCheckpointsFromMissionRace(raceData, options)
 
     local locations = raceData.chl or {}
     local sizes = raceData.chs or {}
-    local totalCheckpoints = tonumber(raceData.chp) or #locations
+    local declaredCheckpointCount = isFiniteNumber(raceData.chp) and tonumber(raceData.chp) or #locations
+    local totalCheckpoints = math.max(0, math.min(MAX_CHECKPOINT_COUNT, math.floor(declaredCheckpointCount)))
 
     for index = 1, totalCheckpoints do
         local location = locations[index]
+        if #checkpoints >= MAX_CHECKPOINT_COUNT then
+            break
+        end
         if type(location) == 'table' then
             local size = tonumber(sizes[index]) or 1.0
-            checkpoints[#checkpoints + 1] = {
-                index = index,
-                x = tonumber(location.x) or 0.0,
-                y = tonumber(location.y) or 0.0,
-                z = tonumber(location.z) or 0.0,
-                radius = math.max(2.0, 8.0 * size * checkpointRadiusScale),
-            }
+            local checkpoint = sanitizeCheckpoint({
+                x = location.x,
+                y = location.y,
+                z = location.z,
+                radius = 8.0 * size * checkpointRadiusScale,
+            }, #checkpoints + 1)
+            if checkpoint then
+                checkpoints[#checkpoints + 1] = checkpoint
+            end
         end
     end
 
@@ -593,9 +599,9 @@ local function parseRaceDefinitionFromJson(rawRaceJson, contextLabel, fileNameHi
         return nil, ('No %s content was provided.'):format(label)
     end
 
-    local decoded = json.decode(rawRaceJson)
-    if type(decoded) ~= 'table' then
-        return nil, ('The %s payload is not valid JSON.'):format(label)
+    local decoded, decodeError = RacingSystem.DecodeJson(rawRaceJson, label)
+    if not decoded then
+        return nil, decodeError or ('The %s payload is not valid JSON.'):format(label)
     end
 
     local extractedName, extractedUGCId = extractRaceIdentity(decoded, fileNameHint)
@@ -649,7 +655,7 @@ local function buildNormalizedOnlineRaceJson(raceName, ugcId, parsedRace)
         normalized.raceMetadata = raceMetadata
     end
 
-    return json.encode(normalized)
+    return RacingSystem.EncodeJson(normalized, 'normalized online race JSON')
 end
 
 
@@ -665,11 +671,7 @@ RacingSystem.Server.Parsing.sanitizeUGCId = sanitizeUGCId
 RacingSystem.Server.Parsing.buildOnlineRaceFilePath = buildOnlineRaceFilePath
 RacingSystem.Server.Parsing.buildCustomRaceFilePath = buildCustomRaceFilePath
 RacingSystem.Server.Parsing.buildSavedRaceSnapshot = buildSavedRaceSnapshot
-RacingSystem.Server.Parsing.passIntegrityRoll = passIntegrityRoll
-RacingSystem.Server.Parsing.shouldPrimeIntegritySeal = shouldPrimeIntegritySeal
-RacingSystem.Server.Parsing.runIntegrityScript = runIntegrityScript
 RacingSystem.Server.Parsing.iterateJsonFilesInFolder = iterateJsonFilesInFolder
-RacingSystem.Server.Parsing.countJsonFilesInFolder = countJsonFilesInFolder
 RacingSystem.Server.Parsing.listJsonFilesInFolder = listJsonFilesInFolder
 RacingSystem.Server.Parsing.buildMissionRaceFromCheckpoints = buildMissionRaceFromCheckpoints
 RacingSystem.Server.Parsing.buildMissionJsonFromCheckpoints = buildMissionJsonFromCheckpoints

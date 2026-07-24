@@ -147,7 +147,6 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         raceMetadata = RacingSystem.Server.Catalog.cloneMissionValue(customRace.raceMetadata)
         sourceType = 'custom'
         sourceName = customRace.name
-        RacingSystem.Server.Catalog.registerKnownRaceDefinition(customRace.name, 'custom')
     elseif onlineRace then
         instanceName = onlineRace.name
         definitionName = onlineRace.name
@@ -157,7 +156,6 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         raceMetadata = RacingSystem.Server.Catalog.cloneMissionValue(onlineRace.raceMetadata)
         sourceType = 'online'
         sourceName = onlineRace.name
-        RacingSystem.Server.Catalog.registerKnownRaceDefinition(onlineRace.name, 'online', onlineRace.ugcId or onlineRace.fileName)
     else
         return nil, 'That saved race does not exist.'
     end
@@ -168,6 +166,10 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
 
     local id = tonumber(RacingSystem.Server.State.nextRaceInstanceId) or 1
     RacingSystem.Server.State.nextRaceInstanceId = id + 1
+    local pointToPoint = RacingSystem.Server.Snapshot.isPointToPointByCheckpointDistance(checkpoints)
+    if pointToPoint then
+        laps = 1
+    end
 
     local instance = {
         id = id,
@@ -176,7 +178,7 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         definitionName = definitionName,
         sourceType = sourceType,
         sourceName = sourceName,
-        pointToPoint = RacingSystem.Server.Snapshot.isPointToPointByCheckpointDistance(checkpoints),
+        pointToPoint = pointToPoint,
         trafficDensity = invokeTrafficDensity,
         lateJoinProgressLimitPercent = invokeLateJoinPercent,
         laps = laps,
@@ -232,17 +234,12 @@ local function terminateRaceInstance(instance, actorSource, reason)
     return instance, nil
 end
 
-local function killRaceInstanceByName(instanceName)
-    local instance = RacingSystem.Server.Snapshot.findRaceInstanceByName(instanceName)
-    return terminateRaceInstance(instance, 0, 'killed_by_command')
-end
-
-local function killRaceInstanceById(instanceId)
+local function killRaceInstanceById(instanceId, actorSource, reason)
     local numericInstanceId = tonumber(instanceId) or -1
     return terminateRaceInstance(
         RacingSystem.Server.State.raceInstancesById[numericInstanceId],
-        0,
-        'killed_by_command'
+        actorSource,
+        reason or 'killed_by_command'
     )
 end
 
@@ -413,7 +410,7 @@ local function getLapIncrementUnlockCheckpoint(totalCheckpoints)
     return math.max(1, math.ceil(checkpointCount * 0.5))
 end
 
-local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTimingPayload)
+local function handleCheckpointPassed(source, instanceId, checkpointIndex)
     local instance = RacingSystem.Server.State.raceInstancesById[tonumber(instanceId) or -1]
     if not instance then
         RacingSystem.Server.Logging.logLevelOne(("%s sent a checkpoint update for missing instance %s."):format(
@@ -487,14 +484,13 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
 
     local canIncrementLap = entrant.lapIncrementUnlocked == true
     if reportedCheckpoint == lapTriggerCheckpoint and canIncrementLap then
-        local currentLapTimeMs = tonumber(type(lapTimingPayload) == 'table' and lapTimingPayload.lapTimeMs) or nil
-        local currentTotalTimeMs = tonumber(type(lapTimingPayload) == 'table' and lapTimingPayload.totalTimeMs) or nil
+        local lapStartedAt = tonumber(entrant.lapStartedAt) or tonumber(instance.startedAt) or now
+        local raceStartedAt = tonumber(instance.startedAt) or lapStartedAt
+        local currentLapTimeMs = math.max(0, now - lapStartedAt)
+        local currentTotalTimeMs = math.max(0, now - raceStartedAt)
 
-        if currentLapTimeMs ~= nil then
-            currentLapTimeMs = math.max(0, currentLapTimeMs)
-            entrant.lapTimes = entrant.lapTimes or {}
-            entrant.lapTimes[#entrant.lapTimes + 1] = currentLapTimeMs
-        end
+        entrant.lapTimes = entrant.lapTimes or {}
+        entrant.lapTimes[#entrant.lapTimes + 1] = currentLapTimeMs
 
         if currentLap >= totalLaps then
             entrant.currentCheckpoint = totalCheckpoints + 1
@@ -502,14 +498,11 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
             entrant.totalTimeMs = currentTotalTimeMs and math.max(0, currentTotalTimeMs) or nil
         else
             entrant.currentLap = currentLap + 1
-            if instance.pointToPoint == true then
-                entrant.currentCheckpoint = totalCheckpoints
-            else
-                entrant.currentCheckpoint = 1
-            end
+            entrant.currentCheckpoint = 1
+            entrant.lapStartedAt = now
         end
 
-        if currentLapTimeMs ~= nil then
+        do
             local previousBestLapTimeMs = tonumber(instance.bestLapTimeMs)
             local bestLapDeltaMs = 0
 
@@ -618,7 +611,6 @@ end
 
 RacingSystem.Server.Instances.resetRaceInstanceProgress = resetRaceInstanceProgress
 RacingSystem.Server.Instances.invokeRaceInstance = invokeRaceInstance
-RacingSystem.Server.Instances.killRaceInstanceByName = killRaceInstanceByName
 RacingSystem.Server.Instances.killRaceInstanceById = killRaceInstanceById
 RacingSystem.Server.Instances.removeSourceFromRaceInstances = removeSourceFromRaceInstances
 RacingSystem.Server.Instances.joinResolvedInstance = joinResolvedInstance

@@ -110,7 +110,6 @@ local function getEditorCameraCoords()
     end
     return camera
 end
-RacingSystem.Client.getEditorCameraCoords = getEditorCameraCoords
 
 local function directionFromRotation(pitchDegrees, yawDegrees)
     local pitchRadians = math.rad(tonumber(pitchDegrees) or 0.0)

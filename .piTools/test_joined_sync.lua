@@ -155,6 +155,8 @@ expectEqual('out of order no standings', standingsCalls, 0)
 
 -- A finishing entrant publishes finished progress once before aggregate cleanup.
 instance = buildInstance()
+instance.startedAt = 500
+instance.entrants[1].lapStartedAt = 700
 instance.entrants[1].currentCheckpoint = 3
 instance.entrants[1].lapIncrementUnlocked = true
 RacingSystem.Server.State.raceInstancesById[instance.id] = instance
@@ -170,6 +172,41 @@ expect('finish timestamp set', tonumber(instance.entrants[1].finishedAt) ~= nil)
 expectEqual('finish standings exactly once', standingsCalls, 1)
 expect('finish standings includes timestamp', tonumber(standingsSnapshots[1].finishedAt) ~= nil)
 expectEqual('other entrant prevents aggregate finish', instance.state, RacingSystem.States.running)
+expectEqual('server owns lap timing', instance.entrants[1].lapTimes[1], instance.entrants[1].finishedAt - 700)
+expectEqual('server owns total timing', instance.entrants[1].totalTimeMs, instance.entrants[1].finishedAt - 500)
+expect('client timing payload ignored', instance.entrants[1].lapTimes[1] ~= 5000)
+
+-- Point-to-point routes are normalized to one lap regardless of client input.
+RacingSystem.Server.Repository.loadCustomRace = function()
+    return {
+        name = 'Point To Point',
+        checkpoints = {
+            { x = 0, y = 0, z = 0, radius = 8 },
+            { x = 1000, y = 0, z = 0, radius = 8 },
+        },
+        props = {},
+        modelHides = {},
+        raceMetadata = {},
+    }
+end
+RacingSystem.Server.Repository.loadBundledOnlineRace = function() return nil end
+RacingSystem.Server.Parsing.sanitizeLapCount = function(value) return math.max(1, math.floor(tonumber(value) or 3)) end
+RacingSystem.Server.Catalog.cloneCheckpoints = function(value) return value end
+RacingSystem.Server.Catalog.cloneMissionValue = function(value) return value end
+RacingSystem.Server.Snapshot.cloneOnlineRaceProps = function(value) return value or {} end
+RacingSystem.Server.Snapshot.cloneOnlineRaceModelHides = function(value) return value or {} end
+RacingSystem.Server.Snapshot.isPointToPointByCheckpointDistance = function() return true end
+RacingSystem.Server.Snapshot.findRaceInstanceByName = function() return nil end
+RacingSystem.Server.Snapshot.buildEntrant = function(source)
+    return { entrantId = 'entrant-' .. tostring(source), source = source }
+end
+RacingSystem.Server.Snapshot.upsertEntrantState = function() end
+RacingSystem.Server.Snapshot.indexRaceInstanceName = function() end
+RacingSystem.Server.Logging.setRaceStateBag = function() end
+RacingSystem.Server.State.nextRaceInstanceId = 20
+local pointToPointInstance, invokeError = RacingSystem.Server.Instances.invokeRaceInstance(33, 'Point To Point', 5)
+expect('point-to-point invoke succeeds', pointToPointInstance ~= nil, tostring(invokeError))
+expectEqual('point-to-point lap count normalized', pointToPointInstance and pointToPointInstance.laps, 1)
 
 local total = passed + failed
 io.write(('\n%d / %d assertions passed'):format(passed, total))

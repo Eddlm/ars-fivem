@@ -20,7 +20,6 @@ local raceRuntimeState = {
     chevronEdgeCache = nil,
     penaltyPreviewText = nil,
     penaltyPreviewShownAt = 0,
-    cornerConesByKey = {},
 }
 RacingSystem.Client.InRace.raceRuntimeState = raceRuntimeState
 
@@ -397,9 +396,7 @@ CreateThread(function()
             clearPowerPenaltyVehicleOverride()
             RacingSystem.Client.clearFutureCheckpointBlips()
             RacingSystem.Client.clearStartLineBlip()
-            RacingSystem.Client.clearCornerCones()
             resetLocalRaceTiming()
-            RacingSystem.Client.Util.ClearCountdownVisual()
             RacingSystem.Client.Util.ClearRaceLeaderboardVisual()
             if RacingSystem.Client.activeInstanceAssets.instanceId then
                 if type(RacingSystem.Client.runSafetyExitTeleportIfNeeded) == 'function' then
@@ -412,17 +409,12 @@ CreateThread(function()
             local joinedInstanceId = tonumber(joinedInstance.id)
             if joinedInstanceId and raceRuntimeState.joinHintInstanceId ~= joinedInstanceId then
                 raceRuntimeState.joinHintInstanceId = joinedInstanceId
-                RacingSystem.Client.showJoinHintNotifications()
-
                 local joinCheckpoints = type(joinedInstance.checkpoints) == 'table' and joinedInstance.checkpoints or {}
                 local joinCheckpointCount = #joinCheckpoints
                 if joinCheckpointCount > 0 then
                     local joinEntrant = RacingSystem.Client.getLocalEntrant(joinedInstance)
                     local joinTargetIndex = tonumber(joinEntrant and joinEntrant.currentCheckpoint) or 1
-                    local joinCurrentLap = math.max(1, tonumber(joinEntrant and joinEntrant.currentLap) or 1)
-                    local joinTotalLaps = math.max(1, tonumber(joinedInstance.laps) or 1)
-                    local allowWrapOnJoin = (joinedInstance.pointToPoint ~= true) and (joinCurrentLap < joinTotalLaps)
-                    RacingSystem.Client.updateFutureCheckpointBlips(joinedInstance, joinCheckpointCount, joinTargetIndex, allowWrapOnJoin)
+                    RacingSystem.Client.clearFutureCheckpointBlips()
                     raceRuntimeState.futureBlipCheckpointIndex = joinTargetIndex
                     raceRuntimeState.futureBlipInstanceId = joinedInstanceId
                 else
@@ -460,14 +452,11 @@ CreateThread(function()
             clearPendingCheckpointIfAdvanced(entrant)
             targetIndex = tonumber(entrantProgress.currentCheckpoint) or targetIndex
             local routeTargetIndex = tonumber(entrant and entrant.currentCheckpoint) or targetIndex
-            local routeCurrentLap = math.max(1, tonumber(entrantProgress and entrantProgress.currentLap) or 1)
-            local routeTotalLaps = math.max(1, tonumber(joinedInstance.laps) or 1)
-            local allowRouteWrap = (joinedInstance.pointToPoint ~= true) and (routeCurrentLap < routeTotalLaps)
             if totalCheckpoints > 0 then
                 local routeInstanceId = tonumber(joinedInstance.id)
                 if raceRuntimeState.futureBlipInstanceId ~= routeInstanceId
                     or raceRuntimeState.futureBlipCheckpointIndex ~= routeTargetIndex then
-                    RacingSystem.Client.updateFutureCheckpointBlips(joinedInstance, totalCheckpoints, routeTargetIndex, allowRouteWrap)
+                    RacingSystem.Client.clearFutureCheckpointBlips()
                     raceRuntimeState.futureBlipCheckpointIndex = routeTargetIndex
                     raceRuntimeState.futureBlipInstanceId = routeInstanceId
                 end
@@ -521,7 +510,6 @@ CreateThread(function()
                         end
                     else
                         -- Player still racing, show GO if not shown
-                        RacingSystem.Client.Util.ClearCountdownVisual()
                         local joinedInstanceId2 = tonumber(joinedInstance.id)
                         if joinedInstanceId2 and not raceStartCueShownByInstanceId[joinedInstanceId2] then
                             raceStartCueShownByInstanceId[joinedInstanceId2] = true
@@ -538,7 +526,6 @@ CreateThread(function()
                         SetVehicleHandbrake(pedVehicle, false)
                     end
                 elseif joinedInstance.state == RacingSystem.States.finished and tonumber(entrantProgress.finishedAt) then
-                    RacingSystem.Client.Util.ClearCountdownVisual()
                     local joinedInstanceId4 = tonumber(joinedInstance.id)
                     if joinedInstanceId4 and not finishCueShownByInstanceId[joinedInstanceId4] then
                         finishCueShownByInstanceId[joinedInstanceId4] = true
@@ -550,7 +537,6 @@ CreateThread(function()
                         SetVehicleHandbrake(pedVehicle, false)
                     end
                 else
-                    RacingSystem.Client.Util.ClearCountdownVisual()
                     if pedVehicle ~= 0 and GetPedInVehicleSeat(pedVehicle, -1) == ped then
                         SetVehicleHandbrake(pedVehicle, false)
                     end
@@ -822,11 +808,7 @@ CreateThread(function()
                         local isRecoveryPenaltyBypass = lowSpeedRecoveryPass or offWheelsRecoveryPass
                         if isOutsidePenaltyRadius then
                             outsideOffset = math.max(0.0, (tonumber(closestApproachDistanceMeters) or 0.0) - RacingSystem.Client.getCheckpointPenaltyRadius(crossedCheckpointTarget, joinedInstance))
-                            if isRecoveryPenaltyBypass then
-                                if offWheelsRecoveryPass then
-                                else
-                                end
-                            else
+                            if not isRecoveryPenaltyBypass then
                                 if outsideOffset > 20.0 then
                                     isCheckpointPassValid = false
                                 elseif outsideOffset > 10.0 then
@@ -847,19 +829,6 @@ CreateThread(function()
                         end
 
                         if isCheckpointPassValid then
-                            local lapTimingPayload = nil
-                            local totalLaps = math.max(1, tonumber(joinedInstance.laps) or 1)
-                            if targetIndex == lapTriggerCheckpoint then
-                                local nowMs = GetGameTimer()
-                                local raceStartedAt = tonumber(raceTimingState.raceStartedAt) or nowMs
-                                local lapStartedAt = tonumber(raceTimingState.lapStartedAt) or raceStartedAt
-
-                                lapTimingPayload = {
-                                    lapTimeMs = math.max(0, nowMs - lapStartedAt),
-                                    totalTimeMs = math.max(0, nowMs - raceStartedAt),
-                                }
-                            end
-
                             raceRuntimeState.pendingCheckpointPass = {
                                 instanceId = joinedInstance.id,
                                 checkpointIndex = targetIndex,
@@ -876,23 +845,11 @@ CreateThread(function()
                             }
 
                             predictCheckpointPass(joinedInstance, entrantProgress, totalCheckpoints, targetIndex)
-                            TriggerServerEvent('racingsystem:race:checkpointPassed', joinedInstance.id, targetIndex, lapTimingPayload)
+                            TriggerServerEvent('racingsystem:race:checkpointPassed', joinedInstance.id, targetIndex)
 
                             if applyTeleportPenalty then
-                                local postPassCheckpointIndex = targetIndex + 1
-                                if postPassCheckpointIndex > totalCheckpoints then
-                                    postPassCheckpointIndex = 1
-                                end
-                                local lapTriggerCheckpoint2 = RacingSystem.Client.getClientLapTriggerCheckpoint(totalCheckpoints)
-                                local currentLapNum = math.max(1, tonumber(entrantProgress.currentLap) or 1)
-                                local didFinishLap = currentLapNum >= totalLaps
-                                if targetIndex == lapTriggerCheckpoint2 and lapTimingPayload ~= nil and not didFinishLap then
-                                    postPassCheckpointIndex = 1
-                                end
-
                                 local passedCheckpoint = crossedCheckpointTarget or targetCheckpoint
-                                local newCurrentCheckpoint = RacingSystem.Client.getNextCheckpointForVariant(joinedInstance, totalCheckpoints, targetIndex, crossedRouteVariant) or checkpoints[postPassCheckpointIndex]
-                                RacingSystem.Client.runSmartCheckpointTeleport(passedCheckpoint, newCurrentCheckpoint)
+                                RacingSystem.Client.runSmartCheckpointTeleport(passedCheckpoint)
                             elseif applyThrottlePenalty then
                                 if pedVehicle ~= 0 and DoesEntityExist(pedVehicle) then
                                     local velocity = GetEntityVelocity(pedVehicle)

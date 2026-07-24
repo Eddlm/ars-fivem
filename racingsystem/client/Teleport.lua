@@ -5,7 +5,6 @@ local isTeleportInProgress = false
 local MAX_LOOP_ITERATIONS = 5
 local SAFE_SPOT_SAMPLE_COUNT = 5
 local FADE_POLL_ATTEMPTS = 5
-local ENTITY_SCAN_LIMIT = 5
 
 local function sampleGroundZWithSpherecast(x, y, zHint, ignoreEntity)
     local startZ = (tonumber(zHint) or 0.0) + 4.0
@@ -33,12 +32,7 @@ local function isSpotOccupiedByVehicleOrPlayer(x, y, z, radius, ignoreVehicle, i
     local checkRadius = math.max(1.5, tonumber(radius) or 2.5)
     local checkRadiusSq = checkRadius * checkRadius
     local vehicles = GetGamePool('CVehicle')
-    local vehicleChecks = 0
     for _, vehicle in ipairs(vehicles) do
-        if vehicleChecks >= ENTITY_SCAN_LIMIT then
-            break
-        end
-        vehicleChecks = vehicleChecks + 1
         if vehicle ~= 0 and DoesEntityExist(vehicle) and vehicle ~= ignoreVehicle then
             local coords = GetEntityCoords(vehicle)
             local dx = (tonumber(coords.x) or 0.0) - x
@@ -50,18 +44,15 @@ local function isSpotOccupiedByVehicleOrPlayer(x, y, z, radius, ignoreVehicle, i
         end
     end
 
-    for playerOffset = 0, ENTITY_SCAN_LIMIT - 1 do
-        local playerIndex = playerOffset
-        if NetworkIsPlayerActive(playerIndex) then
-            local ped = GetPlayerPed(playerIndex)
-            if ped ~= 0 and DoesEntityExist(ped) and IsPedAPlayer(ped) and ped ~= ignorePed then
-                local coords = GetEntityCoords(ped)
-                local dx = (tonumber(coords.x) or 0.0) - x
-                local dy = (tonumber(coords.y) or 0.0) - y
-                local dz = (tonumber(coords.z) or 0.0) - z
-                if ((dx * dx) + (dy * dy) + (dz * dz)) <= checkRadiusSq then
-                    return true
-                end
+    for _, playerIndex in ipairs(GetActivePlayers()) do
+        local ped = GetPlayerPed(playerIndex)
+        if ped ~= 0 and DoesEntityExist(ped) and IsPedAPlayer(ped) and ped ~= ignorePed then
+            local coords = GetEntityCoords(ped)
+            local dx = (tonumber(coords.x) or 0.0) - x
+            local dy = (tonumber(coords.y) or 0.0) - y
+            local dz = (tonumber(coords.z) or 0.0) - z
+            if ((dx * dx) + (dy * dy) + (dz * dz)) <= checkRadiusSq then
+                return true
             end
         end
     end
@@ -70,6 +61,7 @@ local function isSpotOccupiedByVehicleOrPlayer(x, y, z, radius, ignoreVehicle, i
 end
 
 local function findNearestSafeGroundSpot(originX, originY, zHint, ignoreVehicle, ignorePed, timeoutMs)
+    local deadline = GetGameTimer() + math.max(0, math.floor(tonumber(timeoutMs) or 0))
     local maxGroundZDelta = 8.0
     local sampleRadius = 2.0
     local candidates = {
@@ -81,6 +73,9 @@ local function findNearestSafeGroundSpot(originX, originY, zHint, ignoreVehicle,
     }
 
     for index = 1, SAFE_SPOT_SAMPLE_COUNT do
+        if timeoutMs ~= nil and GetGameTimer() >= deadline then
+            break
+        end
         local candidate = candidates[index]
         if type(candidate) ~= 'table' then
             break
@@ -368,7 +363,7 @@ local function runSmartJoinTeleport(payload)
         Wait(math.min(clampedWaitMs, remainingMs))
     end
 
-    local ok, _ = pcall(function()
+    local ok, teleportError = pcall(function()
         if teleportType == 'join' then
             destinationX, destinationY = resolveJoinTeleportDestination(payload, destinationX, destinationY)
         end
@@ -409,11 +404,12 @@ local function runSmartJoinTeleport(payload)
         end
     end
     if not ok then
+        print(('[racingsystem:teleport] Teleport failed: %s'):format(tostring(teleportError or 'unknown error')))
     end
     isTeleportInProgress = false
 end
 
-local function buildCheckpointTeleportPayload(checkpoint, nextCheckpoint)
+local function buildCheckpointTeleportPayload(checkpoint)
     if type(checkpoint) ~= 'table' then
         return nil
     end
@@ -432,8 +428,8 @@ local function buildCheckpointTeleportPayload(checkpoint, nextCheckpoint)
     return payload
 end
 
-local function runSmartCheckpointTeleport(checkpoint, nextCheckpoint)
-    local payload = buildCheckpointTeleportPayload(checkpoint, nextCheckpoint)
+local function runSmartCheckpointTeleport(checkpoint)
+    local payload = buildCheckpointTeleportPayload(checkpoint)
     if type(payload) ~= 'table' then
         return
     end
@@ -452,7 +448,6 @@ local function runSmartTeleportToPoint(x, y, z, heading)
         sourceType = tostring(type(joinedInstance) == 'table' and joinedInstance.sourceType or ''),
     })
 end
-RacingSystem.Client.runSmartTeleportToPoint = runSmartTeleportToPoint
 
 local function runSafetyExitTeleportIfNeeded()
     local ped = PlayerPedId()
@@ -501,8 +496,7 @@ end)
 AddEventHandler('racingsystem:smartCheckpointTeleport', function(payload)
     Citizen.CreateThread(function()
         local checkpoint = type(payload) == 'table' and payload.checkpoint or nil
-        local nextCheckpoint = type(payload) == 'table' and payload.nextCheckpoint or nil
-        runSmartCheckpointTeleport(checkpoint, nextCheckpoint)
+        runSmartCheckpointTeleport(checkpoint)
     end)
 end)
 

@@ -13,12 +13,11 @@ local MENU_TITLE    = tostring(MenuConfig.title or 'Race Control')
 local MENU_SUBTITLE = tostring(MenuConfig.subtitle or '~b~RACINGSYSTEM')
 local MENU_X        = math.floor(tonumber(MenuConfig.x) or 20)
 local CLIENT_EXTRA_PRINT_LEVEL = math.floor(tonumber(MenuConfig.extraPrintLevel) or 0)
-local function getClientExtraPrintLevel()
-    return CLIENT_EXTRA_PRINT_LEVEL == 2 and 2 or 0
-end
-
 local function logMenuVerbose(message)
-    local _ = message
+    if CLIENT_EXTRA_PRINT_LEVEL ~= 2 then
+        return
+    end
+    print(('[racingsystem:menu] %s'):format(tostring(message or '')))
 end
 
 local function loadAvailableRaceDefinitions()
@@ -69,22 +68,10 @@ local function setIntendedGreyState(item, shouldGrey)
     intendedGreyStateByItem[item] = nil
 end
 
-local function EnsureGreyedOrActive(item, active)
-    setIntendedGreyState(item, active ~= true)
-    item:Enabled(active == true)
-end
-
 RacingSystem.Menu.raceMenuInitialized    = false
 RacingSystem.Menu.pendingSelectRaceName  = nil
-RacingSystem.Menu.pendingEditorRaceName  = nil
 RacingSystem.Menu.deleteConfirmRaceName  = nil
 RacingSystem.Menu.countdownAcceptedByInstanceId = RacingSystem.Menu.countdownAcceptedByInstanceId or {}
-local function isLocalHostForInstance(instance)
-    local ownerSource = tonumber(type(instance) == 'table' and instance.owner)
-    local localSource = tonumber(GetPlayerServerId(PlayerId())) or 0
-    return ownerSource ~= nil and ownerSource > 0 and ownerSource == localSource
-end
-
 local function getMenuPlayerState()
     if type(RacingSystem.Client.editorState) == 'table' and RacingSystem.Client.editorState.active then
         return 'editing'

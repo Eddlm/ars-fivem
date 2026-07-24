@@ -2,6 +2,17 @@ RacingSystem = RacingSystem or {}
 RacingSystem.Server = RacingSystem.Server or {}
 RacingSystem.Server.Repository = RacingSystem.Server.Repository or {}
 
+local function removeResourceFile(relativePath)
+    local resourcePath = GetResourcePath(RacingSystem.Server.State.resourceName)
+    if type(resourcePath) ~= 'string' or resourcePath == '' then
+        return false, 'Could not resolve the resource path.'
+    end
+    local separator = resourcePath:find('\\', 1, true) and '\\' or '/'
+    local absolutePath = resourcePath .. separator .. tostring(relativePath or ''):gsub('/', separator)
+    local removed, removeError = os.remove(absolutePath)
+    return removed == true, removed and nil or tostring(removeError or 'unknown error')
+end
+
 local function loadMissionRaceFromFolder(raceName, folderName, label)
     local normalizedRequestedName = RacingSystem.NormalizeRaceName(raceName)
     local normalizedRequestedLookupKey = RacingSystem.Server.Parsing.normalizeRaceLookupKey(raceName)
@@ -18,57 +29,60 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
 
     local triedFileNames = {}
     local function tryLoadByFileName(fileName)
-        local normalizedFileToken = RacingSystem.NormalizeRaceName(fileName)
+        local safeFileToken = RacingSystem.Server.Parsing.sanitizeOnlineRaceFileName(fileName)
+        local normalizedFileToken = RacingSystem.NormalizeRaceName(safeFileToken)
         if not normalizedFileToken or triedFileNames[normalizedFileToken] then
             return nil
         end
         triedFileNames[normalizedFileToken] = true
         RacingSystem.Server.Logging.logVerbose(("[resolve:%s] try file token '%s' (normalized '%s')"):format(
             tostring(label),
-            tostring(fileName),
+            tostring(safeFileToken),
             tostring(normalizedFileToken)
         ))
 
         local filePath = folderName == RacingSystem.Server.State.customRaceFolder
-            and RacingSystem.Server.Parsing.buildCustomRaceFilePath(fileName)
-            or RacingSystem.Server.Parsing.buildOnlineRaceFilePath(fileName)
+            and RacingSystem.Server.Parsing.buildCustomRaceFilePath(safeFileToken)
+            or RacingSystem.Server.Parsing.buildOnlineRaceFilePath(safeFileToken)
         local rawMissionJson = LoadResourceFile(RacingSystem.Server.State.resourceName, filePath)
         if not rawMissionJson or rawMissionJson == '' then
             RacingSystem.Server.Logging.logVerbose(("[resolve:%s] token '%s' not found at '%s'"):format(
                 tostring(label),
-                tostring(fileName),
+                tostring(safeFileToken),
                 tostring(filePath)
             ))
-            return nil
+            return nil, nil
         end
 
         local parsedRace, parseError = RacingSystem.Server.Parsing.parseRaceDefinitionFromJson(
             rawMissionJson,
-            ('%s race "%s"'):format(label, fileName),
-            fileName
+            ('%s race "%s"'):format(label, safeFileToken),
+            safeFileToken
         )
         if not parsedRace then
-            RacingSystem.Server.Logging.logLevelOne(parseError or ('Could not parse %s race "%s".'):format(label, fileName))
+            RacingSystem.Server.Logging.logLevelOne(parseError or ('Could not parse %s race "%s".'):format(label, safeFileToken))
             RacingSystem.Server.Logging.logVerbose(("[resolve:%s] token '%s' parse failed: %s"):format(
                 tostring(label),
-                tostring(fileName),
+                tostring(safeFileToken),
                 tostring(parseError or 'unknown parse error')
             ))
-            return nil
+            return nil, parseError or ('Could not parse %s race "%s".'):format(label, safeFileToken)
         end
 
         local parsedName = RacingSystem.Trim(parsedRace.name or '')
         RacingSystem.Server.Logging.logVerbose(("[resolve:%s] token '%s' resolved name='%s' ugcId='%s' checkpoints=%s"):format(
             tostring(label),
-            tostring(fileName),
-            tostring(parsedName ~= '' and parsedName or fileName),
+            tostring(safeFileToken),
+            tostring(parsedName ~= '' and parsedName or safeFileToken),
             tostring(parsedRace.ugcId or 'nil'),
             tostring(#(parsedRace.checkpoints or {}))
         ))
         return {
-            name = parsedName ~= '' and parsedName or fileName,
-            fileName = fileName,
+            name = parsedName ~= '' and parsedName or safeFileToken,
+            fileName = safeFileToken,
             ugcId = parsedRace.ugcId,
+            sourceType = label,
+            raceId = label == 'online' and (parsedRace.ugcId or safeFileToken) or nil,
             checkpoints = RacingSystem.Server.Catalog.cloneCheckpoints(parsedRace.checkpoints),
             props = RacingSystem.Server.Snapshot.cloneOnlineRaceProps(parsedRace.props),
             modelHides = RacingSystem.Server.Snapshot.cloneOnlineRaceModelHides(parsedRace.modelHides),
@@ -80,9 +94,18 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
     local requestedToken = RacingSystem.Trim(raceName)
     local requestedSlug = RacingSystem.Server.Parsing.sanitizeOnlineRaceFileName(requestedToken)
     local requestedUGCId = RacingSystem.Server.Parsing.sanitizeUGCId(requestedToken)
-    local directMatch = tryLoadByFileName(requestedToken)
-        or (requestedSlug and tryLoadByFileName(requestedSlug))
-        or (requestedUGCId and tryLoadByFileName(requestedUGCId))
+    local directMatch = nil
+    local directError = nil
+    for _, candidate in ipairs({ requestedToken, requestedSlug, requestedUGCId }) do
+        if candidate then
+            local candidateMatch, candidateError = tryLoadByFileName(candidate)
+            if candidateMatch then
+                directMatch = candidateMatch
+                break
+            end
+            directError = candidateError or directError
+        end
+    end
     if directMatch then
         RacingSystem.Server.Logging.logVerbose(("[resolve:%s] direct token match success -> file='%s' name='%s' ugcId='%s'"):format(
             tostring(label),
@@ -91,6 +114,9 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
             tostring(directMatch.ugcId or 'nil')
         ))
         return directMatch
+    end
+    if directError then
+        return nil, directError, 'invalid'
     end
 
     for _, fileName in ipairs(RacingSystem.Server.Parsing.listJsonFilesInFolder(folderName)) do
@@ -112,7 +138,7 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
                 local normalizedParsedName = RacingSystem.NormalizeRaceName(parsedName)
                 local normalizedFileName = RacingSystem.NormalizeRaceName(fileName)
                 local normalizedUGCId = RacingSystem.NormalizeRaceName(parsedRace.ugcId)
-                local derivedHumanName = extractHumanNameFromFileBase(fileName, parsedRace.ugcId)
+                local derivedHumanName = RacingSystem.Server.Parsing.extractHumanNameFromFileBase(fileName, parsedRace.ugcId)
                 local normalizedDerivedHumanName = RacingSystem.NormalizeRaceName(derivedHumanName)
                 local parsedLookupKey = RacingSystem.Server.Parsing.normalizeRaceLookupKey(parsedName)
                 local fileLookupKey = RacingSystem.Server.Parsing.normalizeRaceLookupKey(fileName)
@@ -135,6 +161,8 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
                         name = parsedName ~= '' and parsedName or fileName,
                         fileName = fileName,
                         ugcId = parsedRace.ugcId,
+                        sourceType = label,
+                        raceId = label == 'online' and (parsedRace.ugcId or fileName) or nil,
                         checkpoints = RacingSystem.Server.Catalog.cloneCheckpoints(parsedRace.checkpoints),
                         props = RacingSystem.Server.Snapshot.cloneOnlineRaceProps(parsedRace.props),
                         modelHides = RacingSystem.Server.Snapshot.cloneOnlineRaceModelHides(parsedRace.modelHides),
@@ -162,6 +190,8 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
                         name = parsedName ~= '' and parsedName or fileName,
                         fileName = fileName,
                         ugcId = parsedRace.ugcId,
+                        sourceType = label,
+                        raceId = label == 'online' and (parsedRace.ugcId or fileName) or nil,
                         checkpoints = RacingSystem.Server.Catalog.cloneCheckpoints(parsedRace.checkpoints),
                         props = RacingSystem.Server.Snapshot.cloneOnlineRaceProps(parsedRace.props),
                         modelHides = RacingSystem.Server.Snapshot.cloneOnlineRaceModelHides(parsedRace.modelHides),
@@ -181,7 +211,7 @@ local function loadMissionRaceFromFolder(raceName, folderName, label)
         tostring(raceName),
         tostring(folderName)
     ))
-    return nil, ('No %s race named "%s" was found.'):format(label, tostring(raceName))
+    return nil, ('No %s race named "%s" was found.'):format(label, tostring(raceName)), 'not_found'
 end
 
 local function loadCustomRace(raceName)
@@ -198,7 +228,7 @@ local function saveBundledUGCById(ugcId)
         return nil, 'A valid UGC id is required.'
     end
 
-    local rawMissionJson, fetchError = fetchUGCJsonContentById(normalizedUGCId)
+    local rawMissionJson, fetchError = RacingSystem.Server.Parsing.fetchUGCJsonContentById(normalizedUGCId)
     if not rawMissionJson then
         return nil, fetchError or 'Could not download the UGC JSON.'
     end
@@ -236,10 +266,10 @@ local function saveBundledUGCById(ugcId)
         displayRaceName = normalizedUGCId
     end
 
-    local normalizedRaceJson = RacingSystem.Server.Parsing.buildNormalizedOnlineRaceJson(displayRaceName, normalizedUGCId, parsedRace)
+    local normalizedRaceJson, encodeError = RacingSystem.Server.Parsing.buildNormalizedOnlineRaceJson(displayRaceName, normalizedUGCId, parsedRace)
     if type(normalizedRaceJson) ~= 'string' or normalizedRaceJson == '' then
         cleanupTempFile()
-        return nil, 'Could not encode normalized online race JSON.'
+        return nil, encodeError or 'Could not encode normalized online race JSON.'
     end
 
     local filePath = RacingSystem.Server.Parsing.buildOnlineRaceFilePath(normalizedUGCId)
@@ -254,7 +284,18 @@ local function saveBundledUGCById(ugcId)
 
     local loadedRace, loadError = loadBundledOnlineRace(normalizedUGCId)
     if not loadedRace then
+        removeResourceFile(filePath)
         return nil, loadError or 'The imported race could not be loaded after saving.'
+    end
+
+    local definition, registerError = RacingSystem.Server.Catalog.registerKnownRaceDefinition(
+        loadedRace.name,
+        'online',
+        loadedRace.ugcId or loadedRace.fileName
+    )
+    if not definition then
+        removeResourceFile(filePath)
+        return nil, registerError or 'The imported race catalog entry could not be saved.'
     end
 
     return {
@@ -265,50 +306,6 @@ local function saveBundledUGCById(ugcId)
         propCount = #(loadedRace.props or {}),
         modelHideCount = #(loadedRace.modelHides or {}),
     }
-end
-
-local function validateBundledUGCById(ugcId)
-    local normalizedUGCId = RacingSystem.Server.Parsing.sanitizeUGCId(ugcId)
-    if not normalizedUGCId then
-        return nil, 'A valid UGC id is required.'
-    end
-
-    local rawMissionJson, fetchError = fetchUGCJsonContentById(normalizedUGCId)
-    if not rawMissionJson then
-        return nil, fetchError or 'Could not download the UGC JSON.'
-    end
-
-    local parsedRace, parseError = RacingSystem.Server.Parsing.parseRaceDefinitionFromJson(
-        rawMissionJson,
-        ('downloaded UGC "%s"'):format(normalizedUGCId),
-        normalizedUGCId
-    )
-    if not parsedRace then
-        return nil, parseError or 'The downloaded UGC could not be parsed.'
-    end
-
-    return {
-        ugcId = normalizedUGCId,
-        checkpointCount = #(parsedRace.checkpoints or {}),
-        propCount = #(parsedRace.props or {}),
-        modelHideCount = #(parsedRace.modelHides or {}),
-    }, nil
-end
-
-local function registerRaceDefinitionIfValid(raceName)
-    local customRace = loadCustomRace(raceName)
-    if customRace then
-        local definition = RacingSystem.Server.Catalog.registerKnownRaceDefinition(customRace.name, 'custom')
-        return definition, nil
-    end
-
-    local onlineRace = loadBundledOnlineRace(raceName)
-    if onlineRace then
-        local definition = RacingSystem.Server.Catalog.registerKnownRaceDefinition(onlineRace.name, 'online', onlineRace.ugcId or onlineRace.fileName)
-        return definition, nil
-    end
-
-    return nil, 'That race name is not valid in CustomRaces or OnlineRaces.'
 end
 
 local function deleteRaceDefinition(request)
@@ -356,7 +353,7 @@ local function deleteRaceDefinition(request)
         return nil, 'That race is an immutable example and cannot be deleted.'
     end
 
-    if findRaceInstanceByName(definitionLookupName) then
+    if RacingSystem.Server.Snapshot.findRaceInstanceByName(definitionLookupName) then
         return nil, 'Cannot delete a race while its instance is active.'
     end
 
@@ -384,34 +381,39 @@ local function deleteRaceDefinition(request)
 
     local targetFileName = nil
     if sourceType == 'custom' then
-        targetFileName = (customRace and customRace.fileName) or RacingSystem.Server.Parsing.sanitizeOnlineRaceFileName(displayName) or definitionLookupName
+        targetFileName = RacingSystem.Server.Parsing.sanitizeOnlineRaceFileName(
+            (customRace and customRace.fileName) or displayName or definitionLookupName
+        )
     else
-        targetFileName = (onlineRace and onlineRace.fileName) or resolvedRaceId or RacingSystem.Server.Parsing.sanitizeOnlineRaceFileName(displayName) or definitionLookupName
+        targetFileName = RacingSystem.Server.Parsing.sanitizeOnlineRaceFileName(
+            (onlineRace and onlineRace.fileName) or resolvedRaceId or displayName or definitionLookupName
+        )
+    end
+    if not targetFileName then
+        return nil, 'The race file name is invalid.'
     end
 
     local relativePath = sourceType == 'custom'
         and RacingSystem.Server.Parsing.buildCustomRaceFilePath(targetFileName)
         or RacingSystem.Server.Parsing.buildOnlineRaceFilePath(targetFileName)
 
-    local fileRemoved = false
-    local fileRemoveError = nil
-    local resourcePath = GetResourcePath(RacingSystem.Server.State.resourceName)
-    if type(resourcePath) == 'string' and resourcePath ~= '' then
-        local separator = resourcePath:find('\\', 1, true) and '\\' or '/'
-        local absolutePath = resourcePath .. separator .. relativePath:gsub('/', separator)
-        local removeOk, removeError = os.remove(absolutePath)
-        if removeOk then
-            fileRemoved = true
-        else
-            fileRemoveError = tostring(removeError or 'unknown error')
-            RacingSystem.Server.Logging.logError(("The server could not delete '%s'. Reason: %s. Continuing with race index deletion."):format(relativePath, fileRemoveError))
-        end
-    else
-        fileRemoveError = 'Could not resolve the resource path.'
-        RacingSystem.Server.Logging.logError('Could not resolve the resource path. Continuing with race index deletion only.')
+    local unregistered, unregisterError = RacingSystem.Server.Catalog.unregisterKnownRaceDefinition(definitionLookupName)
+    if not unregistered then
+        return nil, unregisterError or 'The race catalog index could not be updated.'
     end
 
-    RacingSystem.Server.Catalog.unregisterKnownRaceDefinition(definitionLookupName)
+    local removeOk, removeError = removeResourceFile(relativePath)
+    if not removeOk then
+        RacingSystem.Server.State.knownRaceDefinitionsByName[definitionLookupName] = definition
+        local rollbackSaved = RacingSystem.Server.Catalog.saveRaceIndex()
+        local reason = tostring(removeError or 'unknown error')
+        RacingSystem.Server.Logging.logError(("The server could not delete '%s'. Reason: %s. Catalog rollback: %s."):format(
+            relativePath,
+            reason,
+            rollbackSaved and 'saved' or 'failed'
+        ))
+        return nil, ("Could not delete '%s': %s"):format(relativePath, reason)
+    end
 
     return {
         name = displayName ~= '' and displayName or definitionLookupName,
@@ -419,8 +421,8 @@ local function deleteRaceDefinition(request)
         sourceType = sourceType,
         raceId = resolvedRaceId,
         filePath = relativePath,
-        fileRemoved = fileRemoved,
-        fileRemoveError = fileRemoveError,
+        fileRemoved = true,
+        fileRemoveError = nil,
     }, nil
 end
 
@@ -437,14 +439,21 @@ local function createNewRaceDefinition(ownerSource, raceName)
 
     local filePath = RacingSystem.Server.Parsing.buildCustomRaceFilePath(fileName)
 
-    local missionJson = RacingSystem.Server.Parsing.buildMissionJsonFromCheckpoints({}, nil, sanitizedName)
+    local missionJson, encodeError = RacingSystem.Server.Parsing.buildMissionJsonFromCheckpoints({}, nil, sanitizedName)
+    if not missionJson then
+        return nil, encodeError or 'Could not encode the new race mission.'
+    end
     local saveOk = SaveResourceFile(RacingSystem.Server.State.resourceName, filePath, missionJson, -1)
     if not saveOk then
         RacingSystem.Server.Logging.logError(("The server could not create new race '%s'."):format(filePath))
         return nil, ('Could not create %s.'):format(filePath)
     end
 
-    RacingSystem.Server.Catalog.registerKnownRaceDefinition(sanitizedName, 'custom')
+    local registeredDefinition, registerError = RacingSystem.Server.Catalog.registerKnownRaceDefinition(sanitizedName, 'custom')
+    if not registeredDefinition then
+        removeResourceFile(filePath)
+        return nil, registerError or 'Could not save the new race catalog entry.'
+    end
     RacingSystem.Server.Snapshot.broadcastDefinitions()
 
     return {
@@ -476,19 +485,31 @@ local function saveRaceDefinition(ownerSource, raceName, checkpoints)
     end
 
     local filePath = RacingSystem.Server.Parsing.buildCustomRaceFilePath(fileName)
-    local existingMissionJson = LoadResourceFile(RacingSystem.Server.State.resourceName, filePath)
-    if (not existingMissionJson or existingMissionJson == '') then
+    local existingCustomMissionJson = LoadResourceFile(RacingSystem.Server.State.resourceName, filePath)
+    local existingMissionJson = existingCustomMissionJson
+    if not existingMissionJson or existingMissionJson == '' then
         local existingOnlinePath = RacingSystem.Server.Parsing.buildOnlineRaceFilePath(fileName)
         existingMissionJson = LoadResourceFile(RacingSystem.Server.State.resourceName, existingOnlinePath)
     end
-    local missionJson = RacingSystem.Server.Parsing.buildMissionJsonFromCheckpoints(sanitizedCheckpoints, existingMissionJson, sanitizedName)
+    local missionJson, encodeError = RacingSystem.Server.Parsing.buildMissionJsonFromCheckpoints(sanitizedCheckpoints, existingMissionJson, sanitizedName)
+    if not missionJson then
+        return nil, encodeError or 'Could not encode the race mission.'
+    end
     local saveOk = SaveResourceFile(RacingSystem.Server.State.resourceName, filePath, missionJson, -1)
     if not saveOk then
         RacingSystem.Server.Logging.logError(("The server could not save '%s'."):format(filePath))
         return nil, ('Could not save %s.'):format(filePath)
     end
 
-    RacingSystem.Server.Catalog.registerKnownRaceDefinition(sanitizedName, 'custom')
+    local registeredDefinition, registerError = RacingSystem.Server.Catalog.registerKnownRaceDefinition(sanitizedName, 'custom')
+    if not registeredDefinition then
+        if type(existingCustomMissionJson) == 'string' and existingCustomMissionJson ~= '' then
+            SaveResourceFile(RacingSystem.Server.State.resourceName, filePath, existingCustomMissionJson, -1)
+        else
+            removeResourceFile(filePath)
+        end
+        return nil, registerError or 'Could not save the race catalog entry.'
+    end
 
     return {
         id = nil,
@@ -506,8 +527,6 @@ RacingSystem.Server.Repository.loadMissionRaceFromFolder = loadMissionRaceFromFo
 RacingSystem.Server.Repository.loadCustomRace = loadCustomRace
 RacingSystem.Server.Repository.loadBundledOnlineRace = loadBundledOnlineRace
 RacingSystem.Server.Repository.saveBundledUGCById = saveBundledUGCById
-RacingSystem.Server.Repository.validateBundledUGCById = validateBundledUGCById
-RacingSystem.Server.Repository.registerRaceDefinitionIfValid = registerRaceDefinitionIfValid
 RacingSystem.Server.Repository.deleteRaceDefinition = deleteRaceDefinition
 RacingSystem.Server.Repository.createNewRaceDefinition = createNewRaceDefinition
 RacingSystem.Server.Repository.saveRaceDefinition = saveRaceDefinition

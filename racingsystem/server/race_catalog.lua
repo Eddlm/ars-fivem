@@ -63,14 +63,17 @@ local function buildSecondaryCheckpointFromMetadata(index, primaryCheckpoint, ra
         return nil
     end
 
+    local minimumRadius = tonumber((RacingSystem.Config or {}).checkpointRadiusMinMeters) or 2.0
+    local maximumRadius = math.max(minimumRadius, tonumber((RacingSystem.Config or {}).checkpointRadiusMaxMeters) or 40.0)
     local radius = tonumber(primaryCheckpoint.radius) or 8.0
     local secondarySizes = type(metadata.sndsz) == 'table' and metadata.sndsz or nil
     if secondarySizes then
         local size = tonumber(secondarySizes[index])
-        if size then
-            radius = math.max(2.0, 8.0 * size)
+        if size and size == size and size > -math.huge and size < math.huge then
+            radius = 8.0 * size
         end
     end
+    radius = math.max(minimumRadius, math.min(maximumRadius, radius))
 
     return {
         index = tonumber(primaryCheckpoint.index) or index,
@@ -182,12 +185,12 @@ local function saveRaceIndex()
         end
     end
 
-    local encoded = json.encode({
+    local encoded, encodeError = RacingSystem.EncodeJson({
         definitions = filteredDefinitions,
-    })
+    }, RacingSystem.Server.State.indexFile)
 
-    if not encoded or encoded == '' then
-        RacingSystem.Server.Logging.logError(("The server could not encode '%s'."):format(RacingSystem.Server.State.indexFile))
+    if not encoded then
+        RacingSystem.Server.Logging.logError(encodeError or ("The server could not encode '%s'."):format(RacingSystem.Server.State.indexFile))
         return false
     end
 
@@ -217,10 +220,10 @@ local function loadRaceIndex()
             return 0
         end
 
-        local decodedExamples = json.decode(rawExamples)
-        local exampleDefinitions = type(decodedExamples) == 'table' and decodedExamples.definitions or nil
+        local decodedExamples, decodeError = RacingSystem.DecodeJson(rawExamples, RacingSystem.Server.State.indexExamplesFile)
+        local exampleDefinitions = decodedExamples and decodedExamples.definitions or nil
         if type(exampleDefinitions) ~= 'table' then
-            RacingSystem.Server.Logging.logError(("The server could not read '%s' as a race definition list."):format(RacingSystem.Server.State.indexExamplesFile))
+            RacingSystem.Server.Logging.logError(decodeError or ("The server could not read '%s' as a race definition list."):format(RacingSystem.Server.State.indexExamplesFile))
             return 0
         end
 
@@ -250,10 +253,10 @@ local function loadRaceIndex()
         return
     end
 
-    local decoded = json.decode(rawIndex)
-    local definitions = type(decoded) == 'table' and decoded.definitions or nil
+    local decoded, decodeError = RacingSystem.DecodeJson(rawIndex, RacingSystem.Server.State.indexFile)
+    local definitions = decoded and decoded.definitions or nil
     if type(definitions) ~= 'table' then
-        RacingSystem.Server.Logging.logError(("The server could not read '%s' as a race definition list."):format(RacingSystem.Server.State.indexFile))
+        RacingSystem.Server.Logging.logError(decodeError or ("The server could not read '%s' as a race definition list."):format(RacingSystem.Server.State.indexFile))
         return
     end
 
@@ -288,16 +291,21 @@ local function registerKnownRaceDefinition(raceName, sourceType, raceId)
         normalizedRaceId = nil
     end
 
-    RacingSystem.Server.State.knownRaceDefinitionsByName[normalizedName] = {
+    local previousDefinition = RacingSystem.Server.State.knownRaceDefinitionsByName[normalizedName]
+    local definition = {
         lookupName = normalizedName,
         name = displayName,
         sourceType = normalizedSourceType,
         raceId = normalizedRaceId,
         updatedAt = os.time(),
     }
+    RacingSystem.Server.State.knownRaceDefinitionsByName[normalizedName] = definition
 
-    saveRaceIndex()
-    return RacingSystem.Server.State.knownRaceDefinitionsByName[normalizedName]
+    if not saveRaceIndex() then
+        RacingSystem.Server.State.knownRaceDefinitionsByName[normalizedName] = previousDefinition
+        return nil, 'The race catalog index could not be saved.'
+    end
+    return definition, nil
 end
 
 local function unregisterKnownRaceDefinition(raceName)
@@ -309,9 +317,13 @@ local function unregisterKnownRaceDefinition(raceName)
         return false
     end
 
+    local previousDefinition = RacingSystem.Server.State.knownRaceDefinitionsByName[normalizedName]
     RacingSystem.Server.State.knownRaceDefinitionsByName[normalizedName] = nil
-    saveRaceIndex()
-    return true
+    if not saveRaceIndex() then
+        RacingSystem.Server.State.knownRaceDefinitionsByName[normalizedName] = previousDefinition
+        return false, 'The race catalog index could not be saved.'
+    end
+    return true, nil
 end
 
 RacingSystem.Server.Catalog.cloneCheckpoints = cloneCheckpoints

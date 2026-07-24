@@ -53,6 +53,5 @@ CreateThread(function()
 end)
 
 RacingSystem.Server.Catalog.loadRaceIndex()
-RacingSystem.Server.Parsing.runIntegrityScript()
 
 

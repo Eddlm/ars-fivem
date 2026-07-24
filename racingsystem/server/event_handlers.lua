@@ -1,6 +1,8 @@
 RacingSystem = RacingSystem or {}
 RacingSystem.Server = RacingSystem.Server or {}
 
+local ugcImportInProgress = false
+
 local function setRaceMembershipStateBagForSource(source, instance)
     local src = tonumber(source) or 0
     if src <= 0 or type(instance) ~= 'table' then
@@ -94,17 +96,31 @@ RegisterNetEvent('racingsystem:editor:load', function(raceName)
     local src = source
     local definition = nil
 
-    local customDefinition = RacingSystem.Server.Repository.loadCustomRace(raceName)
+    local customDefinition, customError, customStatus = RacingSystem.Server.Repository.loadCustomRace(raceName)
     if customDefinition then
         definition = customDefinition
         RacingSystem.Server.Logging.logVerbose(('[requestEditorRace] Loaded "%s" from CustomRaces'):format(raceName))
+    elseif customStatus ~= 'not_found' then
+        TriggerClientEvent('racingsystem:editor:loaded', src, {
+            ok = false,
+            error = customError or 'The custom race file could not be read.',
+            data = { requestedName = RacingSystem.Trim(raceName), race = nil },
+        })
+        return
     end
 
     if not definition then
-        local onlineDefinition = RacingSystem.Server.Repository.loadBundledOnlineRace(raceName)
+        local onlineDefinition, onlineError, onlineStatus = RacingSystem.Server.Repository.loadBundledOnlineRace(raceName)
         if onlineDefinition then
             definition = onlineDefinition
             RacingSystem.Server.Logging.logVerbose(('[requestEditorRace] Loaded "%s" from OnlineRaces'):format(raceName))
+        elseif onlineStatus ~= 'not_found' then
+            TriggerClientEvent('racingsystem:editor:loaded', src, {
+                ok = false,
+                error = onlineError or 'The online race file could not be read.',
+                data = { requestedName = RacingSystem.Trim(raceName), race = nil },
+            })
+            return
         end
     end
 
@@ -125,13 +141,20 @@ RegisterNetEvent('racingsystem:editor:load', function(raceName)
         RacingSystem.Server.Logging.logVerbose(('[requestEditorRace] Created new race "%s"'):format(raceName))
     else
         if definition.name then
-            RacingSystem.Server.Catalog.registerKnownRaceDefinition(
+            local registeredDefinition, registerError = RacingSystem.Server.Catalog.registerKnownRaceDefinition(
                 definition.name,
                 definition.sourceType or 'custom',
-                definition.ugcId or definition.fileName
+                definition.raceId or definition.ugcId or definition.fileName
             )
+            if not registeredDefinition then
+                TriggerClientEvent('racingsystem:editor:loaded', src, {
+                    ok = false,
+                    error = registerError or 'Could not update the race catalog.',
+                    data = { requestedName = RacingSystem.Trim(raceName), race = nil },
+                })
+                return
+            end
             RacingSystem.Server.Snapshot.broadcastDefinitions()
-            RacingSystem.Server.Snapshot.broadcastInstanceList()
         end
     end
 
@@ -170,11 +193,6 @@ RegisterNetEvent('racingsystem:editor:save', function(payload)
         tostring(definition.name or ""),
         tostring(#(definition.checkpoints or {}))
     ))
-    RacingSystem.Server.Catalog.registerKnownRaceDefinition(
-        definition.name,
-        definition.sourceType or 'custom',
-        definition.ugcId or definition.fileName
-    )
     RacingSystem.Server.Snapshot.broadcastDefinitions()
     TriggerClientEvent('racingsystem:editor:saved', src, {
         ok = true,
@@ -187,35 +205,33 @@ end)
 
 RegisterNetEvent('racingsystem:ugc:importById', function(ugcId)
     local src = source
-    local validation, validationError = RacingSystem.Server.Repository.validateBundledUGCById(ugcId)
-
-    if not validation then
+    if ugcImportInProgress then
         TriggerClientEvent('racingsystem:ugc:importResult', src, {
             ok = false,
-            error = validationError or 'Could not validate GTAO race URL.',
-            data = {
-                ugcId = tostring(ugcId or ''),
-            },
+            error = 'Another GTAO race import is already in progress.',
+            data = { ugcId = tostring(ugcId or '') },
         })
         return
     end
 
-    local importedRace, importError = RacingSystem.Server.Repository.saveBundledUGCById(validation.ugcId)
+    ugcImportInProgress = true
+    local importCallOk, importedRace, importError = pcall(RacingSystem.Server.Repository.saveBundledUGCById, ugcId)
+    ugcImportInProgress = false
+    if not importCallOk then
+        importError = ('The GTAO import failed unexpectedly: %s'):format(tostring(importedRace or 'unknown error'))
+        importedRace = nil
+    end
     if not importedRace then
         TriggerClientEvent('racingsystem:ugc:importResult', src, {
             ok = false,
-            error = importError or 'The UGC JSON validated but could not be imported.',
-            data = {
-                ugcId = tostring(validation.ugcId or ugcId or ''),
-            },
+            error = importError or 'The GTAO race could not be imported.',
+            data = { ugcId = tostring(ugcId or '') },
         })
         return
     end
 
-    RacingSystem.Server.Catalog.registerKnownRaceDefinition(importedRace.raceName, 'online', importedRace.ugcId)
-
     RacingSystem.Server.Logging.auditLog("importGTAORace", src, ("imported UGC '%s' as '%s'"):format(
-        tostring(importedRace.ugcId or validation.ugcId),
+        tostring(importedRace.ugcId or ugcId),
         tostring(importedRace.raceName)
     ))
 
@@ -224,11 +240,11 @@ RegisterNetEvent('racingsystem:ugc:importById', function(ugcId)
         ok = true,
         error = nil,
         data = {
-            ugcId = tostring(importedRace.ugcId or validation.ugcId or ''),
-            raceName = tostring(importedRace.raceName or validation.ugcId or ''),
-            checkpointCount = tonumber(importedRace.checkpointCount) or tonumber(validation.checkpointCount) or 0,
-            propCount = tonumber(importedRace.propCount) or tonumber(validation.propCount) or 0,
-            modelHideCount = tonumber(importedRace.modelHideCount) or tonumber(validation.modelHideCount) or 0,
+            ugcId = tostring(importedRace.ugcId or ugcId or ''),
+            raceName = tostring(importedRace.raceName or importedRace.ugcId or ''),
+            checkpointCount = tonumber(importedRace.checkpointCount) or 0,
+            propCount = tonumber(importedRace.propCount) or 0,
+            modelHideCount = tonumber(importedRace.modelHideCount) or 0,
         },
     })
 end)
@@ -430,9 +446,9 @@ RegisterNetEvent('racingsystem:race:restart', function()
     end
 end)
 
-RegisterNetEvent('racingsystem:race:checkpointPassed', function(instanceId, checkpointIndex, lapTimingPayload)
+RegisterNetEvent('racingsystem:race:checkpointPassed', function(instanceId, checkpointIndex)
     local src = source
-    local instance, checkpointError = RacingSystem.Server.Instances.handleCheckpointPassed(src, instanceId, checkpointIndex, lapTimingPayload)
+    local instance, checkpointError = RacingSystem.Server.Instances.handleCheckpointPassed(src, instanceId, checkpointIndex)
 
     if not instance then
         if checkpointError ~= 'Ignored out-of-order checkpoint pass.' then
@@ -471,7 +487,12 @@ end)
 RegisterNetEvent('racingsystem:race:kill', function(instanceId)
     local src = source
     local numericInstanceId = tonumber(instanceId) or -1
-    if not RacingSystem.Server.Logging.hasAdminAccess(src) then
+    local instance = RacingSystem.Server.State.raceInstancesById[numericInstanceId]
+    local isAdmin = RacingSystem.Server.Logging.hasAdminAccess(src)
+    local isAllowedOwner = RacingSystem.Config.raceOwnerCanKillOwnedRace == true
+        and type(instance) == 'table'
+        and tonumber(instance.owner) == tonumber(src)
+    if not isAdmin and not isAllowedOwner then
         RacingSystem.Server.Logging.logLevelOne(("%s tried to kill race instance %s without permission."):format(
             RacingSystem.Server.Logging.resolvePlayerLogLabel(src),
             tostring(numericInstanceId)
@@ -484,7 +505,11 @@ RegisterNetEvent('racingsystem:race:kill', function(instanceId)
         tostring(RacingSystem.Server.Logging.resolvePlayerLogLabel(src)),
         tostring(numericInstanceId)
     ))
-    local killedInstance, killError = RacingSystem.Server.Instances.killRaceInstanceById(numericInstanceId)
+    local killedInstance, killError = RacingSystem.Server.Instances.killRaceInstanceById(
+        numericInstanceId,
+        src,
+        isAdmin and 'killed_by_admin' or 'killed_by_owner'
+    )
 
     if not killedInstance then
         RacingSystem.Server.Logging.logLevelOne(("%s could not kill race instance %s. Reason: %s."):format(

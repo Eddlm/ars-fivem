@@ -27,6 +27,7 @@ local initialStateTargets = {}
 local listBroadcasts = 0
 local standingsBroadcasts = 0
 local killCalls = 0
+local killReason = nil
 local resetCalls = 0
 local lifecycleTransitions = 0
 local adminSources = {}
@@ -68,7 +69,7 @@ RacingSystem = {
         running = 'running',
         finished = 'finished',
     },
-    Config = { countdownMs = 5000 },
+    Config = { countdownMs = 5000, raceOwnerCanKillOwnedRace = false },
     Server = {
         State = { raceInstancesById = {} },
         Snapshot = {
@@ -100,8 +101,9 @@ RacingSystem = {
             resetRaceInstanceProgress = function()
                 resetCalls = resetCalls + 1
             end,
-            killRaceInstanceById = function(instanceId)
+            killRaceInstanceById = function(instanceId, _, reason)
                 killCalls = killCalls + 1
+                killReason = reason
                 return RacingSystem.Server.State.raceInstancesById[tonumber(instanceId)]
             end,
             removeSourceFromRaceInstances = function()
@@ -202,6 +204,23 @@ expectEqual('authorized kill invoked', killCalls, 1)
 expect('authorized kill clears first membership', playerStates[21]['rs:instanceId'] == nil)
 expect('authorized kill clears second membership', playerStates[22]['rs:instanceId'] == nil)
 expectEqual('authorized kill broadcasts list', listBroadcasts, 1)
+expectEqual('authorized kill lifecycle reason', killReason, 'killed_by_admin')
+
+-- The documented owner-kill option is enforced by the server when enabled.
+source = 50
+RacingSystem.Config.raceOwnerCanKillOwnedRace = true
+RacingSystem.Server.State.raceInstancesById[10] = {
+    id = 10,
+    owner = 50,
+    name = 'Owner Kill Test',
+    entrants = {},
+}
+killCalls = 0
+killReason = nil
+netHandlers['racingsystem:race:kill'](10)
+expectEqual('configured owner kill invoked', killCalls, 1)
+expectEqual('configured owner kill lifecycle reason', killReason, 'killed_by_owner')
+RacingSystem.Config.raceOwnerCanKillOwnedRace = false
 
 -- Host-drop results clear every surviving guest represented by terminated instances.
 source = 30

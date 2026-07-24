@@ -433,7 +433,7 @@ local function getLastPlaceEntrant(instance)
         return nil
     end
     local ordered = buildOrderedEntrants(instance)
-    if #ordered <= 1 then
+    if #ordered == 0 then
         return nil
     end
     return ordered[#ordered]
@@ -500,7 +500,7 @@ local function buildViewerPayload(viewerSource)
         source = numericViewerSource,
         isAdmin = viewerIsAdmin,
         canDeleteRaceDefinitions = viewerIsAdmin,
-        canKillOwnedInstances = true,
+        canKillOwnedInstances = RacingSystem.Config.raceOwnerCanKillOwnedRace == true,
     }
 end
 

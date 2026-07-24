@@ -6,28 +6,12 @@ local spectatorConfig = {
     cameraName = 'DEFAULT_SCRIPTED_CAMERA',
     updateIntervalMs = 0,
     defaultFov = 55.0,
-    minFov = 25.0,
-    maxFov = 85.0,
-    defaultHeightMeters = 4.0,
-    minHeightMeters = 10.0,
-    maxHeightMeters = 160.0,
     minPitchDegrees = -80.0,
     maxPitchDegrees = 80.0,
     defaultPitchDegrees = -55.0,
     defaultYawDegrees = 0.0,
     moveSpeedMetersPerSecond = 42.0,
     verticalSpeedMetersPerSecond = 24.0,
-    sprintMultiplier = 2.0,
-    edgeScrollThresholdNormalized = 0.025,
-    zoomStepFovDegrees = 2.5,
-    zoomStepHeightMeters = 2.0,
-    yawStepDegrees = 1.5,
-    pitchStepDegrees = 1.0,
-    smoothing = {
-        position = 10.0,
-        rotation = 14.0,
-        zoom = 16.0,
-    },
     controls = {
         moveForward = 32,
         moveBackward = 33,
@@ -35,14 +19,6 @@ local spectatorConfig = {
         moveRight = 35,
         moveUp = 21,
         moveDown = 36,
-        sprint = 21,
-        rotateLeft = 174,
-        rotateRight = 175,
-        rotateUp = 172,
-        rotateDown = 173,
-        zoomIn = 241,
-        zoomOut = 242,
-        dragPan = 25,
     },
 }
 RacingSystem.Client.Spectator.config = spectatorConfig
@@ -58,43 +34,11 @@ local spectatorRuntime = {
         active = false,
         initialized = false,
         fov = spectatorConfig.defaultFov,
-        height = spectatorConfig.defaultHeightMeters,
         pitch = spectatorConfig.defaultPitchDegrees,
         yaw = spectatorConfig.defaultYawDegrees,
         roll = 0.0,
         coords = nil,
         lookAt = nil,
-    },
-    motion = {
-        moveVector = vector3(0.0, 0.0, 0.0),
-        worldVelocity = vector3(0.0, 0.0, 0.0),
-        edgeScrollVector = vector3(0.0, 0.0, 0.0),
-        dragPanVector = vector3(0.0, 0.0, 0.0),
-        zoomVelocity = 0.0,
-        yawVelocity = 0.0,
-        pitchVelocity = 0.0,
-    },
-    input = {
-        hasKeyboardInput = false,
-        hasMouseInput = false,
-        hasGamepadInput = false,
-        mouseScreenX = 0.5,
-        mouseScreenY = 0.5,
-        mouseDeltaX = 0.0,
-        mouseDeltaY = 0.0,
-        wheelDelta = 0.0,
-        lastInputAt = 0,
-    },
-    bounds = {
-        center = nil,
-        radius = nil,
-        minZ = nil,
-        maxZ = nil,
-    },
-    debug = {
-        drawAnchor = false,
-        drawBounds = false,
-        printInput = false,
     },
 }
 RacingSystem.Client.Spectator.runtime = spectatorRuntime
@@ -365,9 +309,6 @@ local function startSpectatorMode()
     camera.pitch = spectatorConfig.defaultPitchDegrees
     camera.yaw = spectatorConfig.defaultYawDegrees
     camera.roll = 0.0
-    spectatorRuntime.motion.pitchVelocity = 0.0
-    spectatorRuntime.motion.yawVelocity = 0.0
-
     setCameraToAnchor()
     SetCamFov(camera.handle, camera.fov)
     SetCamRot(camera.handle, camera.pitch, 0.0, camera.yaw, 2)

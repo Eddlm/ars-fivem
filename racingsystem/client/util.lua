@@ -43,13 +43,6 @@ function RacingSystem.Client.Util.ShowWarningSubtitle(message, durationMs, color
     EndTextCommandPrint(math.max(0, math.floor(tonumber(durationMs) or 1000)), true)
 end
 
-function RacingSystem.Client.Util.UpdateCountdownVisual(_, remainingMs)
-    -- Countdown subtitle removed (using GO shard instead)
-end
-
-function RacingSystem.Client.Util.ClearCountdownVisual()
-end
-
 function RacingSystem.Client.Util.ShowRaceEventVisual(title, subtitle, durationMs)
     raceEventVisualState.title = tostring(title or '')
     raceEventVisualState.subtitle = tostring(subtitle or '')

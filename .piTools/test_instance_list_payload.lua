@@ -174,6 +174,12 @@ RacingSystem.Server.State.raceInstancesById = {
 payload = Snapshot.buildInstanceListPayload()
 expectEqual('server invalid states excluded', #payload.instances, 0)
 
+-- A running race with one entrant still has a last-place progress source.
+local singleEntrantInstance = activeInstance(9, RacingSystem.States.running, 1)
+local singleLastPlace = Snapshot.getLastPlaceEntrant(singleEntrantInstance)
+expect('server one-entrant last place exists', singleLastPlace ~= nil)
+expectEqual('server one-entrant last place source', singleLastPlace and singleLastPlace.source, 1)
+
 -- Empty-instance cleanup is idempotent even if a stale caller retries it.
 local emptyInstance = {
     id = 77,
@@ -296,6 +302,10 @@ expect('server catalog excludes props', definitionsPayload.definitions[1].props 
 expectEqual('server catalog viewer source', definitionsPayload.viewer.source, 12)
 expectEqual('server catalog viewer non-admin', definitionsPayload.viewer.isAdmin, false)
 expectEqual('server catalog viewer cannot delete', definitionsPayload.viewer.canDeleteRaceDefinitions, false)
+expectEqual('server catalog owner kill disabled by config', definitionsPayload.viewer.canKillOwnedInstances, false)
+RacingSystem.Config.raceOwnerCanKillOwnedRace = true
+expectEqual('server catalog owner kill enabled by config', Snapshot.buildDefinitionsPayload(12).viewer.canKillOwnedInstances, true)
+RacingSystem.Config.raceOwnerCanKillOwnedRace = false
 
 clientEvents = {}
 Snapshot.sendDefinitions(99)

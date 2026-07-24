@@ -31,7 +31,6 @@
 | `raceOwnerCanKillOwnedRace`    | bool   | `false` | Whether the race owner can forcibly end their own race.       |
 | `countdownMs`                  | number | `5000`  | Countdown duration before race start in milliseconds.         |
 | `lateJoinProgressLimitPercent` | number | `50`    | Maximum race progress (%) after which late joins are blocked. |
-| `debugLogging`                 | bool   | `true`  | Enable verbose server-side logging.                           |
 
 ### Admin
 
@@ -53,13 +52,9 @@
 | `checkpointRecoveryPassMaxMph`              | number | `5.0`                | mph   | Max speed for a retroactive checkpoint pass (recovery).           |
 | `checkpointRecoveryForwardVelocityRatioMax` | number | `0.66`               | ratio | Max forward velocity ratio for recovery passes.                   |
 | `checkpointSoftPowerPenaltyMultiplier`      | number | `0.05`               | —     | Engine power multiplier during soft penalty.                      |
-| `checkpointDebugTextDistanceMeters`         | number | `300.0`              | m     | Distance at which debug text is drawn near checkpoints.           |
 | `leaderboardClientTiebreakEnabled`          | bool   | `false`              | —     | Whether the client breaks leaderboard ties.                       |
 | `checkpointRuntimeZOffsetMeters`            | number | `-2.0`               | m     | Z offset applied to checkpoint markers during a race.             |
 | `maxFuturePreviewCheckpoints`               | number | `3`                  | count | How many upcoming checkpoints to preview as blips.                |
-| `cornerConeModel`                           | string | `"prop_roadcone01a"` | —     | Model used for corner cones in the editor.                        |
-| `cornerConeSpawnHeightOffset`               | number | `4.0`                | m     | Height offset when spawning corner cones.                         |
-| `cornerConeMinLineClearanceMeters`          | number | `10.0`               | m     | Minimum clearance between cones in a line.                        |
 | `markerTaxonomy.routeChevronTypeId`         | number | `20`                 | —     | Marker type for chevron route markers.                            |
 | `markerTaxonomy.startLineIdleTypeId`        | number | `4`                  | —     | Marker type for idle start lines.                                 |
 | `markerTaxonomy.startLineIdleColor`         | table  | `{255,255,255,0}`    | RGBA  | Colour of idle start line markers.                                |

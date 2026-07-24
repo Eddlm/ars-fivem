@@ -586,7 +586,7 @@ Automated checks passed:
 - `lua .piTools/test_joined_sync.lua` — 16 assertions, including useful invalid-join rejection and immediate accepted-progress synchronization.
 - `lua .piTools/test_event_handlers.lua` — 20 assertions executing production event handlers, including repeated read-only state requests, invalid-join notification, host-only start, ACE-protected kill, membership cleanup, and host-drop list publication.
 - Full-resource `luac -p` syntax sweep passed.
-- Runtime source contains no `[DEBUG]` markers; remaining `print(...)` calls are the configured logging functions, gated client verbose logger, integrity script output, and update notifier.
+- Runtime source contains no `[DEBUG]` markers; remaining `print(...)` calls are configured logging functions, exceptional client diagnostics, and the update notifier.
 - Production-handler assertions confirm server-side host enforcement for start, ACE enforcement for kill, and explicit rejection notifications.
 
 Not tested in a FiveM runtime:
