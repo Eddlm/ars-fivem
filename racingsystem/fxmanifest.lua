@@ -31,6 +31,7 @@ client_scripts {
     '@ScaleformUI_Lua/ScaleformUI.lua',
     'client/util.lua',
     'client/Spectator.lua',
+    'client/instance_list.lua',
     'client/menu.lua',
     'client/client.lua',
     'client/Teleport.lua',

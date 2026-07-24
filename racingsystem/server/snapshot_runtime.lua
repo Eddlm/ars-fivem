@@ -553,14 +553,15 @@ local function buildInstanceSummary(instance)
         state = tostring(instance.state or RacingSystem.States.idle),
         laps = tonumber(instance.laps) or 3,
         trafficDensity = math.max(0.0, math.min(1.0, tonumber(instance.trafficDensity) or 0.0)),
+        lateJoinProgressLimitPercent = tonumber(instance.lateJoinProgressLimitPercent),
         entrantCount = #(type(instance.entrants) == 'table' and instance.entrants or {}),
     }
 end
 
-local function buildInstanceListPayload(viewerSource)
+local function buildInstanceListPayload()
     local instances = {}
     for _, instance in pairs(RacingSystem.Server.State.raceInstancesById) do
-        local state = tostring(instance.state or RacingSystem.States.idle)
+        local state = tostring(instance.state or '')
         if state == RacingSystem.States.idle or state == RacingSystem.States.staging or state == RacingSystem.States.running then
             local summary = buildInstanceSummary(instance)
             if summary then
@@ -576,8 +577,6 @@ local function buildInstanceListPayload(viewerSource)
     return {
         revision = tonumber(RacingSystem.Server.State.instanceListRevision) or 0,
         instances = instances,
-        instanceCount = #instances,
-        viewer = buildViewerPayload(viewerSource),
     }
 end
 
@@ -649,7 +648,7 @@ local function sendInstanceList(target)
         return
     end
 
-    local payload = buildInstanceListPayload(numericTarget)
+    local payload = buildInstanceListPayload()
     if type(payload) ~= 'table' then
         return
     end
@@ -660,7 +659,7 @@ end
 local function broadcastInstanceList()
     RacingSystem.Server.State.instanceListRevision = (RacingSystem.Server.State.instanceListRevision or 0) + 1
 
-    local payload = buildInstanceListPayload(-1)
+    local payload = buildInstanceListPayload()
     if type(payload) ~= 'table' then
         return
     end
@@ -910,7 +909,7 @@ end
 
 local function buildFullSnapshot(viewerSource)
     local definitionsPayload = buildDefinitionsPayload(viewerSource)
-    local listPayload = buildInstanceListPayload(viewerSource)
+    local listPayload = buildInstanceListPayload()
     local instances = {}
     for _, instance in pairs(RacingSystem.Server.State.raceInstancesById) do
         local snapshotInstance = buildRaceInstanceSnapshot(instance)
@@ -931,7 +930,7 @@ local function buildFullSnapshot(viewerSource)
         definitionCount = definitionsPayload.definitionCount,
         customRaceCount = definitionsPayload.customRaceCount,
         onlineRaceCount = definitionsPayload.onlineRaceCount,
-        instanceCount = listPayload.instanceCount,
+        instanceCount = #listPayload.instances,
         viewer = definitionsPayload.viewer,
     }
 end

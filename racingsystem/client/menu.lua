@@ -201,48 +201,68 @@ activeRacesSubmenu:MenuAlignment(MenuAlignment.LEFT)
 activeRacesSubmenu:SetBannerColor(SColor.Green)
 local activeRaceListItem = UIMenuListItem.New('Race', {}, 1, 'Select an active race to join.')
 activeRacesSubmenu:AddItem(activeRaceListItem)
+local activeRaceInstanceIds = {}
+
+local function refreshActiveRaceList()
+    local previousIndex = tonumber(activeRaceListItem:Index()) or 1
+    local previousInstanceId = activeRaceInstanceIds[previousIndex]
+    local instances = RacingSystem.Client.getInstanceList()
+    local raceLabels = {}
+    local selectedIndex = 1
+    activeRaceInstanceIds = {}
+
+    for index, instance in ipairs(instances) do
+        local instanceId = tonumber(instance.id)
+        activeRaceInstanceIds[index] = instanceId
+        raceLabels[index] = ('%s [%s] (%d)'):format(
+            tostring(instance.name or ('Race #' .. tostring(instanceId))),
+            tostring(instance.state or ''),
+            tonumber(instance.entrantCount) or 0
+        )
+        if instanceId == previousInstanceId then
+            selectedIndex = index
+        end
+    end
+
+    if #raceLabels == 0 then
+        raceLabels[1] = '~c~No active races~s~'
+    end
+
+    activeRaceListItem.Items = raceLabels
+    activeRaceListItem:Index(selectedIndex)
+    logMenuVerbose(('Active Races refreshed: found %d instance(s)'):format(#instances))
+end
+
 local joinRaceItem = UIMenuItem.New(
     'Join',
     'Join the selected active race.'
 )
 activeRacesSubmenu:AddItem(joinRaceItem)
 activeRacesItem.Activated = function(menu)
-    local instances = RacingSystem.Client.getInstanceList() or {}
-    local raceLabels = {}
-    for i, instance in ipairs(instances) do
-        local stateLabel = tostring(instance.state or '')
-        local entrantCount = tonumber(instance.entrantCount) or 0
-        raceLabels[#raceLabels + 1] = ('%s [%s] (%d)'):format(
-            tostring(instance.name or ('Race #' .. instance.id)),
-            stateLabel,
-            entrantCount
-        )
-    end
-    if #raceLabels == 0 then
-        raceLabels[1] = '~c~No active races~s~'
-    end
-    logMenuVerbose(('Active Races activated: found %d instance(s)'):format(#instances))
-    activeRaceListItem.Items = raceLabels
-    activeRaceListItem:Index(1)
+    TriggerServerEvent('racingsystem:state:request')
+    refreshActiveRaceList()
     menu:SwitchTo(activeRacesSubmenu, 1, true)
 end
 joinRaceItem.Activated = function(menu)
-    local instances = RacingSystem.Client.getInstanceList() or {}
     local selectedIndex = tonumber(activeRaceListItem:Index()) or 1
-    logMenuVerbose(('Join activated: selectedIndex=%d, totalInstances=%d'):format(selectedIndex, #instances))
-    local selectedInstance = instances[selectedIndex]
-    if not selectedInstance then
-        logMenuVerbose('Selected instance is nil')
+    local selectedInstanceId = activeRaceInstanceIds[selectedIndex]
+    logMenuVerbose(('Join activated: selectedIndex=%d, instanceId=%s'):format(
+        selectedIndex,
+        tostring(selectedInstanceId)
+    ))
+    if not selectedInstanceId then
         RacingSystem.Client.Util.NotifyPlayer('No active race selected.', true)
         return
     end
-    logMenuVerbose(('Joining race: id=%d name=%s'):format(
-        selectedInstance.id,
-        tostring(selectedInstance.name)
-    ))
-    TriggerServerEvent('racingsystem:race:joinById', selectedInstance.id)
+    TriggerServerEvent('racingsystem:race:joinById', selectedInstanceId)
     MenuHandler:CloseAndClearHistory()
 end
+
+AddEventHandler('racingsystem:instance:listUpdated', function()
+    if activeRacesSubmenu:Visible() then
+        refreshActiveRaceList()
+    end
+end)
 local hostSubmenu = UIMenu.New('Host', 'Choose a saved race and host it.', MENU_X, 0, true)
 hostSubmenu:MenuAlignment(MenuAlignment.LEFT)
 hostSubmenu:SetBannerColor(SColor.LightBlue)

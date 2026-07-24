@@ -307,43 +307,62 @@ The client may present state and submit an instance ID, but it must not decide t
 
 ## Phase 1 — Restore Active-Instance Discovery and Joining
 
-**Status:** Not started
+**Status:** Code complete; automated verification passed; in-game acceptance deferred
 
 ### Server work
 
-- [ ] Implement `sendInstanceList(target)` in `server/snapshot_runtime.lua`.
-- [ ] Implement `broadcastInstanceList()` in `server/snapshot_runtime.lua`.
-- [ ] Emit `racingsystem:instance:list` with the frozen summary-only contract.
-- [ ] Add and advance the server-owned list revision only on broadcast-worthy mutations.
-- [ ] Include only `idle`, `staging`, and `running` instances, sorted by numeric ID.
-- [ ] Ensure a targeted response is sent by `racingsystem:state:request` without advancing the revision.
-- [ ] Retain existing lifecycle calls to `broadcastInstanceList()` after invoke, join, start, restart, leave, finish, kill, automatic cleanup, and disconnect cleanup.
-- [ ] Confirm the list contains summaries only and does not expose checkpoints, props, model hides, or full entrant records.
+- [x] Implement `sendInstanceList(target)` in `server/snapshot_runtime.lua`.
+- [x] Implement `broadcastInstanceList()` in `server/snapshot_runtime.lua`.
+- [x] Emit `racingsystem:instance:list` with the frozen summary-only contract.
+- [x] Add and advance the server-owned list revision only on broadcast-worthy mutations.
+- [x] Include only `idle`, `staging`, and `running` instances, sorted by numeric ID.
+- [x] Ensure a targeted response is sent by `racingsystem:state:request` without advancing the revision.
+- [x] Retain existing lifecycle calls to `broadcastInstanceList()` after invoke, join, start, restart, leave, finish, kill, automatic cleanup, and disconnect cleanup.
+- [x] Confirm the list contains summaries only and does not expose checkpoints, props, model hides, or full entrant records.
 
 ### Client work
 
-- [ ] Add one client cache for the latest complete instance-summary list.
-- [ ] Register `racingsystem:instance:list` and replace the cache on every valid payload.
-- [ ] Export a narrow getter for the menu instead of exposing a mutable shared snapshot structure.
-- [ ] Request initial state after the client resource starts.
-- [ ] Request a fresh list when the player opens **Active Races**.
-- [ ] Replace both `local instances = {}` placeholders in `client/menu.lua` with the cached server list.
-- [ ] Keep menu selection tied to the selected numeric instance ID, not only its display label or array position.
-- [ ] Display each instance with enough context to distinguish it, including name, lifecycle state, and entrant count.
-- [ ] Show a clear empty-list item when no active instances exist.
-- [ ] Keep `racingsystem:race:joinById` as the only join submission path.
+- [x] Add one client cache for the latest complete instance-summary list.
+- [x] Register `racingsystem:instance:list` and replace the cache on every valid payload.
+- [x] Export a narrow getter for the menu instead of exposing a mutable shared snapshot structure.
+- [x] Request initial state after the client resource starts.
+- [x] Request a fresh list when the player opens **Active Races**.
+- [x] Replace both `local instances = {}` placeholders in `client/menu.lua` with the cached server list.
+- [x] Keep menu selection tied to the selected numeric instance ID, not only its display label or array position.
+- [x] Display each instance with enough context to distinguish it, including name, lifecycle state, and entrant count.
+- [x] Show a clear empty-list item when no active instances exist.
+- [x] Keep `racingsystem:race:joinById` as the only join submission path.
 
 ### Disable-switch cleanup
 
-- [ ] Remove the Active Races guard that reports “Snapshot payload system disabled”.
-- [ ] Do not remove the global disable flag or unrelated dead snapshot code until Phase 4, unless the flag has no remaining readers after Phase 1.
+- [x] Remove the Active Races guard that reports “Snapshot payload system disabled”.
+- [x] Do not remove the global disable flag or unrelated dead snapshot code until Phase 4, unless the flag has no remaining readers after Phase 1.
 
 ### Automated verification
 
-- [ ] Lua syntax check all changed Lua files with `luac -p`.
-- [ ] Search for remaining empty Active Races list placeholders.
-- [ ] Search all invoke/join/leave/finish/kill paths for the expected list broadcast.
-- [ ] Confirm the client sends `racingsystem:state:request` and handles `racingsystem:instance:list`.
+- [x] Lua syntax check all changed Lua files with `luac -p`.
+- [x] Search for remaining empty Active Races list placeholders.
+- [x] Search all invoke/join/leave/finish/kill paths for the expected list broadcast.
+- [x] Confirm the client sends `racingsystem:state:request` and handles `racingsystem:instance:list`.
+- [x] Execute `.piTools/test_instance_list_payload.lua` against the production server and client cache modules.
+
+### Verification record — July 24, 2026
+
+Automated checks passed:
+
+- `lua .piTools/test_instance_list_payload.lua` — 45 assertions covering the exact public contract, filtering, sorting, sensitive-field exclusion, entrant count, revision behavior, targeted delivery, broadcast delivery, initial delivery, invalid client envelopes, stale revisions, complete cache replacement, and getter immutability.
+- The test loads `server/snapshot_runtime.lua` and `client/instance_list.lua` directly with mocked FiveM event APIs; it does not copy their implementation.
+- `luac -p` passed for every changed Lua file.
+- Static wiring checks confirmed both explicit state requests, the client event handler, numeric-ID join submission, absence of empty list placeholders, and all retained lifecycle broadcast call sites.
+
+Not tested in a FiveM runtime:
+
+- Actual server-to-client delivery, ordering, and timing of `TriggerClientEvent`, `RegisterNetEvent`, `playerJoining`, and client resource-start events.
+- ScaleformUI rendering, list mutation while the submenu is visible, selection preservation, empty-list appearance, and input behavior.
+- Multiplayer discovery, entrant-count updates, join/leave behavior, finished/removed-instance disappearance, repeated menu opening, and late-client synchronization.
+- Resource restart behavior with connected players and real state bags.
+
+The unchecked acceptance items below remain required regression tests. Phase 2 proceeds by explicit user decision; this deferred record must not be interpreted as runtime acceptance.
 
 ### In-game acceptance gate
 
@@ -361,7 +380,7 @@ Use two clients where noted.
 
 ## Phase 2 — Make the Race Catalog Server-Synchronized
 
-**Status:** Blocked by Phase 1
+**Status:** Ready; Phase 1 runtime acceptance is deferred
 
 ### Server work
 

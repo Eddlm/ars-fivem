@@ -12,12 +12,6 @@ local LEADERBOARD_CLIENT_TIEBREAK_ENABLED = ClientAdvancedConfig.leaderboardClie
 local isGTAORacePromptOpen = false
 local instanceAssetCache = {}
 RacingSystem.Client.instanceAssetCache = instanceAssetCache
-local instanceListCache = {}
-RacingSystem.Client.instanceListCache = instanceListCache
-
-function RacingSystem.Client.getInstanceList()
-    return instanceListCache
-end
 local activeInstanceAssets = {
     instanceId = nil,
     objects = {},
@@ -79,17 +73,6 @@ local function logClientVerbose(message)
     if getClientExtraPrintLevel() ~= 2 then return end
     print(('[racingsystem:client] %s'):format(tostring(message or '')))
 end
-
-RegisterNetEvent('racingsystem:instance:list', function(payload)
-    if type(payload) ~= 'table' or type(payload.instances) ~= 'table' then
-        return
-    end
-    instanceListCache = payload.instances
-    logClientVerbose(('Instance list updated: %d instances (revision %s)'):format(
-        #payload.instances,
-        tostring(payload.revision)
-    ))
-end)
 
 RegisterNetEvent('racingsystem:ui:notify', function(payload)
     local message = ''

@@ -1,34 +1,75 @@
--- Unit test: buildInstanceListPayload filtering and sorting logic
--- Run with: lua .piTools/test_instance_list_payload.lua
+-- Phase 1 synchronization unit tests.
+-- Executes production server/client modules with FiveM event mocks.
+-- Run from repository root: lua .piTools/test_instance_list_payload.lua
 
-local pass, fail = 0, 0
-local function assert_eq(label, actual, expected)
-    if actual == expected then
-        pass = pass + 1
-    else
-        fail = fail + 1
-        io.stderr:write(string.format("FAIL [%s]: expected %s, got %s\n", label, tostring(expected), tostring(actual)))
-    end
+local passed = 0
+local failed = 0
+
+local function fail(label, message)
+    failed = failed + 1
+    io.stderr:write(('FAIL [%s]: %s\n'):format(label, message))
 end
-local function assert_nil(label, actual)
-    if actual == nil then
-        pass = pass + 1
+
+local function expect(label, condition, message)
+    if condition then
+        passed = passed + 1
     else
-        fail = fail + 1
-        io.stderr:write(string.format("FAIL [%s]: expected nil, got %s\n", label, tostring(actual)))
-    end
-end
-local function assert_table_len(label, tbl, expected)
-    local n = type(tbl) == 'table' and #tbl or -1
-    if n == expected then
-        pass = pass + 1
-    else
-        fail = fail + 1
-        io.stderr:write(string.format("FAIL [%s]: expected length %d, got %d\n", label, expected, n))
+        fail(label, message or 'condition was false')
     end
 end
 
--- Mock RacingSystem namespace
+local function expectEqual(label, actual, expected)
+    expect(label, actual == expected, ('expected %s, got %s'):format(tostring(expected), tostring(actual)))
+end
+
+local function expectKeys(label, value, expectedKeys)
+    local expected = {}
+    for _, key in ipairs(expectedKeys) do
+        expected[key] = true
+    end
+    for key in pairs(value) do
+        if not expected[key] then
+            fail(label, ('unexpected key %s'):format(tostring(key)))
+            return
+        end
+        expected[key] = nil
+    end
+    for key in pairs(expected) do
+        fail(label, ('missing key %s'):format(tostring(key)))
+        return
+    end
+    passed = passed + 1
+end
+
+local function activeInstance(id, state, entrantCount)
+    local entrants = {}
+    for source = 1, entrantCount do
+        entrants[source] = { source = source }
+    end
+    return {
+        id = id,
+        name = ('Race %d'):format(id),
+        sourceType = 'custom',
+        owner = 42,
+        state = state,
+        laps = 2,
+        trafficDensity = 0.25,
+        lateJoinProgressLimitPercent = 50,
+        entrantCount = entrantCount,
+        entrants = entrants,
+        checkpoints = { { x = 1, y = 2, z = 3 } },
+        props = { { model = 1 } },
+        modelHides = { { model = 2 } },
+    }
+end
+
+-- Load the real server implementation. Unresolved FiveM globals are safe until
+-- the corresponding exported function is invoked; invoked event APIs are mocked.
+local clientEvents = {}
+TriggerClientEvent = function(name, target, payload)
+    clientEvents[#clientEvents + 1] = { name = name, target = target, payload = payload }
+end
+
 RacingSystem = {
     States = {
         idle = 'idle',
@@ -36,195 +77,172 @@ RacingSystem = {
         running = 'running',
         finished = 'finished',
     },
+    Config = {},
+    NormalizeRaceName = function(value) return value end,
     Server = {
+        Snapshot = {},
         State = {
             raceInstancesById = {},
+            raceInstanceIdsByName = {},
             instanceListRevision = 0,
+            config = {},
         },
         Logging = {
             hasAdminAccess = function() return false end,
         },
+        Catalog = {},
     },
 }
 
--- Functions under test (extracted from snapshot_runtime.lua)
-local function buildViewerPayload(viewerSource)
-    local numericViewerSource = tonumber(viewerSource) or -1
-    local viewerIsAdmin = numericViewerSource > 0 and RacingSystem.Server.Logging.hasAdminAccess(numericViewerSource) or false
-    return {
-        source = numericViewerSource,
-        isAdmin = viewerIsAdmin,
-        canDeleteRaceDefinitions = viewerIsAdmin,
-        canKillOwnedInstances = true,
-    }
-end
+dofile('racingsystem/server/snapshot_runtime.lua')
+local Snapshot = RacingSystem.Server.Snapshot
 
-local function buildInstanceSummary(instance)
-    if type(instance) ~= 'table' then
-        return nil
-    end
-    return {
-        id = tonumber(instance.id) or -1,
-        name = tostring(instance.name or ''),
-        sourceType = tostring(instance.sourceType or ''),
-        owner = tonumber(instance.owner) or 0,
-        state = tostring(instance.state or RacingSystem.States.idle),
-        laps = tonumber(instance.laps) or 3,
-        trafficDensity = math.max(0.0, math.min(1.0, tonumber(instance.trafficDensity) or 0.0)),
-        entrantCount = #(type(instance.entrants) == 'table' and instance.entrants or {}),
-    }
-end
+-- Empty payload and exact envelope.
+local payload = Snapshot.buildInstanceListPayload()
+expectKeys('server empty envelope', payload, { 'revision', 'instances' })
+expectEqual('server empty revision', payload.revision, 0)
+expectEqual('server empty list', #payload.instances, 0)
 
-local function buildInstanceListPayload(viewerSource)
-    local instances = {}
-    for _, instance in pairs(RacingSystem.Server.State.raceInstancesById) do
-        local state = tostring(instance.state or RacingSystem.States.idle)
-        if state == RacingSystem.States.idle or state == RacingSystem.States.staging or state == RacingSystem.States.running then
-            local summary = buildInstanceSummary(instance)
-            if summary then
-                instances[#instances + 1] = summary
-            end
-        end
-    end
-    table.sort(instances, function(a, b)
-        return (a.id or 0) < (b.id or 0)
-    end)
-    return {
-        revision = tonumber(RacingSystem.Server.State.instanceListRevision) or 0,
-        instances = instances,
-        instanceCount = #instances,
-        viewer = buildViewerPayload(viewerSource),
-    }
-end
-
--- Helper to reset state
-local function resetState()
-    RacingSystem.Server.State.raceInstancesById = {}
-    RacingSystem.Server.State.instanceListRevision = 0
-end
-
--- =============================================
--- Test 1: Empty state returns empty list
--- =============================================
-resetState()
-local result = buildInstanceListPayload(1)
-assert_table_len("empty state: instances", result.instances, 0)
-assert_eq("empty state: instanceCount", result.instanceCount, 0)
-assert_eq("empty state: revision", result.revision, 0)
-assert_eq("empty state: viewer.source", result.viewer.source, 1)
-
--- =============================================
--- Test 2: Only finished instances → empty list
--- =============================================
-resetState()
+-- Include only public lifecycle states and sort by numeric ID.
 RacingSystem.Server.State.raceInstancesById = {
-    [1] = { id = 1, name = "Finished Race", state = RacingSystem.States.finished, entrants = {} },
-    [2] = { id = 2, name = "Another Finished", state = RacingSystem.States.finished, entrants = {} },
+    [30] = activeInstance(30, RacingSystem.States.running, 3),
+    [10] = activeInstance(10, RacingSystem.States.idle, 1),
+    [40] = activeInstance(40, RacingSystem.States.finished, 4),
+    [20] = activeInstance(20, RacingSystem.States.staging, 2),
+    [50] = activeInstance(50, 'unknown', 5),
 }
-result = buildInstanceListPayload(1)
-assert_table_len("finished only: instances", result.instances, 0)
-assert_eq("finished only: instanceCount", result.instanceCount, 0)
+payload = Snapshot.buildInstanceListPayload()
+expectEqual('server visible count', #payload.instances, 3)
+expectEqual('server sorted id 1', payload.instances[1].id, 10)
+expectEqual('server sorted id 2', payload.instances[2].id, 20)
+expectEqual('server sorted id 3', payload.instances[3].id, 30)
+expectKeys('server summary contract', payload.instances[1], {
+    'id',
+    'name',
+    'sourceType',
+    'owner',
+    'state',
+    'laps',
+    'trafficDensity',
+    'lateJoinProgressLimitPercent',
+    'entrantCount',
+})
+expectEqual('server entrant count', payload.instances[3].entrantCount, 3)
+expectEqual('server late join limit', payload.instances[1].lateJoinProgressLimitPercent, 50)
+expect('server excludes checkpoints', payload.instances[1].checkpoints == nil)
+expect('server excludes props', payload.instances[1].props == nil)
+expect('server excludes model hides', payload.instances[1].modelHides == nil)
+expect('server excludes entrant rows', payload.instances[1].entrants == nil)
 
--- =============================================
--- Test 3: Mix of states — only idle/staging/running
--- =============================================
-resetState()
+-- A missing/invalid lifecycle state is not silently treated as a visible state.
 RacingSystem.Server.State.raceInstancesById = {
-    [10] = { id = 10, name = "Idle Race", state = RacingSystem.States.idle, entrants = {} },
-    [20] = { id = 20, name = "Staging Race", state = RacingSystem.States.staging, entrants = {} },
-    [30] = { id = 30, name = "Running Race", state = RacingSystem.States.running, entrants = {} },
-    [40] = { id = 40, name = "Finished Race", state = RacingSystem.States.finished, entrants = {} },
+    [1] = activeInstance(1, nil, 0),
+    [2] = activeInstance(2, 'cancelled', 0),
 }
-result = buildInstanceListPayload(1)
-assert_table_len("mixed states: instances", result.instances, 3)
-assert_eq("mixed states: instanceCount", result.instanceCount, 3)
+payload = Snapshot.buildInstanceListPayload()
+expectEqual('server invalid states excluded', #payload.instances, 0)
 
--- Verify the three included instances
-local names = {}
-for _, inst in ipairs(result.instances) do
-    names[#names + 1] = inst.name
-end
-table.sort(names)
-assert_eq("mixed states: first name", names[1], "Idle Race")
-assert_eq("mixed states: second name", names[2], "Running Race")
-assert_eq("mixed states: third name", names[3], "Staging Race")
-
--- =============================================
--- Test 4: Sorted by ID ascending
--- =============================================
-resetState()
+-- Targeted sends retain the current revision.
 RacingSystem.Server.State.raceInstancesById = {
-    [100] = { id = 100, name = "Z Race", state = RacingSystem.States.idle, entrants = {} },
-    [5]   = { id = 5,   name = "A Race", state = RacingSystem.States.idle, entrants = {} },
-    [42]  = { id = 42,  name = "M Race", state = RacingSystem.States.idle, entrants = {} },
+    [1] = activeInstance(1, RacingSystem.States.idle, 1),
 }
-result = buildInstanceListPayload(1)
-assert_table_len("sorted: instances", result.instances, 3)
-assert_eq("sorted: first id", result.instances[1].id, 5)
-assert_eq("sorted: second id", result.instances[2].id, 42)
-assert_eq("sorted: third id", result.instances[3].id, 100)
-
--- =============================================
--- Test 5: Revision is included
--- =============================================
-resetState()
 RacingSystem.Server.State.instanceListRevision = 7
-RacingSystem.Server.State.raceInstancesById = {
-    [1] = { id = 1, name = "Test", state = RacingSystem.States.idle, entrants = {} },
-}
-result = buildInstanceListPayload(1)
-assert_eq("revision: value", result.revision, 7)
+clientEvents = {}
+Snapshot.sendInstanceList(12)
+expectEqual('server targeted event count', #clientEvents, 1)
+expectEqual('server targeted event name', clientEvents[1].name, 'racingsystem:instance:list')
+expectEqual('server targeted event target', clientEvents[1].target, 12)
+expectEqual('server targeted revision payload', clientEvents[1].payload.revision, 7)
+expectEqual('server targeted revision unchanged', RacingSystem.Server.State.instanceListRevision, 7)
 
--- =============================================
--- Test 6: Entrant count in summary
--- =============================================
-resetState()
-RacingSystem.Server.State.raceInstancesById = {
-    [1] = { id = 1, name = "Full Race", state = RacingSystem.States.running, entrants = { {source=1}, {source=2}, {source=3} } },
-}
-result = buildInstanceListPayload(1)
-assert_eq("entrantCount: value", result.instances[1].entrantCount, 3)
+-- Invalid targets produce no event.
+clientEvents = {}
+Snapshot.sendInstanceList(0)
+Snapshot.sendInstanceList(nil)
+expectEqual('server invalid target ignored', #clientEvents, 0)
 
--- =============================================
--- Test 7: Viewer payload for anonymous source (-1)
--- =============================================
-resetState()
-RacingSystem.Server.State.raceInstancesById = {
-    [1] = { id = 1, name = "Test", state = RacingSystem.States.idle, entrants = {} },
-}
-result = buildInstanceListPayload(-1)
-assert_eq("viewer -1: source", result.viewer.source, -1)
-assert_eq("viewer -1: isAdmin", result.viewer.isAdmin, false)
+-- Broadcast advances once and sends one common payload to all clients.
+clientEvents = {}
+Snapshot.broadcastInstanceList()
+expectEqual('server broadcast event count', #clientEvents, 1)
+expectEqual('server broadcast target', clientEvents[1].target, -1)
+expectEqual('server broadcast revision state', RacingSystem.Server.State.instanceListRevision, 8)
+expectEqual('server broadcast revision payload', clientEvents[1].payload.revision, 8)
 
--- =============================================
--- Test 8: Instance with nil state defaults to idle
--- =============================================
-resetState()
-RacingSystem.Server.State.raceInstancesById = {
-    [1] = { id = 1, name = "No State", state = nil, entrants = {} },
-}
-result = buildInstanceListPayload(1)
-assert_table_len("nil state: instances", result.instances, 1)
-assert_eq("nil state: state value", result.instances[1].state, RacingSystem.States.idle)
+-- Initial state is a targeted read and does not advance the revision.
+clientEvents = {}
+Snapshot.sendInitialState(22)
+expectEqual('server initial event count', #clientEvents, 1)
+expectEqual('server initial target', clientEvents[1].target, 22)
+expectEqual('server initial revision', clientEvents[1].payload.revision, 8)
+expectEqual('server initial revision unchanged', RacingSystem.Server.State.instanceListRevision, 8)
 
--- =============================================
--- Test 9: Instance with unknown state is excluded
--- =============================================
-resetState()
-RacingSystem.Server.State.raceInstancesById = {
-    [1] = { id = 1, name = "Unknown", state = "cancelled", entrants = {} },
-}
-result = buildInstanceListPayload(1)
-assert_table_len("unknown state: instances", result.instances, 0)
-
--- =============================================
--- Summary
--- =============================================
-local total = pass + fail
-io.write(string.format("\n%d / %d tests passed", pass, total))
-if fail > 0 then
-    io.write(string.format(", %d FAILED", fail))
-    os.exit(1)
-else
-    io.write(" — ALL PASSED\n")
+-- Load the real client cache module with event registration mocks.
+local netHandlers = {}
+local localEvents = {}
+RegisterNetEvent = function(name, handler)
+    netHandlers[name] = handler
 end
+TriggerEvent = function(name, ...)
+    localEvents[#localEvents + 1] = { name = name, args = { ... } }
+end
+RacingSystem = { Client = {} }
+
+dofile('racingsystem/client/instance_list.lua')
+local receiveList = netHandlers['racingsystem:instance:list']
+expect('client handler registered', type(receiveList) == 'function')
+expect('client cache not exposed', RacingSystem.Client.instanceListCache == nil)
+expectEqual('client starts empty', #RacingSystem.Client.getInstanceList(), 0)
+
+-- Invalid envelopes/revisions do not replace the cache or emit an update event.
+receiveList(nil)
+receiveList({ instances = {} })
+receiveList({ revision = -1, instances = {} })
+expectEqual('client invalid payload stays empty', #RacingSystem.Client.getInstanceList(), 0)
+expectEqual('client invalid payload no update event', #localEvents, 0)
+
+-- A valid complete payload replaces the cache and emits the local refresh event.
+local sourceInstances = {
+    activeInstance(10, 'idle', 1),
+    activeInstance(20, 'running', 2),
+}
+receiveList({ revision = 3, instances = sourceInstances })
+local cached = RacingSystem.Client.getInstanceList()
+expectEqual('client valid list count', #cached, 2)
+expectEqual('client valid first id', cached[1].id, 10)
+expectEqual('client update event count', #localEvents, 1)
+expectEqual('client update event name', localEvents[1].name, 'racingsystem:instance:listUpdated')
+expectEqual('client update event revision', localEvents[1].args[1], 3)
+expectKeys('client getter summary contract', cached[1], {
+    'id',
+    'name',
+    'sourceType',
+    'owner',
+    'state',
+    'laps',
+    'trafficDensity',
+    'lateJoinProgressLimitPercent',
+    'entrantCount',
+})
+
+-- Getter results cannot mutate the internal cache.
+cached[1].name = 'mutated'
+cached[2] = nil
+local cachedAgain = RacingSystem.Client.getInstanceList()
+expectEqual('client getter protects summary', cachedAgain[1].name, 'Race 10')
+expectEqual('client getter protects list', #cachedAgain, 2)
+
+-- An older revision is stale; an equal revision is a valid targeted refresh.
+receiveList({ revision = 2, instances = { activeInstance(99, 'idle', 0) } })
+expectEqual('client stale revision ignored', RacingSystem.Client.getInstanceList()[1].id, 10)
+receiveList({ revision = 3, instances = { activeInstance(30, 'staging', 0) } })
+expectEqual('client equal revision replaces', RacingSystem.Client.getInstanceList()[1].id, 30)
+expectEqual('client replacement update event', #localEvents, 2)
+
+local total = passed + failed
+io.write(('\n%d / %d assertions passed'):format(passed, total))
+if failed > 0 then
+    io.write((', %d FAILED\n'):format(failed))
+    os.exit(1)
+end
+io.write(' — ALL PASSED\n')
