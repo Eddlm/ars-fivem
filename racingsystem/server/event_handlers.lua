@@ -68,27 +68,12 @@ local function clearAllRacingSystemStateBags()
     end
 end
 
-local function sendRaceInfoToSource(targetSource, instance)
-    local target = tonumber(targetSource) or 0
-    if target <= 0 or type(instance) ~= 'table' then
-        return
-    end
-
-    local payload = RacingSystem.Server.Snapshot.buildRaceInstanceSnapshot(instance)
-    if type(payload) ~= 'table' then
-        return
-    end
-    TriggerClientEvent('racingsystem:race:getRaceInfo', target, payload)
-end
-
 local function completeJoinForSource(src, instance)
-    RacingSystem.Server.Snapshot.broadcastInstanceList()
-    RacingSystem.Server.Snapshot.broadcastInstanceDelta(instance)
-    RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
-    RacingSystem.Server.Snapshot.sendInstanceStaticIfChanged(src, instance, true)
-    RacingSystem.Server.Snapshot.sendInstanceAssets(src, instance)
-    sendRaceInfoToSource(src, instance)
     setRaceMembershipStateBagForSource(src, instance)
+    RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
+    RacingSystem.Server.Snapshot.sendRaceInfoToTarget(src, instance)
+    RacingSystem.Server.Snapshot.sendInstanceAssets(src, instance)
+    RacingSystem.Server.Snapshot.broadcastInstanceList()
 
     if instance.state == RacingSystem.States.running then
         local joiningEntrant = RacingSystem.Server.Snapshot.findEntrantInRaceInstance(instance, src)
@@ -191,21 +176,6 @@ RegisterNetEvent('racingsystem:editor:save', function(payload)
         definition.ugcId or definition.fileName
     )
     RacingSystem.Server.Snapshot.broadcastDefinitions()
-    local savedLookup = RacingSystem.NormalizeRaceName(definition.name)
-    if savedLookup then
-        for _, instance in pairs(RacingSystem.Server.State.raceInstancesById) do
-            local instanceLookup = RacingSystem.NormalizeRaceName(instance.definitionName or instance.name)
-            if instanceLookup == savedLookup then
-                RacingSystem.Server.Snapshot.broadcastInstanceDelta(instance)
-                for _, entrant in ipairs(RacingSystem.Server.Snapshot.listEntrantsFromState(instance)) do
-                    local target = tonumber(entrant.source) or 0
-                    if target > 0 then
-                        RacingSystem.Server.Snapshot.sendInstanceStaticIfChanged(target, instance, true)
-                    end
-                end
-            end
-        end
-    end
     TriggerClientEvent('racingsystem:editor:saved', src, {
         ok = true,
         error = nil,
@@ -451,7 +421,6 @@ RegisterNetEvent('racingsystem:race:start', function()
     instance.startAt = GetGameTimer() + countdownMs
 
     RacingSystem.Server.Snapshot.broadcastInstanceList()
-    RacingSystem.Server.Snapshot.broadcastInstanceDelta(instance)
     RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
 end)
 
@@ -475,7 +444,6 @@ RegisterNetEvent('racingsystem:race:restart', function()
     ))
 
     RacingSystem.Server.Snapshot.broadcastInstanceList()
-    RacingSystem.Server.Snapshot.broadcastInstanceDelta(instance)
     RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
 
     for _, entrant in ipairs(instance.entrants or {}) do
@@ -500,8 +468,6 @@ RegisterNetEvent('racingsystem:race:checkpointPassed', function(instanceId, chec
         return
     end
 
-    RacingSystem.Server.Snapshot.broadcastInstanceDelta(instance)
-    RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
 end)
 
 RegisterNetEvent('racingsystem:race:finish', function()
@@ -521,7 +487,6 @@ RegisterNetEvent('racingsystem:race:finish', function()
         tostring((instance or {}).id or "unknown")
     ))
     RacingSystem.Server.Snapshot.broadcastInstanceList()
-    RacingSystem.Server.Snapshot.broadcastInstanceDelta(instance)
     RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
 end)
 
@@ -565,7 +530,6 @@ RegisterNetEvent('racingsystem:race:leave', function()
     ))
     RacingSystem.Server.Snapshot.broadcastInstanceList()
     if type(instance) == 'table' then
-        RacingSystem.Server.Snapshot.broadcastInstanceDelta(instance)
         RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
     end
     clearRaceMembershipStateBagForSource(src)
@@ -601,7 +565,6 @@ RegisterNetEvent('racingsystem:race:kill', function(instanceId)
         tostring(killedInstance.name or 'unknown'),
         tostring(killedInstance.id or 'unknown')
     ))
-    RacingSystem.Server.Snapshot.broadcastInstanceStandings(killedInstance)
     RacingSystem.Server.Snapshot.broadcastInstanceList()
 end)
 

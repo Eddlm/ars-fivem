@@ -28,7 +28,6 @@ CreateThread(function()
                         tostring(instance.id),
                         tostring(#(instance.entrants or {}))
                     ))
-                    RacingSystem.Server.Snapshot.broadcastInstanceDelta(instance)
                     RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
                     changedAnyState = true
                 elseif RacingSystem.Server.Logging.shouldLogLifecycleAnomaly('countdownElapsed', 0, instance.id) then
@@ -50,12 +49,6 @@ CreateThread(function()
         end
 
         Wait(250)
-    end
-end)
-
-CreateThread(function()
-    while true do
-        RacingSystem.Server.Snapshot.runSnapshotRoundRobinTick()
     end
 end)
 

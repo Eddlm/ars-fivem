@@ -465,25 +465,56 @@ The unchecked acceptance items below remain required regression tests and are no
 
 ## Phase 3 — Resolve Dynamic and Static Instance Channels
 
-**Status:** Blocked by Phase 2; design review required before implementation
+**Status:** Code complete; automated verification passed; in-game acceptance deferred
 
-The current joined-racer path already receives detailed `racingsystem:race:getRaceInfo` payloads and hot progress through state bags. Before restoring any old delta/static channel, measure what is still missing.
+### Review findings
 
-### Review questions
+- [x] Invoke and ordinary join both converge on `completeJoinForSource`, which sends one targeted route/config/participant payload and one targeted asset payload.
+- [x] Lifecycle state is server-owned in `GlobalState['rs:raceState:<instanceId>']` and does not require a duplicate delta event.
+- [x] Entrant membership and hot progress are represented by flat player state bags; accepted checkpoint mutations now publish standings immediately from the mutation owner.
+- [x] The round-robin duplicated complete route and entrant data, resent assets, and repeatedly rewrote state bags despite mutation-site synchronization.
+- [x] `sendInstanceStaticIfChanged()` had no implementation or client consumer and is not needed beside initial targeted race info.
+- [x] `broadcastInstanceDelta()` had no implementation or client consumer and is not needed beside lifecycle/membership state bags.
 
-- [ ] Does every joined racer receive initial route/config data immediately after invoke or join?
-- [ ] Are lifecycle fields updated promptly enough through `GlobalState` and targeted race info?
-- [ ] Does entrant membership remain correct after joins, leaves, and disconnects?
-- [ ] Does the round-robin race-info refresh duplicate data unnecessarily?
-- [ ] Is `sendInstanceStaticIfChanged()` needed, or is detailed initial race info sufficient?
-- [ ] Is `broadcastInstanceDelta()` needed, or should membership changes trigger bounded targeted race-info refreshes?
+### Final Phase 3 decision
 
-### Decision rule
+Use one joined-instance detail path:
 
-Choose one joined-instance detail path. Do not keep two event systems as mutual fallbacks.
+- `racingsystem:race:getRaceInfo` sends route, configuration, runtime seed data, and participant seed data once to the joining racer.
+- `racingsystem:race:instanceAssets` sends props and model hides once to the joining racer.
+- Flat player state bags own membership, entrant identity, position, lap, checkpoint, and finish state.
+- The flat global race-state key owns lifecycle state.
+- Existing targeted lap, restart, teleport, notification, and checkpoint-result events retain their specialized responsibilities.
+- Client membership changes load cached assets for the joined instance and unload assets plus joined caches on exit.
+- There is no periodic full-detail refresh, delta/static compatibility channel, or mutual fallback.
 
-- If targeted race info plus state bags fully covers joined gameplay, remove obsolete delta/static machinery.
-- If a separate dynamic channel is required, define its audience and fields explicitly and stop sending unchanged static route data with dynamic updates.
+### Automated verification
+
+- [x] Remove all delta/static sender functions, exports, and call sites.
+- [x] Remove the joined-racer round-robin thread and its repeated race-info/asset sends.
+- [x] Verify one race-info and one asset call site remain in the join path.
+- [x] Unit test immediate progress publication from accepted checkpoint mutations.
+- [x] Unit test the bounded targeted race-info and asset payloads.
+- [x] Lua syntax check all changed Lua files with `luac -p`.
+
+### Verification record — July 24, 2026
+
+Automated checks passed:
+
+- `lua .piTools/test_instance_list_payload.lua` — 104 assertions across public instance discovery, catalog synchronization, targeted joined-racer race info, and targeted assets.
+- `lua .piTools/test_joined_sync.lua` — 14 assertions executing production checkpoint mutation code, including accepted progress, rejected out-of-order input, finish progress, and exactly-once immediate standings publication.
+- Static checks confirm no delta/static or round-robin symbols remain, and only the join path calls the targeted race-info and asset senders.
+- Client source checks confirm membership-driven asset loading, asset/cache cleanup on exit, and no periodic asset reload path.
+
+Not tested in a FiveM runtime:
+
+- Cross-channel ordering between player state bags, targeted race info, and targeted assets during invoke, ordinary join, and late join.
+- Real prop creation, model loading, model hides, and cleanup when leaving, being killed, finishing, disconnecting, or restarting the resource.
+- Live lifecycle menu transitions and leaderboard updates using actual state-bag replication.
+- Multiplayer entrant add/remove behavior and checkpoint/position propagation latency under load.
+- Countdown, restart, finish, teleport, and late-join inherited-progress behavior after removal of the periodic refresh.
+
+The unchecked acceptance items below remain required regression tests and are not implied by the automated checks.
 
 ### In-game acceptance gate
 
@@ -495,7 +526,7 @@ Choose one joined-instance detail path. Do not keep two event systems as mutual 
 
 ## Phase 4 — Remove the Abandoned Snapshot Rewrite
 
-**Status:** Blocked by Phase 3
+**Status:** Ready; Phase 3 runtime acceptance is deferred
 
 - [ ] Remove `RacingSystem.Client.PayloadSystemDisabled` and its notification path.
 - [ ] Remove obsolete full-snapshot builders, version fields, counters, and no-op exports that have no owner in the chosen architecture.

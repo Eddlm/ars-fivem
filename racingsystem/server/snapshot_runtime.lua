@@ -625,14 +625,6 @@ local function buildInstanceStaticPayload(instance)
     }
 end
 
-local function getInstanceStaticSignature(instance)
-    local payload = buildInstanceStaticPayload(instance)
-    if type(payload) ~= 'table' then
-        return nil
-    end
-    return json.encode(payload) or tostring(GetGameTimer())
-end
-
 local function sendDefinitions(target)
     local numericTarget = tonumber(target) or 0
     if numericTarget <= 0 then
@@ -675,21 +667,6 @@ local function broadcastInstanceList()
     end
 
     TriggerClientEvent('racingsystem:instance:list', -1, payload)
-end
-
-local function sendInstanceDelta(target, instance)
-    local _, _instance = target, instance
-    return
-end
-
-local function broadcastInstanceDelta(instance)
-    local _ = instance
-    return
-end
-
-local function sendInstanceStaticIfChanged(target, instance, force)
-    local _, _, _force = target, instance, force
-    return
 end
 
 local function sendInitialState(target)
@@ -955,66 +932,6 @@ local function broadcastSnapshot()
     return
 end
 
-local snapshotRoundRobinCursor = 0
-
-local function buildSnapshotRoundRobinTargets()
-    local targets = {}
-    for instanceId, instance in pairs(RacingSystem.Server.State.raceInstancesById) do
-        if type(instance) == 'table' then
-            local resolvedInstanceId = tonumber(instance.id) or tonumber(instanceId) or 0
-            for _, entrant in ipairs(listEntrantsFromState(instance)) do
-                local targetSource = tonumber(type(entrant) == 'table' and entrant.source) or 0
-                if targetSource > 0 then
-                    targets[#targets + 1] = {
-                        instanceId = resolvedInstanceId,
-                        source = targetSource,
-                        instance = instance,
-                    }
-                end
-            end
-        end
-    end
-
-    table.sort(targets, function(a, b)
-        if tonumber(a.instanceId) ~= tonumber(b.instanceId) then
-            return (tonumber(a.instanceId) or 0) < (tonumber(b.instanceId) or 0)
-        end
-        return (tonumber(a.source) or 0) < (tonumber(b.source) or 0)
-    end)
-    return targets
-end
-
-local function runSnapshotRoundRobinTick()
-    local targets = buildSnapshotRoundRobinTargets()
-    local targetCount = #targets
-    if targetCount <= 0 then
-        snapshotRoundRobinCursor = 0
-        Wait(500)
-        return
-    end
-
-    if snapshotRoundRobinCursor < 1 or snapshotRoundRobinCursor > targetCount then
-        snapshotRoundRobinCursor = 1
-    end
-
-    local turnTarget = targets[snapshotRoundRobinCursor]
-    if type(turnTarget) == 'table' and type(turnTarget.instance) == 'table' then
-        broadcastInstanceStandings(turnTarget.instance)
-        sendRaceInfoToTarget(turnTarget.source, turnTarget.instance)
-        sendInstanceStaticIfChanged(turnTarget.source, turnTarget.instance, false)
-        sendInstanceAssets(turnTarget.source, turnTarget.instance)
-    end
-
-    snapshotRoundRobinCursor = snapshotRoundRobinCursor + 1
-    if snapshotRoundRobinCursor > targetCount then
-        snapshotRoundRobinCursor = 1
-    end
-
-    local minTickMs = math.max(1, math.floor(tonumber((RacingSystem.Server.State.config or {}).snapshotMinTickMs) or 1))
-    local tickMs = math.max(minTickMs, math.floor(2000 / targetCount))
-    Wait(tickMs)
-end
-
 RacingSystem.Server.Snapshot.cloneOnlineRaceProps = cloneOnlineRaceProps
 RacingSystem.Server.Snapshot.cloneOnlineRaceModelHides = cloneOnlineRaceModelHides
 RacingSystem.Server.Snapshot.cloneNumberArray = cloneNumberArray
@@ -1050,17 +967,13 @@ RacingSystem.Server.Snapshot.buildInstanceListPayload = buildInstanceListPayload
 RacingSystem.Server.Snapshot.sendInstanceList = sendInstanceList
 RacingSystem.Server.Snapshot.broadcastInstanceList = broadcastInstanceList
 RacingSystem.Server.Snapshot.buildInstanceDynamicPayload = buildInstanceDynamicPayload
-RacingSystem.Server.Snapshot.sendInstanceDelta = sendInstanceDelta
-RacingSystem.Server.Snapshot.broadcastInstanceDelta = broadcastInstanceDelta
 RacingSystem.Server.Snapshot.buildInstanceStaticPayload = buildInstanceStaticPayload
-RacingSystem.Server.Snapshot.sendInstanceStaticIfChanged = sendInstanceStaticIfChanged
 RacingSystem.Server.Snapshot.sendInitialState = sendInitialState
 RacingSystem.Server.Snapshot.buildRaceInstanceSnapshot = buildRaceInstanceSnapshot
 RacingSystem.Server.Snapshot.sendRaceInfoToTarget = sendRaceInfoToTarget
 RacingSystem.Server.Snapshot.buildFullSnapshot = buildFullSnapshot
 RacingSystem.Server.Snapshot.sendSnapshot = sendSnapshot
 RacingSystem.Server.Snapshot.broadcastSnapshot = broadcastSnapshot
-RacingSystem.Server.Snapshot.runSnapshotRoundRobinTick = runSnapshotRoundRobinTick
 RacingSystem.Server.Snapshot.buildInstanceAssetPayload = buildInstanceAssetPayload
 RacingSystem.Server.Snapshot.sendInstanceAssets = sendInstanceAssets
 RacingSystem.Server.Snapshot.sendTeleportToLastCheckpoint = sendTeleportToLastCheckpoint

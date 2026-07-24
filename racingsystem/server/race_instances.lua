@@ -505,10 +505,6 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
             entrant.currentCheckpoint = totalCheckpoints + 1
             entrant.finishedAt = now
             entrant.totalTimeMs = currentTotalTimeMs and math.max(0, currentTotalTimeMs) or nil
-            print('[DEBUG] PLAYER FINISHED: entrant=' .. tostring(entrantServerId) .. ' finishedAt=' .. tostring(now) .. ' position=' .. tostring(entrant.position))
-            -- Broadcast standings immediately so position is synced to client
-            RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
-            print('[DEBUG] BROADCAST STANDINGS: instance=' .. tostring(instance.id))
         else
             entrant.currentLap = currentLap + 1
             if instance.pointToPoint == true then
@@ -571,6 +567,8 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
         entrant.currentCheckpoint = nextCheckpoint
     end
 
+    RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
+
     local allFinished = #(instance.entrants or {}) > 0
     for _, otherEntrant in ipairs(instance.entrants or {}) do
         if tonumber(otherEntrant.finishedAt) == nil then
@@ -613,7 +611,6 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
             -- Auto-kill the instance once everyone is done.
             local killedInstance = RacingSystem.Server.Instances.killRaceInstanceById(instance.id)
             if killedInstance then
-                RacingSystem.Server.Snapshot.broadcastInstanceStandings(killedInstance)
                 RacingSystem.Server.Snapshot.broadcastInstanceList()
             end
         else

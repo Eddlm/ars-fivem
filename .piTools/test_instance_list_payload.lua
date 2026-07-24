@@ -44,7 +44,15 @@ end
 local function activeInstance(id, state, entrantCount)
     local entrants = {}
     for source = 1, entrantCount do
-        entrants[source] = { source = source }
+        entrants[source] = {
+            entrantId = ('entrant-%d'):format(source),
+            source = source,
+            name = ('Driver %d'):format(source),
+            currentCheckpoint = 1,
+            currentLap = 1,
+            checkpointsPassed = 0,
+            lapTimes = {},
+        }
     end
     return {
         id = id,
@@ -235,6 +243,30 @@ expectEqual('server initial list event', clientEvents[2].name, 'racingsystem:ins
 expectEqual('server initial list target', clientEvents[2].target, 22)
 expectEqual('server initial revision', clientEvents[2].payload.revision, 8)
 expectEqual('server initial revision unchanged', RacingSystem.Server.State.instanceListRevision, 8)
+
+-- Joined-racer details and assets are targeted, bounded deliveries.
+local joinedInstance = activeInstance(1, RacingSystem.States.idle, 1)
+clientEvents = {}
+Snapshot.sendRaceInfoToTarget(12, joinedInstance)
+expectEqual('server race info event count', #clientEvents, 1)
+expectEqual('server race info event name', clientEvents[1].name, 'racingsystem:race:getRaceInfo')
+expectEqual('server race info target', clientEvents[1].target, 12)
+expectEqual('server race info instance', clientEvents[1].payload.id, 1)
+expectEqual('server race info checkpoints', #clientEvents[1].payload.checkpoints, 1)
+expectEqual('server race info entrants', #clientEvents[1].payload.entrants, 1)
+expect('server race info excludes props', clientEvents[1].payload.props == nil)
+expect('server race info excludes model hides', clientEvents[1].payload.modelHides == nil)
+
+clientEvents = {}
+Snapshot.sendInstanceAssets(12, joinedInstance)
+expectEqual('server assets event count', #clientEvents, 1)
+expectEqual('server assets event name', clientEvents[1].name, 'racingsystem:race:instanceAssets')
+expectEqual('server assets target', clientEvents[1].target, 12)
+expectEqual('server assets instance', clientEvents[1].payload.instanceId, 1)
+expectEqual('server assets props', #clientEvents[1].payload.props, 1)
+expectEqual('server assets model hides', #clientEvents[1].payload.modelHides, 1)
+expect('server assets excludes checkpoints', clientEvents[1].payload.checkpoints == nil)
+expect('server assets excludes entrants', clientEvents[1].payload.entrants == nil)
 
 -- Load the real client cache module with event registration mocks.
 local netHandlers = {}

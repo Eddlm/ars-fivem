@@ -12,6 +12,7 @@ local LEADERBOARD_CLIENT_TIEBREAK_ENABLED = ClientAdvancedConfig.leaderboardClie
 local isGTAORacePromptOpen = false
 local instanceAssetCache = {}
 RacingSystem.Client.instanceAssetCache = instanceAssetCache
+local localMembershipInstanceId = nil
 local activeInstanceAssets = {
     instanceId = nil,
     objects = {},
@@ -1163,6 +1164,7 @@ AddStateBagChangeHandler('rs:instanceId', nil, function(bagName, key, value, _, 
     if not source then return end
     removeEntrantFromAllRaceInfoBySource(source)
     local instanceId = tonumber(value) or 0
+    TriggerEvent('racingsystem:membership:changed', source, instanceId)
     if instanceId <= 0 then return end
     ensureRaceInfoEntrantBySource(instanceId, source)
     applyEntrantStateBagField(source, 'rs:entrantId', getPlayerStateBagValueBySource(source, 'rs:entrantId'))
@@ -1470,6 +1472,45 @@ local function loadInstanceAssets(payload)
     return true
 end
 RacingSystem.Client.loadInstanceAssets = loadInstanceAssets
+
+local function syncJoinedInstanceAssets(instanceId)
+    local numericInstanceId = tonumber(instanceId) or 0
+    if numericInstanceId <= 0 then
+        local previousInstanceId = localMembershipInstanceId
+        localMembershipInstanceId = nil
+        unloadActiveInstanceAssets()
+        if previousInstanceId then
+            instanceAssetCache[previousInstanceId] = nil
+            raceInfoById[previousInstanceId] = nil
+        end
+        return
+    end
+
+    localMembershipInstanceId = numericInstanceId
+    if tonumber(activeInstanceAssets.instanceId) == numericInstanceId then
+        return
+    end
+
+    local payload = instanceAssetCache[numericInstanceId]
+    if type(payload) == 'table' then
+        loadInstanceAssets(payload)
+    end
+end
+
+AddEventHandler('racingsystem:membership:changed', function(source, instanceId)
+    local localSource = tonumber(GetPlayerServerId(PlayerId())) or 0
+    if tonumber(source) ~= localSource then
+        return
+    end
+
+    syncJoinedInstanceAssets(instanceId)
+    if (tonumber(instanceId) or 0) <= 0 then
+        applyRaceMenuStageFromCurrentState()
+        refreshRaceMenuFromCurrentState()
+        applyJoinedInstanceTrafficMode()
+    end
+end)
+
 local function clearPendingCheckpointIfAdvanced(entrant)
     if not getRaceRuntimeState().pendingCheckpointPass then return end
     local currentCheckpoint = tonumber(entrant and entrant.currentCheckpoint) or 1
@@ -1548,7 +1589,12 @@ end)
 
 RegisterNetEvent('racingsystem:race:instanceAssets', function(payload)
     if type(payload) ~= 'table' or tonumber(payload.instanceId) == nil then return end
-    instanceAssetCache[tonumber(payload.instanceId)] = payload
+    local instanceId = tonumber(payload.instanceId)
+    instanceAssetCache[instanceId] = payload
+    local joinedInstanceId = select(1, getLocalRaceMembershipFromStateBag())
+    if joinedInstanceId == instanceId then
+        syncJoinedInstanceAssets(instanceId)
+    end
 end)
 
 local function getEntrantTargetDistanceToCheckpoint(instance, entrant, checkpointIndex)
