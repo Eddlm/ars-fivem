@@ -3,7 +3,7 @@ game 'gta5'
 
 author 'Eddlm'
 description 'Client-server Lua system for a racing system resource'
-version '0.0.4'
+version '0.0.5'
 latest_change 'Harden repository, timing, lifecycle, and client runtime boundaries.'
 
 lua54 'yes'
