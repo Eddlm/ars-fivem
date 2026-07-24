@@ -207,14 +207,19 @@ local joinRaceItem = UIMenuItem.New(
 )
 activeRacesSubmenu:AddItem(joinRaceItem)
 activeRacesItem.Activated = function(menu)
-    if PAYLOAD_SYSTEM_DISABLED then
-        notifyPayloadDisabled()
-        return
-    end
-    local instances = {}
+    local instances = RacingSystem.Client.getInstanceList() or {}
     local raceLabels = {}
     for i, instance in ipairs(instances) do
-        raceLabels[#raceLabels + 1] = tostring(instance.name or ('Race #' .. instance.id))
+        local stateLabel = tostring(instance.state or '')
+        local entrantCount = tonumber(instance.entrantCount) or 0
+        raceLabels[#raceLabels + 1] = ('%s [%s] (%d)'):format(
+            tostring(instance.name or ('Race #' .. instance.id)),
+            stateLabel,
+            entrantCount
+        )
+    end
+    if #raceLabels == 0 then
+        raceLabels[1] = '~c~No active races~s~'
     end
     logMenuVerbose(('Active Races activated: found %d instance(s)'):format(#instances))
     activeRaceListItem.Items = raceLabels
@@ -222,11 +227,7 @@ activeRacesItem.Activated = function(menu)
     menu:SwitchTo(activeRacesSubmenu, 1, true)
 end
 joinRaceItem.Activated = function(menu)
-    if PAYLOAD_SYSTEM_DISABLED then
-        notifyPayloadDisabled()
-        return
-    end
-    local instances = {}
+    local instances = RacingSystem.Client.getInstanceList() or {}
     local selectedIndex = tonumber(activeRaceListItem:Index()) or 1
     logMenuVerbose(('Join activated: selectedIndex=%d, totalInstances=%d'):format(selectedIndex, #instances))
     local selectedInstance = instances[selectedIndex]
