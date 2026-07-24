@@ -1853,7 +1853,6 @@ RegisterNetEvent('racingsystem:race:restarted', function(payload)
         RacingSystem.Menu.clearCountdownAccepted(instanceId)
     end
     RacingSystem.Client.InRace.countdownEndTimeByInstanceId[instanceId] = nil
-    RacingSystem.Client.InRace.countdownZeroReportedByInstanceId[instanceId] = nil
     RacingSystem.Client.InRace.raceStartCueShownByInstanceId[instanceId] = nil
     RacingSystem.Client.InRace.finishCueShownByInstanceId[instanceId] = nil
     local joinedInstance = getJoinedRaceInstance()

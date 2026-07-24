@@ -854,7 +854,10 @@ local function removeEntrantFromAllRaceInstances(source, reason)
         end
 
         removedAny = true
-        cleanupInstanceAfterEntrantRemoval(instance, source, removedEntrant, reason or 'source_removed')
+        local destroyed = cleanupInstanceAfterEntrantRemoval(instance, source, removedEntrant, reason or 'source_removed')
+        if not destroyed then
+            broadcastInstanceStandings(instance)
+        end
     end
 
     return removedAny

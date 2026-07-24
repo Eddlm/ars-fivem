@@ -830,16 +830,6 @@ RegisterNetEvent('racingsystem:editor:saved', function(payload)
     RacingSystem.Menu.refreshEditorMenu(RacingSystem.Menu.buildMenuState())
 end)
 
-RegisterNetEvent('racingsystem:def:registered', function(payload)
-    if type(payload) ~= 'table' or payload.ok ~= true then
-        return
-    end
-    local data = type(payload.data) == 'table' and payload.data or {}
-    local definition = type(data.definition) == 'table' and data.definition or {}
-    RacingSystem.Menu.pendingSelectRaceName = definition.name or RacingSystem.Menu.pendingSelectRaceName
-    RacingSystem.Menu.pendingEditorRaceName = definition.name or RacingSystem.Menu.pendingEditorRaceName
-end)
-
 RegisterNetEvent('racingsystem:def:deleted', function(payload)
     RacingSystem.Menu.deleteConfirmRaceName = nil
     if type(payload) ~= 'table' or payload.ok ~= true then

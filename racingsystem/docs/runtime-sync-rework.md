@@ -416,7 +416,7 @@ Use two clients where noted.
 - [x] Implement `sendDefinitions(target)`.
 - [x] Implement `broadcastDefinitions()`.
 - [x] Include the catalog and viewer permissions from `buildDefinitionsPayload(viewerSource)`.
-- [x] Verify broadcasts occur after create, save, register, import, and delete operations that change the catalog.
+- [x] Verify broadcasts occur after editor load/save, import, and delete operations that change the catalog.
 - [x] Include definitions in `sendInitialState(target)`.
 
 ### Client work
@@ -431,7 +431,7 @@ Use two clients where noted.
 
 - [x] Execute the production server catalog builder and delivery functions with mocked FiveM event APIs.
 - [x] Execute the production client catalog cache handler and immutable getters.
-- [x] Verify create, save, register, import, and delete mutation paths retain catalog broadcasts.
+- [x] Verify editor load/save, import, and delete mutation paths retain catalog broadcasts.
 - [x] Verify no client runtime path reads `race_index.json`.
 - [x] Lua syntax check all changed Lua files with `luac -p`.
 
@@ -441,7 +441,7 @@ Automated checks passed:
 
 - `lua .piTools/test_instance_list_payload.lua` — 88 assertions across the Phase 1 instance view and Phase 2 catalog view.
 - Catalog assertions cover canonical ordering, exact bounded fields, counts, sensitive-field exclusion, target-specific viewer permissions, per-player broadcasts, initial-state delivery, invalid client envelopes, complete cache replacement, and immutable getters.
-- Static checks confirm catalog broadcasts after create, save, explicit register, import, and delete; server-cache use by Host and Edit Existing; stable identity-based Host selection; open-menu refresh handlers; and catalog module load order.
+- Static checks confirm catalog broadcasts after editor load/save, import, and delete; server-cache use by Host and Edit Existing; stable identity-based Host selection; open-menu refresh handlers; and catalog module load order.
 - `client/menu.lua` contains no runtime `race_index.json` read.
 - ScaleformUI source review confirmed that asynchronous list replacement uses `UIMenuListItem:ChangeList(...)` and mutable editor menus use `UIMenu:Clear()` plus `AddItem(...)`.
 
@@ -582,11 +582,12 @@ The following runtime checks remain deferred:
 
 Automated checks passed:
 
-- `lua .piTools/test_instance_list_payload.lua` — 111 assertions, including idempotent empty cleanup, exactly-once reliability counter advancement, stale-list clearing, and repeated initial-state requests with unchanged revision.
+- `lua .piTools/test_instance_list_payload.lua` — 124 assertions, including idempotent empty cleanup, exactly-once reliability counter advancement, stale-list clearing, repeated initial-state requests with unchanged revision, immediate standings repair after disconnect/transfer removal, and host-disconnect termination.
 - `lua .piTools/test_joined_sync.lua` — 16 assertions, including useful invalid-join rejection and immediate accepted-progress synchronization.
+- `lua .piTools/test_event_handlers.lua` — 20 assertions executing production event handlers, including repeated read-only state requests, invalid-join notification, host-only start, ACE-protected kill, membership cleanup, and host-drop list publication.
 - Full-resource `luac -p` syntax sweep passed.
 - Runtime source contains no `[DEBUG]` markers; remaining `print(...)` calls are the configured logging functions, gated client verbose logger, integrity script output, and update notifier.
-- Static authorization checks confirm server-side host enforcement for start, ACE enforcement for kill, and explicit rejection notifications.
+- Production-handler assertions confirm server-side host enforcement for start, ACE enforcement for kill, and explicit rejection notifications.
 
 Not tested in a FiveM runtime:
 
@@ -596,6 +597,30 @@ Not tested in a FiveM runtime:
 - Repeated state requests under network load and during simultaneous catalog/instance mutations.
 
 These runtime cases remain part of the deferred multiplayer regression gate.
+
+## Post-Implementation Static Closure Audit
+
+**Status:** Complete; FiveM runtime acceptance remains deferred
+
+A final producer/consumer and mutation-owner audit found and closed two residual classes of issue:
+
+- Removed unowned `racingsystem:def:register` / `racingsystem:def:registered`, `racingsystem:race:finish`, and `racingsystem:race:countdownZero` channels, the dead countdown-report cache, and the empty lap-time forwarding function. No current client producer owned those channels, and ordinary checkpoint completion already owns race finishing.
+- Racer removal during race transfer or a non-host `playerDropped` now republishes standings for a surviving old instance immediately. Empty instances still use the idempotent destruction path instead.
+- Host disconnect now terminates every instance owned by that source and clears surviving guests' membership state, preventing an orphaned instance with no valid start/restart owner.
+
+Automated closure checks passed:
+
+- `lua .piTools/test_instance_list_payload.lua` — 124/124 assertions.
+- `lua .piTools/test_joined_sync.lua` — 16/16 assertions.
+- `lua .piTools/test_event_handlers.lua` — 20/20 assertions.
+- Full-resource `luac -p` syntax sweep.
+- Exact searches confirm the removed channel names/cache/no-op are absent and no empty local-function no-op remains.
+- Production-backed tests confirm both non-host disconnect and transfer removal update the remaining entrant to position 1 while retaining a nonempty instance, while host disconnect removes the owned instance with the `owner_disconnected` lifecycle reason.
+
+Not tested in a FiveM runtime:
+
+- State-bag propagation timing for remaining entrants during simultaneous disconnect, transfer, and checkpoint events.
+- Whether any external resource outside this repository was invoking one of the removed, undocumented network events. Repository clients had no producer; no compatibility path is retained by design.
 
 ## Manual Test Reporting Template
 

@@ -74,6 +74,7 @@ end
 -- Load the real server implementation. Unresolved FiveM globals are safe until
 -- the corresponding exported function is invoked; invoked event APIs are mocked.
 local clientEvents = {}
+local lifecycleReason = nil
 TriggerClientEvent = function(name, target, payload)
     clientEvents[#clientEvents + 1] = { name = name, target = target, payload = payload }
 end
@@ -111,10 +112,15 @@ RacingSystem = {
         Logging = {
             hasAdminAccess = function(source) return tonumber(source) == 99 end,
             isLifecycleTransitionAllowed = function() return true end,
-            logLifecycleEvent = function() end,
+            logLifecycleEvent = function(_, _, _, _, _, _, reason) lifecycleReason = reason end,
             clearRaceStateBagByInstanceId = function() end,
+            logVerbose = function() end,
+            buildEntrantId = function(source) return ('entrant-%s'):format(tostring(source)) end,
         },
         Catalog = {},
+        Instances = {},
+        Parsing = {},
+        Repository = {},
     },
 }
 
@@ -184,6 +190,58 @@ expectEqual('server first empty cleanup succeeds', firstCleanup, true)
 expectEqual('server repeated empty cleanup ignored', secondCleanup, false)
 expect('server empty cleanup removes instance', RacingSystem.Server.State.raceInstancesById[77] == nil)
 expectEqual('server empty cleanup counter once', RacingSystem.Server.State.reliabilityCounters.emptyInstanceAutoDestroyed, 1)
+
+-- Disconnect cleanup immediately republishes standings for remaining entrants.
+local playerStates = {}
+Player = function(source)
+    local numericSource = tonumber(source) or 0
+    playerStates[numericSource] = playerStates[numericSource] or {}
+    return { state = playerStates[numericSource] }
+end
+local disconnectInstance = activeInstance(78, RacingSystem.States.running, 2)
+RacingSystem.Server.State.raceInstancesById = { [78] = disconnectInstance }
+local removedDisconnected = Snapshot.removeEntrantFromAllRaceInstances(2, 'test_disconnect')
+expectEqual('server disconnect removes entrant', removedDisconnected, true)
+expectEqual('server disconnect leaves one entrant', #disconnectInstance.entrants, 1)
+expectEqual('server disconnect republishes remaining position', playerStates[1]['rs:position'], 1)
+expect('server disconnect retains nonempty instance', RacingSystem.Server.State.raceInstancesById[78] == disconnectInstance)
+
+-- A race transfer republishes the old instance before the caller publishes the new one.
+GetPlayerName = function(source) return ('Driver %s'):format(tostring(source)) end
+dofile('racingsystem/server/race_instances.lua')
+local oldInstance = activeInstance(79, RacingSystem.States.idle, 2)
+local targetInstance = activeInstance(80, RacingSystem.States.idle, 1)
+targetInstance.entrants[1].source = 3
+targetInstance.entrants[1].entrantId = 'entrant-3'
+RacingSystem.Server.State.raceInstancesById = {
+    [79] = oldInstance,
+    [80] = targetInstance,
+}
+playerStates[1] = {}
+local productionBroadcastStandings = Snapshot.broadcastInstanceStandings
+local transferStandingsInstanceId = nil
+Snapshot.broadcastInstanceStandings = function(instance)
+    transferStandingsInstanceId = tonumber(instance and instance.id)
+    return productionBroadcastStandings(instance)
+end
+local transferredInstance, transferError = RacingSystem.Server.Instances.joinResolvedInstance(2, targetInstance)
+Snapshot.broadcastInstanceStandings = productionBroadcastStandings
+expect('server race transfer succeeds', transferredInstance == targetInstance, tostring(transferError))
+expectEqual('server race transfer removes old entrant', #oldInstance.entrants, 1)
+expectEqual('server race transfer adds target entrant', #targetInstance.entrants, 2)
+expectEqual('server race transfer republishes old standings', transferStandingsInstanceId, 79)
+expectEqual('server race transfer updates old position', playerStates[1]['rs:position'], 1)
+
+-- A host disconnect terminates owned instances instead of leaving an orphaned owner.
+local hostOwnedInstance = activeInstance(81, RacingSystem.States.idle, 2)
+hostOwnedInstance.owner = 2
+RacingSystem.Server.State.raceInstancesById = { [81] = hostOwnedInstance }
+lifecycleReason = nil
+local hostDropChanged, hostDropTerminated = RacingSystem.Server.Instances.removeSourceFromRaceInstances(2)
+expectEqual('server host disconnect reports mutation', hostDropChanged, true)
+expectEqual('server host disconnect returns terminated instance', #hostDropTerminated, 1)
+expect('server host disconnect removes owned instance', RacingSystem.Server.State.raceInstancesById[81] == nil)
+expectEqual('server host disconnect lifecycle reason', lifecycleReason, 'owner_disconnected')
 
 -- Targeted sends retain the current revision.
 RacingSystem.Server.State.raceInstancesById = {

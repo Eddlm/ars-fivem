@@ -31,7 +31,7 @@ The server broadcasts it after instance-list mutations and sends the current rev
 
 `racingsystem:catalog:definitions` is a complete replacement view generated from the server catalog. Catalog broadcasts are sent once per player because viewer permissions are target-specific.
 
-The server emits it on initial state and after create, save, explicit register, import, and delete mutations. Clients do not read `race_index.json`, `CustomRaces`, or `OnlineRaces` as runtime data sources.
+The server emits it on initial state and after editor load/save, import, and delete mutations. Clients do not read `race_index.json`, `CustomRaces`, or `OnlineRaces` as runtime data sources.
 
 ### Joined-racer detail
 
@@ -83,7 +83,7 @@ countdown request --> staging --> running
                                +--> public instance list replaced
 ```
 
-Each active instance is stored in `RacingSystem.Server.State.raceInstancesById` and contains its route/configuration, owner, entrants, lifecycle state, traffic density, and late-join cutoff.
+Each active instance is stored in `RacingSystem.Server.State.raceInstancesById` and contains its route/configuration, owner, entrants, lifecycle state, traffic density, and late-join cutoff. A non-host disconnect removes that entrant and immediately republishes standings for survivors. A host disconnect terminates every instance owned by that source and clears guest membership state so no orphaned owner remains.
 
 ## Late Join
 

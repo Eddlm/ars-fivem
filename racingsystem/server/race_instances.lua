@@ -208,37 +208,69 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
     return instance
 end
 
-local function killRaceInstanceByName(instanceName)
-    local instance = RacingSystem.Server.Snapshot.findRaceInstanceByName(instanceName)
-    if not instance then
+local function terminateRaceInstance(instance, actorSource, reason)
+    local instanceId = tonumber(instance and instance.id)
+    if not instanceId or RacingSystem.Server.State.raceInstancesById[instanceId] ~= instance then
         return nil, 'That race instance does not exist.'
     end
 
     local previousState = instance.state
     if RacingSystem.Server.Logging.isLifecycleTransitionAllowed(previousState, 'terminated') then
-        RacingSystem.Server.Logging.logLifecycleEvent('killRace', instance, nil, 0, previousState, 'terminated', 'killed_by_command')
+        RacingSystem.Server.Logging.logLifecycleEvent(
+            'killRace',
+            instance,
+            nil,
+            tonumber(actorSource) or 0,
+            previousState,
+            'terminated',
+            reason
+        )
     end
     RacingSystem.Server.Logging.clearRaceStateBagByInstanceId(instance.id)
     RacingSystem.Server.Snapshot.removeRaceInstanceNameIndex(instance)
-    RacingSystem.Server.State.raceInstancesById[instance.id] = nil
-    return instance
+    RacingSystem.Server.State.raceInstancesById[instanceId] = nil
+    return instance, nil
+end
+
+local function killRaceInstanceByName(instanceName)
+    local instance = RacingSystem.Server.Snapshot.findRaceInstanceByName(instanceName)
+    return terminateRaceInstance(instance, 0, 'killed_by_command')
 end
 
 local function killRaceInstanceById(instanceId)
     local numericInstanceId = tonumber(instanceId) or -1
-    local instance = RacingSystem.Server.State.raceInstancesById[numericInstanceId]
-    if not instance then
-        return nil, 'That race instance does not exist.'
+    return terminateRaceInstance(
+        RacingSystem.Server.State.raceInstancesById[numericInstanceId],
+        0,
+        'killed_by_command'
+    )
+end
+
+local function removeSourceFromRaceInstances(source)
+    local numericSource = tonumber(source) or 0
+    if numericSource <= 0 then
+        return false, {}
     end
 
-    local previousState = instance.state
-    if RacingSystem.Server.Logging.isLifecycleTransitionAllowed(previousState, 'terminated') then
-        RacingSystem.Server.Logging.logLifecycleEvent('killRace', instance, nil, 0, previousState, 'terminated', 'killed_by_command')
+    local ownedInstanceIds = {}
+    for instanceId, instance in pairs(RacingSystem.Server.State.raceInstancesById) do
+        if tonumber(instance and instance.owner) == numericSource then
+            ownedInstanceIds[#ownedInstanceIds + 1] = tonumber(instanceId)
+        end
     end
-    RacingSystem.Server.Logging.clearRaceStateBagByInstanceId(instance.id)
-    RacingSystem.Server.Snapshot.removeRaceInstanceNameIndex(instance)
-    RacingSystem.Server.State.raceInstancesById[instance.id] = nil
-    return instance
+    table.sort(ownedInstanceIds)
+
+    local terminatedInstances = {}
+    for _, instanceId in ipairs(ownedInstanceIds) do
+        local instance = RacingSystem.Server.State.raceInstancesById[instanceId]
+        local terminated = terminateRaceInstance(instance, numericSource, 'owner_disconnected')
+        if terminated then
+            terminatedInstances[#terminatedInstances + 1] = terminated
+        end
+    end
+
+    local removedEntrant = RacingSystem.Server.Snapshot.removeEntrantFromAllRaceInstances(numericSource, 'player_dropped')
+    return #terminatedInstances > 0 or removedEntrant, terminatedInstances
 end
 
 local function joinResolvedInstance(source, instance)
@@ -273,7 +305,10 @@ local function joinResolvedInstance(source, instance)
 
     if existingInstance then
         local removedEntrant = RacingSystem.Server.Snapshot.removeEntrantFromRaceInstance(existingInstance, source)
-        RacingSystem.Server.Snapshot.cleanupInstanceAfterEntrantRemoval(existingInstance, source, removedEntrant, 'join_transfer')
+        local destroyed = RacingSystem.Server.Snapshot.cleanupInstanceAfterEntrantRemoval(existingInstance, source, removedEntrant, 'join_transfer')
+        if not destroyed then
+            RacingSystem.Server.Snapshot.broadcastInstanceStandings(existingInstance)
+        end
     end
 
     instance.entrants = instance.entrants or {}
@@ -346,41 +381,6 @@ local function restartRaceInstanceForSource(source)
     return instance, nil
 end
 
-local function finishRaceInstanceForSource(source)
-    local instance = RacingSystem.Server.Snapshot.findRaceInstanceByEntrant(source)
-    if not instance then
-        return nil, 'You are not currently joined to a race instance.'
-    end
-
-    if instance.state == RacingSystem.States.finished then
-        return nil, 'That race is already finished.'
-    end
-
-    if instance.state ~= RacingSystem.States.running and instance.state ~= RacingSystem.States.staging then
-        if RacingSystem.Server.Logging.shouldLogLifecycleAnomaly('finishRace', source, instance.id) then
-            RacingSystem.Server.Logging.logLifecycleEvent('finishRace', instance, nil, source, instance.state, instance.state, 'finish_rejected_invalid_state')
-        end
-        return nil, 'That race is not running.'
-    end
-
-    local now = GetGameTimer()
-    local transitionOk, transitionError = RacingSystem.Server.Logging.setRaceInstanceState(
-        instance,
-        RacingSystem.States.finished,
-        'finishRace',
-        source,
-        nil,
-        'manual_finish'
-    )
-    if not transitionOk then
-        return nil, transitionError
-    end
-    instance.finishedAt = now
-    instance.startAt = nil
-
-    return instance, nil
-end
-
 local function broadcastLapCompleted(instance, entrant, lapNumber, lapTimeMs, totalTimeMs, finished, bestLapTimeMs, bestLapDeltaMs)
     if type(instance) ~= 'table' or type(entrant) ~= 'table' then
         return
@@ -406,10 +406,6 @@ local function broadcastLapCompleted(instance, entrant, lapNumber, lapTimeMs, to
             })
         end
     end
-end
-
-local function emitStableLapTimeIfReady(instance, entrant, lapNumber, lapTimeMs)
-    return
 end
 
 local function getLapIncrementUnlockCheckpoint(totalCheckpoints)
@@ -547,8 +543,6 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex, lapTi
                 tostring(tonumber(instance.bestLapTimeMs) or currentLapTimeMs),
                 tostring(bestLapDeltaMs)
             ))
-            emitStableLapTimeIfReady(instance, entrant, currentLap, currentLapTimeMs)
-
             local entrantSource = tonumber(entrant.source) or 0
             local isFirstEntrantLap = #(entrant.lapTimes or {}) <= 1
             if entrantSource > 0 and not isFirstEntrantLap then
@@ -626,13 +620,12 @@ RacingSystem.Server.Instances.resetRaceInstanceProgress = resetRaceInstanceProgr
 RacingSystem.Server.Instances.invokeRaceInstance = invokeRaceInstance
 RacingSystem.Server.Instances.killRaceInstanceByName = killRaceInstanceByName
 RacingSystem.Server.Instances.killRaceInstanceById = killRaceInstanceById
+RacingSystem.Server.Instances.removeSourceFromRaceInstances = removeSourceFromRaceInstances
 RacingSystem.Server.Instances.joinResolvedInstance = joinResolvedInstance
 RacingSystem.Server.Instances.joinRaceInstanceById = joinRaceInstanceById
 RacingSystem.Server.Instances.leaveCurrentRaceInstance = leaveCurrentRaceInstance
 RacingSystem.Server.Instances.restartRaceInstanceForSource = restartRaceInstanceForSource
-RacingSystem.Server.Instances.finishRaceInstanceForSource = finishRaceInstanceForSource
 RacingSystem.Server.Instances.broadcastLapCompleted = broadcastLapCompleted
-RacingSystem.Server.Instances.emitStableLapTimeIfReady = emitStableLapTimeIfReady
 RacingSystem.Server.Instances.handleCheckpointPassed = handleCheckpointPassed
 
 

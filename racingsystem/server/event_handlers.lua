@@ -185,38 +185,6 @@ RegisterNetEvent('racingsystem:editor:save', function(payload)
     })
 end)
 
-RegisterNetEvent('racingsystem:def:register', function(raceName)
-    local src = source
-    local definition, registerError = RacingSystem.Server.Repository.registerRaceDefinitionIfValid(raceName)
-
-    if not definition then
-        RacingSystem.Server.Logging.logLevelOne(("%s could not register race definition '%s'. Reason: %s."):format(
-            RacingSystem.Server.Logging.resolvePlayerLogLabel(src),
-            tostring(raceName),
-            tostring(registerError or 'unknown error')
-        ))
-        TriggerClientEvent('racingsystem:def:registered', src, {
-            ok = false,
-            error = registerError or 'Could not register race definition.',
-            data = nil,
-        })
-        return
-    end
-
-    RacingSystem.Server.Logging.auditLog("registerRaceDefinition", src, ("registered race definition '%s' (%s source)"):format(
-        tostring(definition.name or raceName),
-        tostring(definition.sourceType or 'unknown')
-    ))
-    RacingSystem.Server.Snapshot.broadcastDefinitions()
-    TriggerClientEvent('racingsystem:def:registered', src, {
-        ok = true,
-        error = nil,
-        data = {
-            definition = definition,
-        },
-    })
-end)
-
 RegisterNetEvent('racingsystem:ugc:importById', function(ugcId)
     local src = source
     local validation, validationError = RacingSystem.Server.Repository.validateBundledUGCById(ugcId)
@@ -475,46 +443,6 @@ RegisterNetEvent('racingsystem:race:checkpointPassed', function(instanceId, chec
 
 end)
 
-RegisterNetEvent('racingsystem:race:finish', function()
-    local src = source
-    local instance, finishError = RacingSystem.Server.Instances.finishRaceInstanceForSource(src)
-    if not instance then
-        RacingSystem.Server.Logging.logLevelOne(("%s could not finish the race. Reason: %s."):format(
-            RacingSystem.Server.Logging.resolvePlayerLogLabel(src),
-            tostring(finishError or 'unknown error')
-        ))
-        RacingSystem.Server.Logging.notifyPlayer(src, finishError)
-        return
-    end
-
-    RacingSystem.Server.Logging.auditLog("finishRace", src, ("finished race '%s' (instance %s)"):format(
-        tostring((instance or {}).name or "unknown"),
-        tostring((instance or {}).id or "unknown")
-    ))
-    RacingSystem.Server.Snapshot.broadcastInstanceList()
-    RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
-end)
-
-RegisterNetEvent('racingsystem:race:countdownZero', function(instanceId, clientGameTimerAtZero)
-    local src = source
-    local instance = RacingSystem.Server.State.raceInstancesById[tonumber(instanceId) or -1]
-    local playerLabel = RacingSystem.Server.Logging.resolvePlayerLogLabel(src)
-
-    if not instance then
-        RacingSystem.Server.Logging.logLevelOne(("%s reached countdown zero for missing instance %s."):format(playerLabel, tostring(instanceId)))
-        return
-    end
-
-    RacingSystem.Server.Logging.logVerbose(("%s reached countdown zero in race '%s' (instance %s, state=%s). clientTimer=%s, serverTimer=%s."):format(
-        playerLabel,
-        tostring(instance.name or 'unknown'),
-        tostring(instance.id),
-        tostring(instance.state),
-        tostring(clientGameTimerAtZero),
-        tostring(GetGameTimer())
-    ))
-end)
-
 RegisterNetEvent('racingsystem:race:leave', function()
     local src = source
     local instance, leaveError = RacingSystem.Server.Instances.leaveCurrentRaceInstance(src)
@@ -583,9 +511,20 @@ RegisterNetEvent('racingsystem:race:kill', function(instanceId)
 end)
 
 AddEventHandler('playerDropped', function()
-    clearRaceMembershipStateBagForSource(source)
-    if RacingSystem.Server.Snapshot.removeEntrantFromAllRaceInstances(source, 'player_dropped') then
-        RacingSystem.Server.Logging.auditLog("playerDroppedRaceCleanup", source, "disconnected and was removed from one or more active race instances")
+    local droppedSource = source
+    clearRaceMembershipStateBagForSource(droppedSource)
+    local changed, terminatedInstances = RacingSystem.Server.Instances.removeSourceFromRaceInstances(droppedSource)
+    for _, terminatedInstance in ipairs(terminatedInstances or {}) do
+        for _, entrant in ipairs(terminatedInstance.entrants or {}) do
+            local entrantSource = tonumber(entrant.source) or 0
+            if entrantSource > 0 and entrantSource ~= tonumber(droppedSource) then
+                clearRaceMembershipStateBagForSource(entrantSource)
+            end
+        end
+    end
+
+    if changed then
+        RacingSystem.Server.Logging.auditLog("playerDroppedRaceCleanup", droppedSource, "disconnected and was removed from one or more active race instances")
         RacingSystem.Server.Snapshot.broadcastInstanceList()
     end
 end)

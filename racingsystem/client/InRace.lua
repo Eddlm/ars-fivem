@@ -27,9 +27,6 @@ RacingSystem.Client.InRace.raceRuntimeState = raceRuntimeState
 local countdownEndTimeByInstanceId = {}
 RacingSystem.Client.InRace.countdownEndTimeByInstanceId = countdownEndTimeByInstanceId
 
-local countdownZeroReportedByInstanceId = {}
-RacingSystem.Client.InRace.countdownZeroReportedByInstanceId = countdownZeroReportedByInstanceId
-
 local raceStartCueShownByInstanceId = {}
 RacingSystem.Client.InRace.raceStartCueShownByInstanceId = raceStartCueShownByInstanceId
 
