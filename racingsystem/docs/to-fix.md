@@ -98,4 +98,37 @@ FiveM-native teleport queuing/stale rejection, finish/final-lap visuals, timed t
 
 ## Audit Pass 3 — Closure Review
 
-Pending completion of Pass 2. The loop ends only when remaining items are runtime-dependent or theoretical and all automatable checks pass.
+### Critical
+
+- [x] **P3-C1 — Remove the editor-exit call to an undefined global.** `endEditorSession()` calls `releaseEditorHelpScaleform` before a later local declaration, so Lua resolves the call as a global; that global is `nil`. The later function is itself an empty no-op.
+
+### Medium
+
+- [x] **P3-M1 — Repair checkpoint chevron argument/edge coherence.** The renderer computes edge coordinates and accepts caller colors but ignores both, shadows the color, and carries two additional unused parameters.
+
+### Low
+
+- [x] **P3-L1 — Report successful UGC imports and correct the menu description.** The result handler calculates checkpoint count but never uses it, and the menu promises immediate hosting that does not occur.
+- [x] **P3-L2 — Remove unused lap-trigger helper parameters.** The helper accepts an instance and lap count but derives its answer only from checkpoint count.
+
+### Closure Criteria
+
+- [x] Enumerate compiled Lua `_ENV` accesses and verify every remaining global is a FiveM/ScaleformUI/Lua runtime API or an intentional resource global.
+- [x] Repeat all production-backed, syntax, JSON-data, network-closure, dead-code, obsolete-symbol, config-use, and documentation-coherence checks.
+- [x] Confirm only runtime-dependent/theoretical R1–R5 remain open.
+- [x] Commit Pass 3 separately.
+
+### Pass 3 Verification Record
+
+The compiled-global review found and removed the final concrete runtime error: editor exit was calling a `nil` global because an empty local helper was declared later in the file. The closure pass also repaired chevron edge/color use, removed unused lap-trigger parameters, and completed UGC success feedback.
+
+Automated verification:
+
+- `lua .piTools/test_instance_list_payload.lua` — 130/130 assertions.
+- `lua .piTools/test_joined_sync.lua` — 24/24 assertions.
+- `lua .piTools/test_event_handlers.lua` — 23/23 assertions.
+- `lua .piTools/test_repository_robustness.lua` — 37/37 assertions.
+- `python .piTools/audit_lua_globals.py` — 22 compiled production Lua files and 173 intentional/runtime globals audited; no suspicious lowercase global access.
+- Full production/test `luac -p`, `node --check`, JSON syntax/finite-value, literal network producer/consumer, empty-function/branch, dead-local, documentation-link, manifest-path, and config-use/documentation checks passed.
+
+**Closure result:** No additional concrete static issue remains. The only unchecked items are R1–R5, which require a product-policy decision or a real FiveM/OneSync/ScaleformUI/filesystem/network runtime. Those risks are minimal/theoretical from static evidence and are intentionally not marked passed.

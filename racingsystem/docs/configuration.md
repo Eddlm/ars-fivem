@@ -54,6 +54,7 @@
 | `leaderboardClientTiebreakEnabled`          | bool   | `false`              | —     | Whether the client breaks leaderboard ties.                       |
 | `checkpointRuntimeZOffsetMeters`            | number | `-2.0`               | m     | Z offset applied to checkpoint markers during a race.             |
 | `maxFuturePreviewCheckpoints`               | number | `3`                  | count | How many upcoming checkpoints to preview as blips.                |
+| `markerTaxonomy.routeCheckpointTypeId`      | number/nil | `nil`              | —     | Optional route checkpoint marker override; `nil` uses `markerTypeId`. |
 | `markerTaxonomy.routeChevronTypeId`         | number | `20`                 | —     | Marker type for chevron route markers.                            |
 | `markerTaxonomy.startLineIdleTypeId`        | number | `4`                  | —     | Marker type for idle start lines.                                 |
 | `markerTaxonomy.startLineIdleColor`         | table  | `{255,255,255,0}`    | RGBA  | Colour of idle start line markers.                                |

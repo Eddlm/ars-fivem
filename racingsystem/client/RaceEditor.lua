@@ -462,7 +462,6 @@ local function endEditorSession()
     editorTargetState.hit = nil
     editorTargetState.camera = nil
     setEditorCursorHidden(false)
-    releaseEditorHelpScaleform()
 end
 RacingSystem.Client.endEditorSession = endEditorSession
 
@@ -766,10 +765,6 @@ local function drawEditorHelp()
     BeginTextCommandDisplayHelp("THREESTRINGS")
     AddTextComponentSubstringPlayerName("~INPUT_ATTACK~ | " .. displayAction.."\n~INPUT_WEAPON_WHEEL_NEXT~/~INPUT_WEAPON_WHEEL_PREV~")
     EndTextCommandDisplayHelp(0, false, false, -1)
-end
-
-local function releaseEditorHelpScaleform()
-    -- No scaleform to release for help text
 end
 
 local function drawCheckpointIndexLabel(checkpointIndex, x, y, z, distanceMeters)

@@ -370,7 +370,7 @@ local function getCheckpointChevronEdgeCache(instance)
     return cache
 end
 RacingSystem.Client.getCheckpointChevronEdgeCache = getCheckpointChevronEdgeCache
-local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, isStart, isFinish, markerColor, chevronColor, hideChevron, spinDegreesPerSecond, chevronEdge, renderAsCheckeredFlag, markerHeightOverride, instance)
+local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, isStart, isFinish, markerColor, chevronColor, chevronEdge, renderAsCheckeredFlag, markerHeightOverride, instance)
     if type(checkpoint) ~= 'table' then return end
     local markerDraw = getRuntimeCheckpointMarker(checkpoint)
     if renderAsCheckeredFlag == true then
@@ -473,8 +473,10 @@ local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, 
     local edgeRadius = getCheckpointPassRadius(checkpoint, instance)
     local chevronZ = currentZ + 2.35
     local chevronSize = math.max(1.2, math.min(2.2, edgeRadius * 0.18))
-    local chevronColor = { r = 255, g = 140, b = 0, a = 242 }
-    local mainChevronAlpha = chevronColor.a
+    local resolvedChevronColor = type(chevronColor) == 'table'
+        and chevronColor
+        or { r = 255, g = 140, b = 0, a = 242 }
+    local mainChevronAlpha = tonumber(resolvedChevronColor.a) or 242
     local edge = type(chevronEdge) == 'table' and chevronEdge or computeCheckpointChevronEdge(checkpoint, prevCheckpoint, nextCheckpoint, instance)
     if type(edge) ~= 'table' then return end
     local edgeX = tonumber(edge.x) or currentX
@@ -497,9 +499,9 @@ local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, 
             chevronSize,
             chevronSize,
             chevronSize,
-            chevronColor.r,
-            chevronColor.g,
-            chevronColor.b,
+            tonumber(resolvedChevronColor.r) or 255,
+            tonumber(resolvedChevronColor.g) or 140,
+            tonumber(resolvedChevronColor.b) or 0,
             mainChevronAlpha,
             false,
             false,
@@ -510,7 +512,7 @@ local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, 
             false
         )
     end
-    drawRouteChevronAt(currentX, currentY, false)
+    drawRouteChevronAt(edgeX, edgeY, false)
     return
 end
 RacingSystem.Client.drawCheckpointTarget = drawCheckpointTarget
@@ -1490,10 +1492,15 @@ RegisterNetEvent('racingsystem:ugc:importResult', function(payload)
         return
     end
     local raceName = tostring(data.raceName or data.ugcId or '')
-    local checkpointCount = tostring(math.max(0, math.floor(tonumber(data.checkpointCount) or 0)))
+    local checkpointCount = math.max(0, math.floor(tonumber(data.checkpointCount) or 0))
     if raceName ~= '' then
         RacingSystem.Menu.pendingSelectRaceName = raceName
     end
+    RacingSystem.Client.Util.ShowWarningSubtitle(
+        ('Imported %s (%d checkpoints).'):format(raceName ~= '' and raceName or 'GTAO race', checkpointCount),
+        3000,
+        '~g~'
+    )
 end)
 
 RegisterNetEvent('racingsystem:race:restarted', function(payload)

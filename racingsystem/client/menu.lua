@@ -245,7 +245,7 @@ hostSubmenu:MenuAlignment(MenuAlignment.LEFT)
 hostSubmenu:SetBannerColor(SColor.LightBlue)
 local importGTAOUrlItem = UIMenuItem.New(
     'Import GTAO race through URL',
-    'Open URL prompt to import a GTA Online race into OnlineRaces and host with current settings.'
+    'Import a GTA Online race into the server catalog. Host it from the Host menu after import.'
 )
 local raceListItem = UIMenuListItem.New('Race', {}, 1, 'Select a saved race definition to host.')
 hostSubmenu:AddItem(raceListItem)

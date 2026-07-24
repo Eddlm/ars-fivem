@@ -227,7 +227,7 @@ local function getRaceStartCheckpoint(instance)
     return checkpointCount - 1
 end
 
-local function getLapTriggerCheckpoint(instance, totalCheckpoints, totalLaps)
+local function getLapTriggerCheckpoint(totalCheckpoints)
     local checkpointCount = math.max(0, tonumber(totalCheckpoints) or 0)
     if checkpointCount <= 1 then
         return 1
@@ -742,7 +742,7 @@ local function sendTeleportToCheckpoint(target, instance, checkpointIndex)
         tostring(checkpointIndex),
         tostring(checkpointIdx),
         tostring(getRaceStartCheckpoint(instance)),
-        tostring(getLapTriggerCheckpoint(instance, #checkpoints, tonumber(instance.laps) or 1)),
+        tostring(getLapTriggerCheckpoint(#checkpoints)),
         'client',
         tonumber(checkpoint.x) or 0.0,
         tonumber(checkpoint.y) or 0.0,

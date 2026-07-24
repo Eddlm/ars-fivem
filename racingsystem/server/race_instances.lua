@@ -464,7 +464,7 @@ local function handleCheckpointPassed(source, instanceId, checkpointIndex)
     entrant.lastCheckpointAt = now
 
     local currentLap = math.max(1, tonumber(entrant.currentLap) or 1)
-    local lapTriggerCheckpoint = RacingSystem.Server.Snapshot.getLapTriggerCheckpoint(instance, totalCheckpoints, totalLaps)
+    local lapTriggerCheckpoint = RacingSystem.Server.Snapshot.getLapTriggerCheckpoint(totalCheckpoints)
     local lapIncrementUnlockCheckpoint = getLapIncrementUnlockCheckpoint(totalCheckpoints)
     if entrant.lapIncrementUnlocked ~= true and reportedCheckpoint == lapIncrementUnlockCheckpoint then
         entrant.lapIncrementUnlocked = true

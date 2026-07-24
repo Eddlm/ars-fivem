@@ -64,7 +64,7 @@ RacingSystem = {
                 end
                 return nil
             end,
-            getLapTriggerCheckpoint = function(_, totalCheckpoints)
+            getLapTriggerCheckpoint = function(totalCheckpoints)
                 return totalCheckpoints
             end,
             getRaceStartCheckpoint = function()
