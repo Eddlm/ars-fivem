@@ -163,6 +163,21 @@ local function resolveTeleportHeading(payload)
 
     local targetVariant = type(RacingSystem.Client.getCheckpointVariantEntry) == 'function' and RacingSystem.Client.getCheckpointVariantEntry(joinedInstance, checkpointIndex) or nil
     local targetCheckpoint = targetVariant and targetVariant.primary or checkpoints[checkpointIndex]
+    local teleportType = tostring(payload and payload.teleportType or '')
+
+    if teleportType == 'checkpoint' then
+        local nextIndex = checkpointIndex + 1
+        if nextIndex > checkpointCount then
+            nextIndex = 1
+        end
+        local nextVariant = type(RacingSystem.Client.getCheckpointVariantEntry) == 'function' and RacingSystem.Client.getCheckpointVariantEntry(joinedInstance, nextIndex) or nil
+        local nextCheckpoint = nextVariant and nextVariant.primary or checkpoints[nextIndex]
+        if type(targetCheckpoint) == 'table' and type(nextCheckpoint) == 'table' then
+            return (type(RacingSystem.Client.getVehicleHeadingToNextCheckpoint) == 'function' and RacingSystem.Client.getVehicleHeadingToNextCheckpoint(targetCheckpoint, nextCheckpoint)) or 0.0
+        end
+        return 0.0
+    end
+
     local previousIndex = checkpointIndex - 1
     if previousIndex < 1 then
         previousIndex = checkpointCount
@@ -356,9 +371,6 @@ local function runSmartJoinTeleport(payload)
     local heading = resolveTeleportHeading(payload)
     local teleportType = tostring(payload.teleportType or 'join')
     local headingOffset = getHeadingOffsetForSourceType(sourceType)
-    if teleportType == 'checkpoint' then
-        headingOffset = headingOffset + 180.0
-    end
     local checkpointSpeedMph = math.max(0.0, tonumber(payload.speedMph) or 15.0)
     local checkpointSpeedMps = checkpointSpeedMph * 0.44704
     local fadeOutMs = 650
