@@ -1695,6 +1695,8 @@ CreateThread(function()
                         ('Laps: %d'):format(tonumber(raceStandings.totalLaps) or 1),
                         0
                     )
+                    PlayerListScoreboard._start = 0
+                    PlayerListScoreboard.Enabled = true
                     raceLeaderboardScoreboard = true
                 end
                 -- Rebuild rows from current standings
