@@ -423,7 +423,29 @@ local function broadcastInstanceStandings(instance)
         end
     end
 
-    return
+    -- Broadcast full standings to all clients for live leaderboard
+    local standingsPayload = {
+        instanceId = instance.id,
+        instanceName = instance.name,
+        totalLaps = instance.laps,
+        pointToPoint = instance.pointToPoint == true,
+        entrants = {},
+    }
+    for _, entrant in ipairs(orderedEntrants) do
+        standingsPayload.entrants[#standingsPayload.entrants + 1] = {
+            position = tonumber(entrant.position) or 0,
+            name = tostring(entrant.name or ('Player %s'):format(tostring(entrant.source or '?'))),
+            source = tonumber(entrant.source) or 0,
+            currentLap = tonumber(entrant.currentLap) or 1,
+            totalLaps = math.max(1, tonumber(instance.laps) or 1),
+            currentCheckpoint = tonumber(entrant.currentCheckpoint) or 1,
+            totalCheckpoints = math.max(1, #(instance.checkpoints or {})),
+            finishedAt = tonumber(entrant.finishedAt) or nil,
+            totalTimeMs = tonumber(entrant.totalTimeMs) or nil,
+            lapTimes = cloneNumberArray(entrant.lapTimes),
+        }
+    end
+    TriggerClientEvent('racingsystem:race:standingsUpdate', -1, standingsPayload)
 end
 
 local function getLeaderProgress(instance)
