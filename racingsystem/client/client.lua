@@ -11,6 +11,8 @@ local isGTAORacePromptOpen = false
 local instanceAssetCache = {}
 RacingSystem.Client.instanceAssetCache = instanceAssetCache
 local localMembershipInstanceId = nil
+local raceStandings = nil
+local raceLeaderboardScoreboard = nil
 local activeInstanceAssets = {
     instanceId = nil,
     objects = {},
@@ -1288,7 +1290,17 @@ RegisterNetEvent('racingsystem:race:lapCompleted', function(payload)
         local lapOwnerSource = tonumber(payload.playerSource) or 0
         if lapOwnerSource ~= localServerId then return end
     end
+
+    local lapNumber = math.max(1, math.floor(tonumber(payload.lapNumber) or 1))
+    local lapTimeMs = tonumber(payload.lapTimeMs)
+    if lapTimeMs then
+        RacingSystem.Client.InRace.raceTimingState.lapTimes[lapNumber] = lapTimeMs
+    end
+
     if payload.finished == true then
+        if lapTimeMs then
+            RacingSystem.Client.Util.NotifyPlayer('~w~' .. RacingSystem.Client.InRace.formatLapTime(lapTimeMs))
+        end
         RacingSystem.Client.InRace.raceTimingState.lapStartedAt = nil
         local instanceId = tonumber(instance and instance.id)
         if instanceId then
@@ -1302,13 +1314,23 @@ RegisterNetEvent('racingsystem:race:lapCompleted', function(payload)
             2000,
             false
         )
+
+        -- Show all lap times as notifications
+        local lapTimes = RacingSystem.Client.InRace.raceTimingState.lapTimes
+        if lapTimes then
+            local totalLaps = math.max(1, math.floor(tonumber(payload.totalLaps) or tonumber(instance and instance.laps) or 1))
+            for i = 1, totalLaps do
+                local t = lapTimes[i]
+                if t then
+                    RacingSystem.Client.Util.NotifyPlayer(('~w~Lap %d/%d: %s'):format(i, totalLaps, RacingSystem.Client.InRace.formatLapTime(t)))
+                end
+            end
+        end
     else
-        local lapTimeMs = tonumber(payload.lapTimeMs)
         if lapTimeMs then
             RacingSystem.Client.Util.NotifyPlayer('~w~' .. RacingSystem.Client.InRace.formatLapTime(lapTimeMs))
         end
         RacingSystem.Client.InRace.raceTimingState.lapStartedAt = GetGameTimer()
-        local lapNumber = math.max(1, math.floor(tonumber(payload.lapNumber) or 1))
         local totalLaps = math.max(1, math.floor(tonumber(payload.totalLaps) or tonumber(instance and instance.laps) or 1))
         if totalLaps > 1 and lapNumber == totalLaps - 1 then
             RacingSystem.Client.Util.ShowRaceEventVisual('~y~FINAL LAP', '', 3000)
@@ -1327,6 +1349,11 @@ RegisterNetEvent('racingsystem:race:lapAnnotation', function(payload)
         local sign = deltaMs >= 0 and '+' or '-'
         RacingSystem.Client.Util.NotifyPlayer('~r~' .. sign .. RacingSystem.Client.InRace.formatLapTime(math.abs(deltaMs)) .. ' off best')
     end
+end)
+
+RegisterNetEvent('racingsystem:race:standingsUpdate', function(payload)
+    if type(payload) ~= 'table' then return end
+    raceStandings = payload
 end)
 
 RegisterNetEvent('racingsystem:race:instanceAssets', function(payload)
@@ -1654,5 +1681,53 @@ AddEventHandler('onClientResourceStart', function(resourceName)
     end)
 end)
 RacingSystem.Client.drawIdleStartChevron = drawIdleStartChevron
+
+-- Live leaderboard on TAB hold
+CreateThread(function()
+    while true do
+        if raceStandings and raceStandings.entrants and #raceStandings.entrants > 0 then
+            local tabHeld = IsControlPressed(0, 249) -- INPUT_REPLAY_SHOWHOTKEY (TAB)
+            if tabHeld then
+                if not raceLeaderboardScoreboard then
+                    PlayerListScoreboard:Load()
+                    PlayerListScoreboard:SetTitle(
+                        tostring(raceStandings.instanceName or 'Race'),
+                        ('Laps: %d'):format(tonumber(raceStandings.totalLaps) or 1),
+                        0
+                    )
+                    raceLeaderboardScoreboard = true
+                end
+                -- Rebuild rows from current standings
+                for i = #PlayerListScoreboard.PlayerRows, 1, -1 do
+                    PlayerListScoreboard:RemoveRow(i)
+                end
+                for _, entrant in ipairs(raceStandings.entrants) do
+                    local label = entrant.name
+                    local rightText
+                    if entrant.finishedAt then
+                        rightText = RacingSystem.Client.InRace.formatDurationMs(entrant.totalTimeMs or 0)
+                    else
+                        rightText = ('Lap %d/%d'):format(entrant.currentLap, entrant.totalLaps)
+                    end
+                    local row = SCPlayerItem.New(label, 0, 0, rightText, '', '', '', 0, '', entrant.source, '')
+                    PlayerListScoreboard:AddRow(row)
+                end
+                PlayerListScoreboard:CurrentPage(1)
+                PlayerListScoreboard:Update()
+            else
+                if raceLeaderboardScoreboard then
+                    PlayerListScoreboard:Dispose()
+                    raceLeaderboardScoreboard = nil
+                end
+            end
+        else
+            if raceLeaderboardScoreboard then
+                PlayerListScoreboard:Dispose()
+                raceLeaderboardScoreboard = nil
+            end
+        end
+        Wait(0)
+    end
+end)
 
 

@@ -32,6 +32,7 @@ local raceTimingState = {
     instanceId = nil,
     raceStartedAt = nil,
     lapStartedAt = nil,
+    lapTimes = {},
 }
 RacingSystem.Client.InRace.raceTimingState = raceTimingState
 
@@ -104,6 +105,7 @@ local function resetLocalRaceTiming()
     raceTimingState.instanceId = nil
     raceTimingState.raceStartedAt = nil
     raceTimingState.lapStartedAt = nil
+    raceTimingState.lapTimes = {}
     clearPredictedRaceProgress()
 end
 RacingSystem.Client.InRace.resetLocalRaceTiming = resetLocalRaceTiming
