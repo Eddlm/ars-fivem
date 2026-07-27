@@ -1715,6 +1715,7 @@ CreateThread(function()
                     PlayerListScoreboard:AddRow(row)
                 end
                 PlayerListScoreboard:CurrentPage(1)
+                PlayerListScoreboard:BuildMenu()
                 PlayerListScoreboard:Update()
             else
                 if raceLeaderboardScoreboard then
