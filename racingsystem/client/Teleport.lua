@@ -6,6 +6,18 @@ local pendingTeleportPayload = nil
 local MAX_LOOP_ITERATIONS = 5
 local SAFE_SPOT_SAMPLE_COUNT = 5
 local FADE_POLL_ATTEMPTS = 5
+local AREA_LOAD_FRAMES = 90
+
+-- Requests collision at (x, y, z) and waits a short while for the destination area
+-- to stream in before teleporting, so we never drop the player into an unloaded
+-- world (which can crash). Uses only RequestCollisionAtCoord (always available).
+local function waitForAreaToLoad(x, y, z)
+    RequestCollisionAtCoord(x, y, z)
+    for _ = 1, AREA_LOAD_FRAMES do
+        RequestCollisionAtCoord(x, y, z)
+        Wait(0)
+    end
+end
 
 local function sampleGroundZWithSpherecast(x, y, zHint, ignoreEntity)
     local startZ = (tonumber(zHint) or 0.0) + 4.0
@@ -285,14 +297,9 @@ end
 
 local function applyVehicleTeleport(vehicle, ped, destinationX, destinationY, destinationZ, heading, headingOffset, teleportType, checkpointSpeedMps, getFadeInRemainingMs, waitWithinFadeInDeadline)
     local targetZ = destinationZ
-    -- Request collision streaming for long-distance teleports to prevent crashes
-    RequestCollisionAtCoord(destinationX, destinationY, destinationZ)
-    -- Wait for collision to stream in (prevents crash when teleporting to unloaded areas)
-    local collisionWaitFrames = 0
-    while not HasCollisionLoadedAroundEntity(vehicle) and collisionWaitFrames < 50 do
-        Wait(10)
-        collisionWaitFrames = collisionWaitFrames + 1
-    end
+    -- Request collision at the destination and wait for it to stream in, so we
+    -- never teleport into an unloaded world (which can crash).
+    waitForAreaToLoad(destinationX, destinationY, destinationZ)
     SetEntityCoordsNoOffset(vehicle, destinationX, destinationY, targetZ, false, false, false)
     SetEntityHeading(vehicle, heading)
     SetEntityVelocity(vehicle, 0.0, 0.0, 0.0)
@@ -325,13 +332,9 @@ local function applyVehicleTeleport(vehicle, ped, destinationX, destinationY, de
 end
 
 local function applyPedTeleport(ped, destinationX, destinationY, destinationZ, heading, headingOffset)
-    -- Request collision streaming for long-distance teleports to prevent crashes
-    RequestCollisionAtCoord(destinationX, destinationY, destinationZ)
-    local collisionWaitFrames = 0
-    while not HasCollisionLoadedAroundEntity(ped) and collisionWaitFrames < 50 do
-        Wait(10)
-        collisionWaitFrames = collisionWaitFrames + 1
-    end
+    -- Request collision at the destination and wait for it to stream in, so we
+    -- never teleport into an unloaded world (which can crash).
+    waitForAreaToLoad(destinationX, destinationY, destinationZ)
     SetEntityCoordsNoOffset(ped, destinationX, destinationY, destinationZ, false, false, false)
     SetEntityHeading(ped, normalizeHeading(heading - headingOffset))
     SetEntityVelocity(ped, 0.0, 0.0, 0.0)

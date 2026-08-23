@@ -388,7 +388,7 @@ local function drawCheckpointTarget(checkpoint, prevCheckpoint, nextCheckpoint, 
     local markerRed = tonumber((markerColor or {}).r) or 80
     local markerGreen = tonumber((markerColor or {}).g) or 255
     local markerBlue = tonumber((markerColor or {}).b) or 255
-    local markerAlpha = 170
+    local markerAlpha = tonumber((markerColor or {}).a) or 204
     local markerHeight = tonumber(markerHeightOverride) or 4.0
     DrawMarker(
         getRouteCheckpointMarkerTypeId(),

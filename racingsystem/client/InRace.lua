@@ -581,7 +581,7 @@ CreateThread(function()
                         nextPrimaryCheckpoint,
                         isStart,
                         isFinish,
-                        { r = 255, g = 225, b = 80, a = 180 },
+                        { r = 255, g = 225, b = 80, a = 204 },
                         { r = 255, g = 235, b = 80, a = 220 },
                         chevronEdgeCache.primary[targetIndex],
                         isTerminalFinish,
@@ -596,7 +596,7 @@ CreateThread(function()
                             nextSecondaryCheckpoint,
                             isStart,
                             isFinish,
-                            { r = 255, g = 145, b = 35, a = 170 },
+                            { r = 255, g = 145, b = 35, a = 204 },
                             { r = 255, g = 170, b = 75, a = 220 },
                             chevronEdgeCache.secondary[targetIndex],
                             false,
@@ -608,12 +608,12 @@ CreateThread(function()
                     local previewSeenIndex = { [targetIndex] = true }
                     local previewIndex = targetIndex
                     local previewMarkerColors = {
-                        { r = 90, g = 170, b = 255, a = 120 },
-                        { r = 70, g = 135, b = 235, a = 95 },
+                        { r = 90, g = 170, b = 255, a = 153 },
+                        { r = 70, g = 135, b = 235, a = 153 },
                     }
                     local previewChevronColors = {
-                        { r = 170, g = 170, b = 170, a = 145 },
-                        { r = 140, g = 140, b = 140, a = 120 },
+                        { r = 170, g = 170, b = 170, a = 153 },
+                        { r = 140, g = 140, b = 140, a = 153 },
                     }
 
                     local MAX_FUTURE_PREVIEW_CHECKPOINTS = RacingSystem.Client.getMaxFuturePreviewCheckpoints()
