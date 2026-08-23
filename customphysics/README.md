@@ -28,6 +28,11 @@
   - Effective default: `true`
   - Example: `setr cp_offroad_boost_enabled true`
 
+- `cp_slides_enabled`
+  - Read via: `GetConvarBool`
+  - Effective default: `true`
+  - Example: `setr cp_slides_enabled true`
+
 - `cp_offroad_max_multiplier`
   - Read via: `GetConvar`
   - Effective default: `5.0`

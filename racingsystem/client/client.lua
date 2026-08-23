@@ -6,13 +6,11 @@ local raceInfoById = {}
 local currentTrafficDensity = nil
 local RACE_TRAFFIC_REQUEST_KEY = GetCurrentResourceName()
 local ClientAdvancedConfig = (((RacingSystem or {}).Config or {}).advanced or {}).client or {}
-local LEADERBOARD_CLIENT_TIEBREAK_ENABLED = ClientAdvancedConfig.leaderboardClientTiebreakEnabled == true
 local isGTAORacePromptOpen = false
 local instanceAssetCache = {}
 RacingSystem.Client.instanceAssetCache = instanceAssetCache
 local localMembershipInstanceId = nil
 local raceStandings = nil
-local raceLeaderboardScoreboard = nil
 local activeInstanceAssets = {
     instanceId = nil,
     objects = {},
@@ -1298,33 +1296,39 @@ RegisterNetEvent('racingsystem:race:lapCompleted', function(payload)
     end
 
     if payload.finished == true then
-        if lapTimeMs then
-            RacingSystem.Client.Util.NotifyPlayer('~w~' .. RacingSystem.Client.InRace.formatLapTime(lapTimeMs))
-        end
         RacingSystem.Client.InRace.raceTimingState.lapStartedAt = nil
         local instanceId = tonumber(instance and instance.id)
-        if instanceId then
-            if RacingSystem.Client.InRace.finishCueShownByInstanceId[instanceId] then return end
+        local finishCueAlreadyShown = instanceId and RacingSystem.Client.InRace.finishCueShownByInstanceId[instanceId] == true
+        if instanceId and not finishCueAlreadyShown then
             RacingSystem.Client.InRace.finishCueShownByInstanceId[instanceId] = true
         end
         local finishPosition = math.max(1, math.floor(tonumber(payload.position) or tonumber(localEntrant and localEntrant.position) or 1))
-        ScaleformUI.Scaleforms.BigMessageInstance:ShowSimpleShard(
-            'FINISHED',
-            ('%dº'):format(finishPosition),
-            2000,
-            false
-        )
+        if not finishCueAlreadyShown then
+            ScaleformUI.Scaleforms.BigMessageInstance:ShowSimpleShard(
+                'FINISHED',
+                ('%dº'):format(finishPosition),
+                2000,
+                false
+            )
+        end
 
-        -- Show all lap times as notifications
-        local lapTimes = RacingSystem.Client.InRace.raceTimingState.lapTimes
-        if lapTimes then
-            local totalLaps = math.max(1, math.floor(tonumber(payload.totalLaps) or tonumber(instance and instance.laps) or 1))
-            for i = 1, totalLaps do
-                local t = lapTimes[i]
-                if t then
-                    RacingSystem.Client.Util.NotifyPlayer(('~w~Lap %d/%d: %s'):format(i, totalLaps, RacingSystem.Client.InRace.formatLapTime(t)))
-                end
+        -- Show all lap times as a single combined notification on race end.
+        local totalLaps = math.max(1, math.floor(tonumber(payload.totalLaps) or tonumber(instance and instance.laps) or 1))
+        local lapTimes = type(payload.allLapTimes) == 'table' and payload.allLapTimes or RacingSystem.Client.InRace.raceTimingState.lapTimes
+        local messageParts = {}
+        messageParts[#messageParts + 1] = '~b~RACE FINISHED'
+        local hasAnyLapTime = false
+        for i = 1, totalLaps do
+            local t = lapTimes[i]
+            if t then
+                hasAnyLapTime = true
+                messageParts[#messageParts + 1] = ('~w~Lap %d/%d: %s'):format(i, totalLaps, RacingSystem.Client.InRace.formatLapTime(t))
             end
+        end
+        if hasAnyLapTime then
+            RacingSystem.Client.Util.NotifyPlayer(table.concat(messageParts, '~n~'))
+        elseif lapTimeMs then
+            RacingSystem.Client.Util.NotifyPlayer('~w~Final lap: ' .. RacingSystem.Client.InRace.formatLapTime(lapTimeMs))
         end
     else
         if lapTimeMs then
@@ -1366,111 +1370,36 @@ RegisterNetEvent('racingsystem:race:instanceAssets', function(payload)
     end
 end)
 
-local function getEntrantTargetDistanceToCheckpoint(instance, entrant, checkpointIndex)
-    if type(instance) ~= 'table' or type(entrant) ~= 'table' then
-        return math.huge
-    end
-    local checkpoints = type(instance.checkpoints) == 'table' and instance.checkpoints or {}
-    local totalCheckpoints = #checkpoints
-    if totalCheckpoints <= 0 then
-        return math.huge
-    end
-    local targetIndex = math.max(1, math.min(totalCheckpoints, math.floor(tonumber(checkpointIndex) or 1)))
-    local variantEntry = getCheckpointVariantEntry(instance, targetIndex)
-    local checkpoint = variantEntry and variantEntry.primary or checkpoints[targetIndex]
-    if type(checkpoint) ~= 'table' then
-        return math.huge
-    end
-    local source = tonumber(entrant.source) or 0
-    if source <= 0 then
-        return math.huge
-    end
-    local localSource = tonumber(GetPlayerServerId(PlayerId())) or 0
-    local ped = nil
-    if source == localSource then
-        ped = PlayerPedId()
-    else
-        local player = GetPlayerFromServerId(source)
-        if player and player ~= -1 then
-            ped = GetPlayerPed(player)
-        end
-    end
-    if not ped or ped == 0 or not DoesEntityExist(ped) then
-        return math.huge
-    end
-    local coords = GetEntityCoords(ped)
-    local dx = (tonumber(coords.x) or 0.0) - (tonumber(checkpoint.x) or 0.0)
-    local dy = (tonumber(coords.y) or 0.0) - (tonumber(checkpoint.y) or 0.0)
-    local dz = (tonumber(coords.z) or 0.0) - (tonumber(checkpoint.z) or 0.0)
-    return math.sqrt((dx * dx) + (dy * dy) + (dz * dz))
-end
-
-local function buildLiveLeaderboardRows(instance)
-    local entrants = type(instance) == 'table' and type(instance.entrants) == 'table' and instance.entrants or {}
-    if #entrants == 0 then
-        return {}
-    end
-    local localEntrant = getLocalEntrant(instance)
-    local localEntrantId = normalizeEntrantId(localEntrant and localEntrant.entrantId)
-    local localServerId = tonumber(GetPlayerServerId(PlayerId())) or 0
-    local entries = {}
+local function buildStandingsLeaderboardRows()
+    local standings = raceStandings
+    local entrants = type(standings) == 'table' and type(standings.entrants) == 'table' and standings.entrants or {}
     local rows = {}
-    for index, entrant in ipairs(entrants) do
-        local entrantSource = tonumber(entrant.source) or 0
-        local entrantId = normalizeEntrantId(entrant.entrantId)
-        local position = math.max(1, math.floor(tonumber(entrant.position) or index))
-        local entrantName = tostring(entrant.name or ('Player %s'):format(entrantSource > 0 and entrantSource or position))
-        local label = entrantName
-        local isLocalEntrant = false
-        if localEntrantId and entrantId then
-            isLocalEntrant = entrantId == localEntrantId
-        else
-            isLocalEntrant = entrantSource == localServerId
-        end
-        if isLocalEntrant then
-            label = ('%s (You)'):format(entrantName)
-        end
-        local checkpointIndex = math.max(1, math.floor(tonumber(entrant.currentCheckpoint) or 1))
-        local lap = math.max(1, math.floor(tonumber(entrant.currentLap) or 1))
-        entries[#entries + 1] = {
-            key = tostring(entrantId or (entrantSource > 0 and entrantSource or position)),
-            label = label,
-            basePosition = position,
-            sourceOrder = index,
-            checkpointIndex = checkpointIndex,
-            lap = lap,
-            tieBreakDistance = getEntrantTargetDistanceToCheckpoint(instance, entrant, checkpointIndex),
-            finishedAt = tonumber(entrant.finishedAt),
-        }
-    end
-    if LEADERBOARD_CLIENT_TIEBREAK_ENABLED then
-        table.sort(entries, function(a, b)
-            if a.basePosition ~= b.basePosition then
-                return a.basePosition < b.basePosition
-            end
-            local sameProgress = a.checkpointIndex == b.checkpointIndex and a.lap == b.lap
-            if sameProgress then
-                local aDistance = tonumber(a.tieBreakDistance) or math.huge
-                local bDistance = tonumber(b.tieBreakDistance) or math.huge
-                if aDistance ~= bDistance then
-                    return aDistance < bDistance
-                end
-            end
-            return a.sourceOrder < b.sourceOrder
-        end)
-    end
-    for index, entry in ipairs(entries) do
-        local displayPosition = LEADERBOARD_CLIENT_TIEBREAK_ENABLED and index or entry.basePosition
+    if #entrants == 0 then
+        -- No server standings yet: show a self row with '-' defaults until the server broadcasts.
+        local localServerId = tonumber(GetPlayerServerId(PlayerId())) or 0
         rows[#rows + 1] = {
-            key = entry.key,
-            text = ('%dº %s'):format(displayPosition, entry.label),
-            rank = displayPosition,
-            finalized = entry.finishedAt ~= nil,
+            key = tostring(localServerId),
+            position = '-',
+            name = GetPlayerName(PlayerId()),
+            lap = '-',
+            laptime = '-',
+        }
+        return rows
+    end
+    for _, entrant in ipairs(entrants) do
+        local lapTimes = type(entrant.lapTimes) == 'table' and entrant.lapTimes or {}
+        local lastLapTimeMs = tonumber(lapTimes[#lapTimes])
+        rows[#rows + 1] = {
+            key = tostring(entrant.source or #rows + 1),
+            position = tostring(tonumber(entrant.position) or '-'),
+            name = tostring(entrant.name or ('Player %s'):format(tostring(entrant.source or '?'))),
+            lap = tostring(tonumber(entrant.currentLap) or '-'),
+            laptime = lastLapTimeMs and RacingSystem.Client.InRace.formatDurationMs(lastLapTimeMs) or '-',
         }
     end
     return rows
 end
-RacingSystem.Client.buildLiveLeaderboardRows = buildLiveLeaderboardRows
+RacingSystem.Client.buildStandingsLeaderboardRows = buildStandingsLeaderboardRows
 RegisterNetEvent('racingsystem:race:getRaceInfo', function(payload)
     if type(payload) ~= 'table' then return end
     local instanceId = tonumber(payload.id)
@@ -1647,6 +1576,7 @@ end)
 CreateThread(function()
     while true do
         RacingSystem.Client.Util.DrawRaceEventVisual()
+        RacingSystem.Client.Util.DrawRaceLeaderboardVisual()
         Wait(0)
     end
 end)
@@ -1681,56 +1611,5 @@ AddEventHandler('onClientResourceStart', function(resourceName)
     end)
 end)
 RacingSystem.Client.drawIdleStartChevron = drawIdleStartChevron
-
--- Live leaderboard on TAB hold
-CreateThread(function()
-    while true do
-        if raceStandings and raceStandings.entrants and #raceStandings.entrants > 0 then
-            local tabHeld = IsControlPressed(0, 249) -- INPUT_REPLAY_SHOWHOTKEY (TAB)
-            if tabHeld then
-                if not raceLeaderboardScoreboard then
-                    PlayerListScoreboard:Load()
-                    PlayerListScoreboard:SetTitle(
-                        tostring(raceStandings.instanceName or 'Race'),
-                        ('Laps: %d'):format(tonumber(raceStandings.totalLaps) or 1),
-                        0
-                    )
-                    PlayerListScoreboard._start = 0
-                    PlayerListScoreboard.Enabled = true
-                    raceLeaderboardScoreboard = true
-                end
-                -- Rebuild rows from current standings
-                for i = #PlayerListScoreboard.PlayerRows, 1, -1 do
-                    PlayerListScoreboard:RemoveRow(i)
-                end
-                for _, entrant in ipairs(raceStandings.entrants) do
-                    local label = entrant.name
-                    local rightText
-                    if entrant.finishedAt then
-                        rightText = RacingSystem.Client.InRace.formatDurationMs(entrant.totalTimeMs or 0)
-                    else
-                        rightText = ('Lap %d/%d'):format(entrant.currentLap, entrant.totalLaps)
-                    end
-                    local row = SCPlayerItem.New(label, 0, 0, rightText, '', '', '', 0, '', entrant.source, '')
-                    PlayerListScoreboard:AddRow(row)
-                end
-                PlayerListScoreboard:CurrentPage(1)
-                PlayerListScoreboard:BuildMenu()
-                PlayerListScoreboard:Update()
-            else
-                if raceLeaderboardScoreboard then
-                    PlayerListScoreboard:Dispose()
-                    raceLeaderboardScoreboard = nil
-                end
-            end
-        else
-            if raceLeaderboardScoreboard then
-                PlayerListScoreboard:Dispose()
-                raceLeaderboardScoreboard = nil
-            end
-        end
-        Wait(0)
-    end
-end)
 
 

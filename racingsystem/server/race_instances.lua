@@ -389,7 +389,8 @@ local function sendLapCompleted(instance, entrant, lapNumber, lapTimeMs, totalTi
     end
 
     RacingSystem.Server.Snapshot.buildOrderedEntrants(instance)
-    TriggerClientEvent('racingsystem:race:lapCompleted', entrantSource, {
+    local isFinished = finished == true
+    local payload = {
         instanceId = instance.id,
         entrantId = tostring(entrant.entrantId or ''),
         playerSource = entrantSource,
@@ -401,8 +402,13 @@ local function sendLapCompleted(instance, entrant, lapNumber, lapTimeMs, totalTi
         totalTimeMs = tonumber(totalTimeMs) or 0,
         bestLapTimeMs = tonumber(bestLapTimeMs) or 0,
         bestLapDeltaMs = tonumber(bestLapDeltaMs) or 0,
-        finished = finished == true,
-    })
+        finished = isFinished,
+    }
+    if isFinished then
+        payload.allLapTimes = RacingSystem.Server.Snapshot.cloneNumberArray(entrant.lapTimes)
+        payload.totalTimeMs = tonumber(entrant.totalTimeMs) or tonumber(totalTimeMs) or 0
+    end
+    TriggerClientEvent('racingsystem:race:lapCompleted', entrantSource, payload)
 end
 
 local function getLapIncrementUnlockCheckpoint(totalCheckpoints)

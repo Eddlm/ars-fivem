@@ -5,6 +5,7 @@ natives.txt
 !.github/
 !.github/**
 *.log
+*.zip
 .DS_Store
 Thumbs.db
 vehiclemanager/savedvehicles/*.json

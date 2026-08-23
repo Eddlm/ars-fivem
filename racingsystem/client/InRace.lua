@@ -409,7 +409,7 @@ CreateThread(function()
         else
             local joinedInstanceId = tonumber(joinedInstance.id)
 
-            RacingSystem.Client.Util.UpdateRaceLeaderboardVisual(nil, RacingSystem.Client.buildLiveLeaderboardRows(joinedInstance))
+            RacingSystem.Client.Util.UpdateRaceLeaderboardVisual(nil, RacingSystem.Client.buildStandingsLeaderboardRows())
             ensureLocalRaceTiming(joinedInstanceId)
             if joinedInstance.sourceType == 'online' then
                 if tonumber(RacingSystem.Client.activeInstanceAssets.instanceId) ~= joinedInstanceId then

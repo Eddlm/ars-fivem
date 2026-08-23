@@ -6,7 +6,6 @@ RacingSystem.Client.Util = RacingSystem.Client.Util or {}
 local raceLeaderboardVisualState = {
     title = 'LEADERBOARD',
     rows = {},
-    finalizedByKey = {},
 }
 
 local raceEventVisualState = {
@@ -77,48 +76,56 @@ end
 
 function RacingSystem.Client.Util.UpdateRaceLeaderboardVisual(title, rows)
     raceLeaderboardVisualState.title = tostring(title or 'LEADERBOARD')
-    local previousByKey = {}
-    for _, existing in ipairs(type(raceLeaderboardVisualState.rows) == 'table' and raceLeaderboardVisualState.rows or {}) do
-        if type(existing) == 'table' then
-            previousByKey[tostring(existing.key or '')] = existing
-        end
+    raceLeaderboardVisualState.rows = {}
+    for index, row in ipairs(type(rows) == 'table' and rows or {}) do
+        raceLeaderboardVisualState.rows[index] = {
+            key = tostring((type(row) == 'table' and row.key) or index),
+            position = tostring((type(row) == 'table' and row.position) or '-'),
+            name = tostring((type(row) == 'table' and row.name) or ''),
+            lap = tostring((type(row) == 'table' and row.lap) or '-'),
+            laptime = tostring((type(row) == 'table' and row.laptime) or '-'),
+        }
+    end
+end
+
+function RacingSystem.Client.Util.DrawRaceLeaderboardVisual()
+    local rows = type(raceLeaderboardVisualState.rows) == 'table' and raceLeaderboardVisualState.rows or {}
+    if #rows == 0 then
+        return
     end
 
-    local finalizedByKey = type(raceLeaderboardVisualState.finalizedByKey) == 'table' and raceLeaderboardVisualState.finalizedByKey or {}
-    raceLeaderboardVisualState.finalizedByKey = finalizedByKey
-    raceLeaderboardVisualState.rows = {}
+    local panelX = 0.74
+    local panelY = 0.12
+    local panelW = 0.24
+    local lineH = 0.026
+    local headerH = 0.03
+    local bodyH = lineH * #rows
+    local totalH = headerH + bodyH + 0.006
 
-    for index, row in ipairs(type(rows) == 'table' and rows or {}) do
-        local rowKey = tostring((type(row) == 'table' and row.key) or index)
-        local incomingFinalized = type(row) == 'table' and row.finalized == true
-        local wasFinalized = finalizedByKey[rowKey] == true
-        local shouldFinalize = incomingFinalized or wasFinalized
-        local previous = previousByKey[rowKey]
+    DrawRect(panelX + panelW * 0.5, panelY + totalH * 0.5, panelW, totalH, 10, 14, 24, 170)
 
-        if shouldFinalize then
-            finalizedByKey[rowKey] = true
-        end
+    local headerY = panelY + headerH * 0.5
+    DrawRect(panelX + panelW * 0.5, headerY, panelW, headerH, 60, 140, 255, 200)
+    local colX = {
+        panelX + 0.02,
+        panelX + 0.08,
+        panelX + 0.16,
+        panelX + 0.20,
+    }
+    drawLeaderboardText(colX[1], headerY - 0.006, 0.28, 'POS', 255, 255, 255, 255, false)
+    drawLeaderboardText(colX[2], headerY - 0.006, 0.28, 'PLAYER', 255, 255, 255, 255, false)
+    drawLeaderboardText(colX[3], headerY - 0.006, 0.28, 'LAP', 255, 255, 255, 255, false)
+    drawLeaderboardText(colX[4], headerY - 0.006, 0.28, 'LAPTIME', 255, 255, 255, 255, false)
 
-        local resolvedRank = math.max(1, math.floor(tonumber(type(row) == 'table' and row.rank) or index))
-        if shouldFinalize and type(previous) == 'table' and tonumber(previous.rank) then
-            resolvedRank = math.max(1, math.floor(tonumber(previous.rank) or resolvedRank))
-        end
-
-        local resolvedText = tostring((type(row) == 'table' and row.text) or '')
-        if shouldFinalize and type(previous) == 'table' and type(previous.text) == 'string' and previous.text ~= '' then
-            resolvedText = previous.text
-        end
-
-        raceLeaderboardVisualState.rows[index] = {
-            key = rowKey,
-            text = resolvedText,
-            rank = resolvedRank,
-            finalized = shouldFinalize,
-        }
+    for i, row in ipairs(rows) do
+        local rowY = panelY + headerH + lineH * (i - 0.5)
+        drawLeaderboardText(colX[1], rowY - 0.006, 0.26, row.position, 255, 255, 255, 255, false)
+        drawLeaderboardText(colX[2], rowY - 0.006, 0.26, row.name, 255, 255, 255, 255, false)
+        drawLeaderboardText(colX[3], rowY - 0.006, 0.26, row.lap, 255, 255, 255, 255, false)
+        drawLeaderboardText(colX[4], rowY - 0.006, 0.26, row.laptime, 255, 255, 255, 255, false)
     end
 end
 
 function RacingSystem.Client.Util.ClearRaceLeaderboardVisual()
     raceLeaderboardVisualState.rows = {}
-    raceLeaderboardVisualState.finalizedByKey = {}
 end

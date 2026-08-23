@@ -113,6 +113,10 @@ end
 
 -- Computes the slide multiplier from slip angle relative to the handling traction baseline.
 local function calculateSlideMultiplier(vehicle, forward, velocity)
+    if not GetConvarBool('cp_slides_enabled', true) then
+        return 1.0, 0.0
+    end
+
     local slipAngle, planarSpeed = CustomPhysicsUtil.getPlanarAngleDegrees(forward, velocity)
 
     if planarSpeed < (CustomPhysics.Config.slideSpeedThresholdMetersPerSecond or 3.0) then
