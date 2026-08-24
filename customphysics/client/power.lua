@@ -200,6 +200,8 @@ end
 
 -- Starts the overspeed smoke effect if it is not already running.
 local function ensureEngineSmokeEffect(vehicle)
+    -- TEMPORARILY DISABLED: engine smoke/flame effect hardcoded off (do not emit).
+    return
     local boneIndex = getEngineSmokeBoneIndex(vehicle)
     if boneIndex == -1 then
         stopEngineSmokeEffect()
