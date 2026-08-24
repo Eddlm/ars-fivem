@@ -3,8 +3,8 @@ game 'gta5'
 
 author 'Eddlm'
 description 'Client-server Lua system for a racing system resource'
-version '0.0.5'
-latest_change 'Harden repository, timing, lifecycle, and client runtime boundaries.'
+version '0.0.6'
+latest_change 'Brighter checkpoints, pre-load area before teleport, remove scratch tracks.'
 
 lua54 'yes'
 
