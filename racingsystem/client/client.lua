@@ -1608,6 +1608,13 @@ AddEventHandler('onClientResourceStart', function(resourceName)
 
     SetTimeout(500, function()
         TriggerServerEvent('racingsystem:state:request')
+        local joinedInstanceId = type(LocalPlayer) == 'table'
+            and type(LocalPlayer.state) == 'table'
+            and tonumber(LocalPlayer.state['rs:instanceId'])
+            or nil
+        if joinedInstanceId and joinedInstanceId > 0 then
+            TriggerServerEvent('racingsystem:race:joinById', joinedInstanceId)
+        end
     end)
 end)
 RacingSystem.Client.drawIdleStartChevron = drawIdleStartChevron

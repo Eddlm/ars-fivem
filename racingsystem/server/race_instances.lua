@@ -279,6 +279,11 @@ local function joinResolvedInstance(source, instance)
         return nil, 'That race instance has no checkpoints.'
     end
 
+    local existingInstance = RacingSystem.Server.Snapshot.findRaceInstanceByEntrant(source)
+    if existingInstance and existingInstance.id == instance.id then
+        return instance, nil
+    end
+
     if instance.state == RacingSystem.States.running then
         local canJoin, joinError = RacingSystem.Server.Snapshot.canJoinMidRace(instance)
         if not canJoin then
@@ -293,11 +298,6 @@ local function joinResolvedInstance(source, instance)
             RacingSystem.Server.Logging.logLifecycleEvent('joinRace', instance, nil, source, instance.state, instance.state, 'join_rejected_invalid_state')
         end
         return nil, 'That race cannot be joined right now.'
-    end
-
-    local existingInstance = RacingSystem.Server.Snapshot.findRaceInstanceByEntrant(source)
-    if existingInstance and existingInstance.id == instance.id then
-        return instance, nil
     end
 
     if existingInstance then
@@ -330,6 +330,15 @@ local function leaveCurrentRaceInstance(source)
     local instance = RacingSystem.Server.Snapshot.findRaceInstanceByEntrant(source)
     if not instance then
         return nil, 'You are not currently joined to a race instance.'
+    end
+
+    local numericSource = tonumber(source) or 0
+    if tonumber(instance.owner) == numericSource then
+        local terminatedInstance, terminateError = terminateRaceInstance(instance, numericSource, 'owner_left')
+        if not terminatedInstance then
+            return nil, terminateError or 'Could not terminate the race instance.'
+        end
+        return terminatedInstance, nil
     end
 
     local removedEntrant = RacingSystem.Server.Snapshot.removeEntrantFromRaceInstance(instance, source)

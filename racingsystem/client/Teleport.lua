@@ -7,6 +7,8 @@ local MAX_LOOP_ITERATIONS = 5
 local SAFE_SPOT_SAMPLE_COUNT = 5
 local FADE_POLL_ATTEMPTS = 5
 local AREA_LOAD_FRAMES = 90
+local JOIN_TELEPORT_SYNC_TIMEOUT_MS = 4000
+local JOIN_TELEPORT_SYNC_POLL_MS = 50
 
 -- Requests collision at (x, y, z) and waits a short while for the destination area
 -- to stream in before teleporting, so we never drop the player into an unloaded
@@ -17,6 +19,36 @@ local function waitForAreaToLoad(x, y, z)
         RequestCollisionAtCoord(x, y, z)
         Wait(0)
     end
+end
+
+local function waitForJoinedTeleportContext(instanceId)
+    local numericInstanceId = tonumber(instanceId) or 0
+    if numericInstanceId <= 0 then
+        return true
+    end
+
+    local deadline = GetGameTimer() + JOIN_TELEPORT_SYNC_TIMEOUT_MS
+    while GetGameTimer() <= deadline do
+        local joinedInstance = type(RacingSystem.Client.getJoinedRaceInstance) == 'function'
+            and RacingSystem.Client.getJoinedRaceInstance()
+            or nil
+        if type(joinedInstance) == 'table' then
+            if tonumber(joinedInstance.id) ~= numericInstanceId then
+                return nil
+            end
+
+            local checkpoints = type(joinedInstance.checkpoints) == 'table' and joinedInstance.checkpoints or {}
+            local localEntrant = type(RacingSystem.Client.getLocalEntrant) == 'function'
+                and RacingSystem.Client.getLocalEntrant(joinedInstance)
+                or nil
+            if #checkpoints > 0 and type(localEntrant) == 'table' then
+                return joinedInstance
+            end
+        end
+        Wait(JOIN_TELEPORT_SYNC_POLL_MS)
+    end
+
+    return nil
 end
 
 local function sampleGroundZWithSpherecast(x, y, zHint, ignoreEntity)
@@ -354,6 +386,13 @@ local function runSmartJoinTeleport(payload)
             and tonumber(LocalPlayer.state['rs:instanceId'])
             or nil
         if joinedInstanceId and joinedInstanceId ~= payloadInstanceId then
+            return
+        end
+        if not waitForJoinedTeleportContext(payloadInstanceId) then
+            print(('[racingsystem:teleport] Ignored teleport for instance %s because joined race data did not synchronize.'):format(tostring(payloadInstanceId)))
+            if type(RacingSystem.Client.Util) == 'table' and type(RacingSystem.Client.Util.NotifyPlayer) == 'function' then
+                RacingSystem.Client.Util.NotifyPlayer('~r~Race route data did not synchronize before teleport.')
+            end
             return
         end
     end

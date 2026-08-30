@@ -69,6 +69,7 @@ local function cloneEntrant(entrant)
         source = tonumber(entrant.source) or 0,
         name = entrant.name,
         joinedAt = tonumber(entrant.joinedAt) or 0,
+        joinOrdinal = tonumber(entrant.joinOrdinal) or 0,
         currentCheckpoint = tonumber(entrant.currentCheckpoint) or 1,
         currentLap = tonumber(entrant.currentLap) or 1,
         checkpointsPassed = tonumber(entrant.checkpointsPassed) or 0,
@@ -281,12 +282,16 @@ end
 
 local function buildEntrant(source, instance)
     local numericSource = tonumber(source) or 0
+    local serverState = type(RacingSystem.Server.State) == 'table' and RacingSystem.Server.State or {}
+    local joinOrdinal = (tonumber(serverState.nextEntrantJoinOrdinal) or 0) + 1
+    serverState.nextEntrantJoinOrdinal = joinOrdinal
 
     return {
         entrantId = RacingSystem.Server.Logging.buildEntrantId(numericSource),
         source = numericSource,
         name = GetPlayerName(numericSource) or ('Player %s'):format(numericSource),
         joinedAt = os.time(),
+        joinOrdinal = joinOrdinal,
         currentCheckpoint = getPreRaceExpectedCheckpoint(instance),
         currentLap = 1,
         checkpointsPassed = 0,
@@ -377,6 +382,12 @@ local function buildOrderedEntrants(instance)
             end
 
             return aLastCheckpointAt < bLastCheckpointAt
+        end
+
+        local aJoinOrdinal = tonumber(a.joinOrdinal) or 0
+        local bJoinOrdinal = tonumber(b.joinOrdinal) or 0
+        if aJoinOrdinal ~= bJoinOrdinal then
+            return aJoinOrdinal < bJoinOrdinal
         end
 
         local aJoinedAt = tonumber(a.joinedAt) or 0
@@ -516,7 +527,7 @@ local function inheritLastPlaceProgress(newEntrant, lastPlaceEntrant)
     newEntrant.currentLap = tonumber(lastPlaceEntrant.currentLap) or 1
     newEntrant.checkpointsPassed = tonumber(lastPlaceEntrant.checkpointsPassed) or 0
     newEntrant.lapStartedAt = tonumber(lastPlaceEntrant.lapStartedAt) or 0
-    newEntrant.lastCheckpointAt = GetGameTimer()
+    newEntrant.lastCheckpointAt = tonumber(lastPlaceEntrant.lastCheckpointAt) or 0
     newEntrant.lapTimes = cloneNumberArray(lastPlaceEntrant.lapTimes)
     newEntrant.lapIncrementUnlocked = lastPlaceEntrant.lapIncrementUnlocked == true
 

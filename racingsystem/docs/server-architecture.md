@@ -83,7 +83,7 @@ countdown request --> staging --> running
                                +--> public instance list replaced
 ```
 
-Each active instance is stored in `RacingSystem.Server.State.raceInstancesById` and contains its route/configuration, owner, entrants, lifecycle state, traffic density, and late-join cutoff. A non-host disconnect removes that entrant and immediately republishes standings for survivors. A host disconnect terminates every instance owned by that source and clears guest membership state so no orphaned owner remains.
+Each active instance is stored in `RacingSystem.Server.State.raceInstancesById` and contains its route/configuration, owner, entrants, lifecycle state, traffic density, and late-join cutoff. A non-host disconnect removes that entrant and immediately republishes standings for survivors. A host disconnect or intentional host leave terminates every instance owned by that source and clears guest membership state so no orphaned owner remains.
 
 ## Late Join
 

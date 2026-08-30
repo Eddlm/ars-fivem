@@ -359,6 +359,11 @@ RegisterNetEvent('racingsystem:race:joinById', function(instanceId)
     local instance, joinError = RacingSystem.Server.Instances.joinRaceInstanceById(src, instanceId)
 
     if not instance then
+        local player = Player(tonumber(src) or 0)
+        local state = player and player.state or nil
+        if state and tonumber(state['rs:instanceId']) == tonumber(instanceId) then
+            clearRaceMembershipStateBagForSource(src)
+        end
         RacingSystem.Server.Logging.logLevelOne(("%s could not join race instance %s. Reason: %s."):format(
             RacingSystem.Server.Logging.resolvePlayerLogLabel(src),
             tostring(instanceId),
@@ -472,6 +477,7 @@ end)
 
 RegisterNetEvent('racingsystem:race:leave', function()
     local src = source
+    local numericSource = tonumber(src) or 0
     local instance, leaveError = RacingSystem.Server.Instances.leaveCurrentRaceInstance(src)
 
     if not instance then
@@ -483,13 +489,24 @@ RegisterNetEvent('racingsystem:race:leave', function()
         return
     end
 
+    local leftRaceWasOwner = tonumber(instance.owner) == numericSource
     RacingSystem.Server.Logging.auditLog("leaveRace", src, ("left race '%s' (instance %s). Entrants now: %s"):format(
         tostring(instance.name or 'unknown'),
         tostring(instance.id),
-        tostring(#(instance.entrants or {}))
+        leftRaceWasOwner and '0' or tostring(#(instance.entrants or {}))
     ))
     RacingSystem.Server.Snapshot.broadcastInstanceList()
-    if type(instance) == 'table' then
+    if leftRaceWasOwner then
+        for _, entrant in ipairs(instance.entrants or {}) do
+            local entrantSource = tonumber(entrant.source) or 0
+            if entrantSource > 0 and entrantSource ~= numericSource then
+                RacingSystem.Server.Logging.notifyPlayer(entrantSource, 'Race ended because the host left.', false)
+            end
+            if entrantSource > 0 then
+                clearRaceMembershipStateBagForSource(entrantSource)
+            end
+        end
+    else
         RacingSystem.Server.Snapshot.broadcastInstanceStandings(instance)
     end
     clearRaceMembershipStateBagForSource(src)

@@ -45,6 +45,10 @@ Test one full race from host to finish. Check each box as you go.
 ## Edge Cases
 - [x] Leave mid-race — removed from leaderboard, assets unload
 - [x] Rejoin mid-race (late join) — inherits last place progress
+- [ ] Rejoin before cutoff — starts in last place, with correct checkpoint/heading/grid slot
+- [ ] Rejoin after cutoff — rejected with the configured late-join message
+- [ ] Client resource restart while joined — race route, entrants, assets, and position resync even after cutoff
+- [ ] Host leaves mid-race — instance terminates for everyone
 - [ ] Host disconnect mid-race — instance terminates for everyone
 - [ ] Non-host disconnect — standings repair, race continues
 - [ ] Restart after finish, then start again — works cleanly
