@@ -35,6 +35,8 @@ To activate a different profile, move the `.meta` file from `Inactive/` into `Ac
 
 ## Inactive Handling Files
 
+### Alternative / preset profiles
+
 | File                                 | Description                       |
 | ------------------------------------ | --------------------------------- |
 | `handling.meta`                      | Legacy/stock handling             |
@@ -49,6 +51,12 @@ To activate a different profile, move the `.meta` file from `Inactive/` into `Ac
 | `_handling_z_san_andreas_drift.meta` | San Andreas drift handling preset |
 
 ⚠️ Files prefixed with `_` in the `Inactive/` folder are intentionally sorted to the end by convention — they are alternative presets, not default overrides.
+
+### Stock reference files (Firecul mirror)
+
+56 raw stock handling files (basegame + every DLC up to the latest, `mp2025_02`), copied verbatim from the [Firecul GTA-V-Default-Handling-Files](https://github.com/Firecul/GTA-V-Default-Handling-Files---FiveM-resource) repository. These are **reference only** — not loaded by this resource (the manifest only globs `Active/**`). They preserve the untouched default handling values for each content pack, useful for auditing which vehicle IDs `handling_basegame.meta` might be missing or overriding.
+
+Files: `common-handling.meta`, `update-handling.meta`, `spupgrade-handling.meta`, plus `mp*-handling.meta` and `update-mp*-handling.meta` for every DLC.
 
 ## See Also
 
