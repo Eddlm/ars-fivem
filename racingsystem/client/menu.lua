@@ -257,6 +257,8 @@ hostSubmenu:AddItem(lapListItem)
 local trafficOptions = { 'None', 'Low', 'High', 'Full' }
 local trafficListItem = UIMenuListItem.New('Traffic', trafficOptions, 1, 'Traffic density for the hosted race instance.')
 hostSubmenu:AddItem(trafficListItem)
+local noCollisionListItem = UIMenuListItem.New('No Collision', { 'Off', 'On' }, 1, 'Disable collisions between race participants\' vehicles.')
+hostSubmenu:AddItem(noCollisionListItem)
 local piListItem = UIMenuListItem.New('Maximum PI', { '400', '800', '1200' }, 1, 'Maximum PI limit (preview only, not enforced yet).')
 piListItem:Enabled(false)
 hostSubmenu:AddItem(piListItem)
@@ -344,13 +346,15 @@ acceptItem.Activated = function(menu)
     local lateJoinIndex = tonumber(lateJoinListItem:Index()) or 3
     local lateJoinPercents = { 0, 25, 50, 75, 100 }
     local lateJoinPercent = lateJoinPercents[lateJoinIndex] or 50
-    logMenuVerbose(('Invoking race: name=%s lookup=%s sourceType=%s laps=%d trafficDensity=%.2f lateJoin=%d%%'):format(
+    local noCollision = (tonumber(noCollisionListItem:Index()) or 1) == 2
+    logMenuVerbose(('Invoking race: name=%s lookup=%s sourceType=%s laps=%d trafficDensity=%.2f lateJoin=%d%% noCollision=%s'):format(
         tostring(selectedDefinition.name),
         tostring(selectedDefinition.lookupName),
         tostring(selectedDefinition.sourceType),
         actualLapCount,
         trafficDensity,
-        lateJoinPercent
+        lateJoinPercent,
+        tostring(noCollision)
     ))
     local payload = {
         name = selectedDefinition.name,
@@ -359,6 +363,7 @@ acceptItem.Activated = function(menu)
         raceId = selectedDefinition.raceId,
         trafficDensity = trafficDensity,
         lateJoinProgressLimitPercent = lateJoinPercent,
+        noCollision = noCollision,
     }
     TriggerServerEvent('racingsystem:race:invoke', payload, actualLapCount)
     MenuHandler:CloseAndClearHistory()

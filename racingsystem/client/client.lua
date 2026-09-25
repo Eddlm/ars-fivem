@@ -1058,6 +1058,7 @@ function getJoinedRaceInstance()
             owner = tonumber(identity.owner) or localServerId,
             laps = tonumber(config.laps) or 1,
             trafficDensity = tonumber(config.trafficDensity) or 0.0,
+            noCollision = config.noCollision == true,
             pointToPoint = config.pointToPoint == true,
             checkpoints = type(route.checkpoints) == 'table' and route.checkpoints or {},
             checkpointVariants = type(route.checkpointVariants) == 'table' and route.checkpointVariants or {},
@@ -1417,6 +1418,7 @@ RegisterNetEvent('racingsystem:race:getRaceInfo', function(payload)
         Config = {
             laps = tonumber(payload.laps) or 1,
             trafficDensity = tonumber(payload.trafficDensity) or 0.0,
+            noCollision = payload.noCollision == true,
             pointToPoint = payload.pointToPoint == true,
         },
         Route = {

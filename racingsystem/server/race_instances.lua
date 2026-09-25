@@ -31,6 +31,7 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
     local invokeRaceId = nil
     local invokeTrafficDensity = 0.0
     local invokeLateJoinPercent = nil
+    local invokeNoCollision = false
     if type(raceName) == 'table' then
         local requestPayload = raceName
         invokeRequestName = RacingSystem.Trim(requestPayload.name or requestPayload.lookupName or '')
@@ -67,8 +68,9 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         if lateJoinPercent and lateJoinPercent >= 0 and lateJoinPercent <= 100 then
             invokeLateJoinPercent = lateJoinPercent
         end
+        invokeNoCollision = requestPayload.noCollision == true
     end
-    RacingSystem.Server.Logging.logVerbose(("[invoke] owner=%s rawType=%s request='%s' lookup='%s' sourceType='%s' raceId='%s' laps=%s trafficDensity=%.2f"):format(
+    RacingSystem.Server.Logging.logVerbose(("[invoke] owner=%s rawType=%s request='%s' lookup='%s' sourceType='%s' raceId='%s' laps=%s trafficDensity=%.2f noCollision=%s"):format(
         tostring(ownerSource),
         tostring(type(raceName)),
         tostring(invokeRequestName),
@@ -76,7 +78,8 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         tostring(invokeSourceType or 'nil'),
         tostring(invokeRaceId or 'nil'),
         tostring(lapCount),
-        invokeTrafficDensity
+        invokeTrafficDensity,
+        tostring(invokeNoCollision)
     ))
 
     if RacingSystem.Trim(invokeRequestName) == '' then
@@ -181,6 +184,7 @@ local function invokeRaceInstance(ownerSource, raceName, lapCount)
         pointToPoint = pointToPoint,
         trafficDensity = invokeTrafficDensity,
         lateJoinProgressLimitPercent = invokeLateJoinPercent,
+        noCollision = invokeNoCollision,
         laps = laps,
         owner = tonumber(ownerSource) or 0,
         state = RacingSystem.States.idle,

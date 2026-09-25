@@ -439,30 +439,32 @@ CreateThread(function()
 
             clearPendingCheckpointIfAdvanced(entrant)
             targetIndex = tonumber(entrantProgress.currentCheckpoint) or targetIndex
-            for _, otherEntrant in ipairs(type(joinedInstance.entrants) == 'table' and joinedInstance.entrants or {}) do
-                local otherSource = tonumber(otherEntrant.source) or 0
-                if otherSource > 0 and otherSource ~= GetPlayerServerId(PlayerId()) then
-                    local otherPlayer = GetPlayerFromServerId(otherSource)
-                    if otherPlayer and otherPlayer ~= -1 then
-                        local otherPed = GetPlayerPed(otherPlayer)
-                        if otherPed and otherPed ~= 0 and DoesEntityExist(otherPed) then
-                            local otherVehicle = GetVehiclePedIsIn(otherPed, false)
-                            SetEntityNoCollisionEntity(ped, otherPed, true)
-                            SetEntityNoCollisionEntity(otherPed, ped, true)
+            if joinedInstance.noCollision == true then
+                for _, otherEntrant in ipairs(type(joinedInstance.entrants) == 'table' and joinedInstance.entrants or {}) do
+                    local otherSource = tonumber(otherEntrant.source) or 0
+                    if otherSource > 0 and otherSource ~= GetPlayerServerId(PlayerId()) then
+                        local otherPlayer = GetPlayerFromServerId(otherSource)
+                        if otherPlayer and otherPlayer ~= -1 then
+                            local otherPed = GetPlayerPed(otherPlayer)
+                            if otherPed and otherPed ~= 0 and DoesEntityExist(otherPed) then
+                                local otherVehicle = GetVehiclePedIsIn(otherPed, false)
+                                SetEntityNoCollisionEntity(ped, otherPed, true)
+                                SetEntityNoCollisionEntity(otherPed, ped, true)
 
-                            if pedVehicle ~= 0 and DoesEntityExist(pedVehicle) then
-                                SetEntityNoCollisionEntity(pedVehicle, otherPed, true)
-                                SetEntityNoCollisionEntity(otherPed, pedVehicle, true)
-                            end
+                                if pedVehicle ~= 0 and DoesEntityExist(pedVehicle) then
+                                    SetEntityNoCollisionEntity(pedVehicle, otherPed, true)
+                                    SetEntityNoCollisionEntity(otherPed, pedVehicle, true)
+                                end
 
-                            if otherVehicle ~= 0 and DoesEntityExist(otherVehicle) then
-                                SetEntityNoCollisionEntity(ped, otherVehicle, true)
-                                SetEntityNoCollisionEntity(otherVehicle, ped, true)
-                            end
+                                if otherVehicle ~= 0 and DoesEntityExist(otherVehicle) then
+                                    SetEntityNoCollisionEntity(ped, otherVehicle, true)
+                                    SetEntityNoCollisionEntity(otherVehicle, ped, true)
+                                end
 
-                            if pedVehicle ~= 0 and DoesEntityExist(pedVehicle) and otherVehicle ~= 0 and DoesEntityExist(otherVehicle) then
-                                SetEntityNoCollisionEntity(pedVehicle, otherVehicle, true)
-                                SetEntityNoCollisionEntity(otherVehicle, pedVehicle, true)
+                                if pedVehicle ~= 0 and DoesEntityExist(pedVehicle) and otherVehicle ~= 0 and DoesEntityExist(otherVehicle) then
+                                    SetEntityNoCollisionEntity(pedVehicle, otherVehicle, true)
+                                    SetEntityNoCollisionEntity(otherVehicle, pedVehicle, true)
+                                end
                             end
                         end
                     end

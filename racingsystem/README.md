@@ -39,3 +39,4 @@
 
 - `Maximum PI` is currently preview-only in UI (not enforced).
 - `Late Join %` is sent in race invoke payload and used server-side (`lateJoinProgressLimitPercent`).
+- `No Collision` defaults to `Off`; when enabled, race participants do not collide with one another while they are in the same race.

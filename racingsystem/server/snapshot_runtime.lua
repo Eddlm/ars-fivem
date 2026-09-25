@@ -582,6 +582,7 @@ local function buildInstanceSummary(instance)
         laps = tonumber(instance.laps) or 3,
         trafficDensity = math.max(0.0, math.min(1.0, tonumber(instance.trafficDensity) or 0.0)),
         lateJoinProgressLimitPercent = tonumber(instance.lateJoinProgressLimitPercent),
+        noCollision = instance.noCollision == true,
         entrantCount = #(type(instance.entrants) == 'table' and instance.entrants or {}),
     }
 end
@@ -622,6 +623,7 @@ local function buildInstanceDynamicPayload(instance)
         sourceName = instance.sourceName,
         pointToPoint = instance.pointToPoint == true,
         trafficDensity = math.max(0.0, math.min(1.0, tonumber(instance.trafficDensity) or 0.0)),
+        noCollision = instance.noCollision == true,
         laps = tonumber(instance.laps) or 3,
         owner = instance.owner,
         state = instance.state,
